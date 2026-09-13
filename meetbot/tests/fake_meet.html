@@ -1,0 +1,119 @@
+<!doctype html>
+<!--
+  A static imitation of the Google Meet pre-join lobby and in-call DOM, just
+  enough of it for meetbot/session.py's selectors: the copy and attributes are
+  the ones Vexa's selectors.ts targets, not a claim about today's live Meet.
+
+  Query parameters drive the scenario:
+    lobby=signedin|guest|blocked|empty   which lobby renders (default signedin)
+    admit=instant|knock|deny|never       what the "host" does after the click
+    delay=<ms>                           host reaction time (default 150)
+    prompt=1                             a first-visit device dialog blocks the CTA
+    others=<n>                           remote participants on admission (default 1)
+  window.fake exposes host actions to the test: admit(), removeOthers(),
+  addOther(name), end(kind) with kind in removed|ended, consent(on).
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Meet</title>
+<script>
+  // Runs during parse: records whether an init script got here first.
+  window.__seenAtLoad = window.__hardyInit === undefined ? null : window.__hardyInit;
+</script>
+</head>
+<body>
+<div id="lobby">
+  <div data-participant-id="effects" aria-label="Backgrounds and effects">visual_effects</div>
+  <h1 id="ready">Ready to join?</h1>
+  <div id="guest" jscontroller="x" hidden>
+    <h2>What's your name?</h2>
+    <input type="text" aria-label="Your name" id="name">
+  </div>
+  <button aria-label="Turn off camera" id="cam">videocam</button>
+  <button aria-label="Turn on microphone" id="mic">mic_off</button>
+  <button id="cta"><span id="cta-label">Join now</span></button>
+</div>
+<div id="prompt" role="dialog" hidden>
+  Do you want people to hear you in the meeting?
+  <button id="use-mic">Use microphone</button>
+</div>
+<div id="blocked" hidden><h1>You can't join this video call</h1><button>Return to home screen</button></div>
+<div id="waiting" hidden>Asking to be let in…</div>
+<div id="denied" hidden>Someone in the call denied your request to join <button>Ask to join again</button></div>
+<div id="consent" role="dialog" hidden>Gemini wants to take notes for me <button>Start</button></div>
+<div id="call" hidden>
+  <div id="tiles"></div>
+  <div role="toolbar">
+    <button aria-label="Chat with everyone">chat</button>
+    <button aria-label="Leave call" id="leave">call_end</button>
+  </div>
+</div>
+<div id="ended" hidden><h1 id="endmsg"></h1><button>Rejoin</button><button>Return to home screen</button></div>
+<script>
+(function () {
+  const q = new URLSearchParams(location.search);
+  const lobby = q.get("lobby") || "signedin";
+  const admit = q.get("admit") || "instant";
+  const delay = Number(q.get("delay") || 150);
+  const others = Number(q.get("others") || 1);
+  const $ = (id) => document.getElementById(id);
+  const show = (id, on) => { $(id).hidden = !on; };
+  const state = { clicked: false, name: null, mic: false, cam: true };
+  window.fakeState = state;
+
+  if (lobby === "guest") {
+    show("guest", true); show("ready", false);
+    $("cta-label").textContent = "Ask to join";
+    $("cta").disabled = true;
+    $("name").addEventListener("input", () => { $("cta").disabled = !$("name").value; });
+  }
+  if (lobby === "blocked") { show("lobby", false); show("blocked", true); }
+  if (lobby === "empty") { $("cta").remove(); }
+  if (q.get("prompt") === "1") show("prompt", true);
+  $("use-mic").onclick = () => show("prompt", false);
+
+  $("cam").onclick = () => { state.cam = !state.cam;
+    $("cam").setAttribute("aria-label", state.cam ? "Turn off camera" : "Turn on camera"); };
+  $("mic").onclick = () => { state.mic = !state.mic;
+    $("mic").setAttribute("aria-label", state.mic ? "Turn off microphone" : "Turn on microphone"); };
+
+  function tile(name, self) {
+    const t = document.createElement("div");
+    t.setAttribute("data-participant-id", "spaces/x/devices/" + Math.random());
+    t.setAttribute("aria-label", name);
+    if (self) t.setAttribute("data-self-name", name);
+    t.textContent = name;
+    $("tiles").appendChild(t);
+  }
+  function enterCall() {
+    show("lobby", false); show("waiting", false);
+    // The lobby's effects phantom tile goes away with the lobby.
+    show("call", true);
+    tile(state.name || "Pat Liu (Hardy account)", true);
+    for (let i = 0; i < others; i++) tile("Other " + (i + 1), false);
+  }
+  $("cta").onclick = () => {
+    if (!$("prompt").hidden) return;  // a modal dialog swallows the click
+    state.clicked = true;
+    if (lobby === "guest") state.name = $("name").value;
+    if (admit === "instant") return setTimeout(enterCall, delay);
+    show("lobby", false); show("waiting", true);
+    if (admit === "knock") setTimeout(enterCall, delay);
+    if (admit === "deny") setTimeout(() => show("denied", true), delay);  // stale waiting text stays
+  };
+  $("leave").onclick = () => { show("call", false); $("endmsg").textContent = "You left the meeting"; show("ended", true); };
+
+  window.fake = {
+    admit: enterCall,
+    removeOthers() { document.querySelectorAll("#tiles [data-participant-id]:not([data-self-name])").forEach((e) => e.remove()); },
+    addOther(name) { tile(name, false); },
+    end(kind) {
+      show("call", false);
+      $("endmsg").textContent = kind === "removed" ? "You've been removed from the meeting" : "Call ended";
+      show("ended", true);
+    },
+    consent(on) { show("consent", on); },
+  };
+})();
+</script>
+</body>
+</html>

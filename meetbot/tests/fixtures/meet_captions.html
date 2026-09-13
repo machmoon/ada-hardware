@@ -1,0 +1,84 @@
+<!doctype html>
+<!--
+  A stand-in for Google Meet's in-call page, shaped only as far as
+  meetbot/listen.py's SELECTORS assume (sources named there):
+  - a captions button with aria-label "Turn on captions" / "Turn off captions"
+    and a .google-symbols icon closed_caption_off / closed_caption (Attendee,
+    TranscripTonic);
+  - a call_end icon while the call runs (TranscripTonic);
+  - div[role="region"][tabindex="0"] present whether captions are on or off,
+    holding caption blocks [speaker element, text element] followed by two
+    trailing non-caption children (TranscripTonic).
+  Query flags: ?nobutton=1 (no captions control), ?stuck=1 (the button does
+  nothing), ?timeline=1 (plays a scripted meeting once captions come on).
+  Tests also drive it directly through window.fixture.
+-->
+<html>
+<head><meta charset="utf-8"><title>Meet fixture</title></head>
+<body>
+<div id="toolbar">
+  <button id="cc" aria-label="Turn on captions"><i class="google-symbols">closed_caption_off</i></button>
+  <button id="hangup" aria-label="Leave call"><i class="google-symbols">call_end</i></button>
+</div>
+<div id="captions" role="region" tabindex="0">
+  <div class="jump">Jump to bottom</div>
+  <div class="settings"><button>Caption settings</button></div>
+</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const region = () => document.querySelector('div[role="region"]');
+  const cc = document.getElementById('cc');
+  if (params.get('nobutton')) cc.remove();
+  let captionsOn = false;
+  cc.addEventListener('click', () => {
+    if (params.get('stuck')) return;
+    captionsOn = !captionsOn;
+    cc.setAttribute('aria-label', captionsOn ? 'Turn off captions' : 'Turn on captions');
+    cc.firstElementChild.textContent = captionsOn ? 'closed_caption' : 'closed_caption_off';
+    if (captionsOn && params.get('timeline')) window.fixture.timeline();
+  });
+
+  window.fixture = {
+    // Append a caption block before the two trailing children; returns its index.
+    say(speaker, text) {
+      const block = document.createElement('div');
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = speaker;
+      const body = document.createElement('div');
+      body.className = 'text';
+      body.appendChild(document.createTextNode(text));
+      block.append(name, body);
+      const r = region();
+      r.insertBefore(block, r.children[r.children.length - 2]);
+      return r.children.length - 3;
+    },
+    // Rewrite a block's text in place, the way Meet refines recognition.
+    revise(index, text) {
+      region().children[index].lastElementChild.firstChild.data = text;
+    },
+    rename(index, speaker) {
+      region().children[index].firstElementChild.textContent = speaker;
+    },
+    captionsOn() { return captionsOn; },
+    removeRegion() { region().remove(); },
+    endCall() { document.getElementById('hangup').remove(); },
+    timeline() {
+      const at = (ms, fn) => setTimeout(fn, ms);
+      let pat, hardy, battery;
+      at(50, () => { pat = window.fixture.say('Pat Liu', 'I don\'t'); });
+      at(150, () => window.fixture.revise(pat, 'I don\'t think this'));
+      at(250, () => window.fixture.revise(pat, 'i don\'t think this will work'));
+      at(350, () => window.fixture.revise(pat, 'I don\'t think this will work.'));
+      at(1200, () => { hardy = window.fixture.say('You', 'Why not? What'); });
+      at(1300, () => window.fixture.revise(hardy, 'Why not? What worries you?'));
+      // Meet polishes an old block after a newer one exists: must not repeat.
+      at(1500, () => { battery = window.fixture.say('Pat Liu', 'The battery'); });
+      at(1550, () => window.fixture.revise(pat, 'I don\'t think this will work!'));
+      at(1650, () => window.fixture.revise(battery, 'The battery is too small.'));
+      at(2600, () => window.fixture.endCall());
+    },
+  };
+</script>
+</body>
+</html>
