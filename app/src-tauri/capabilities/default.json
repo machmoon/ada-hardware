@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window on macOS, including Ada wake (ada-wake). http:default is scoped to what the Engine page accepts (pages/engine/components/EngineConnection.tsx validateEngineBaseUrl): plain http only on loopback, and any https origin for a deployed engine behind its bearer token -- the app has no allowlist of deployed hosts, so the https scope cannot be narrower than the setting.",
+  "description": "Capability for the main window on macOS, including Hardy wake (hardy-wake). http:default is scoped to what the Engine page accepts (pages/engine/components/EngineConnection.tsx validateEngineBaseUrl): plain http only on loopback, and any https origin for a deployed engine behind its bearer token -- the app has no allowlist of deployed hosts, so the https scope cannot be narrower than the setting.",
   "windows": [
     "main",
     "dashboard"
@@ -15,13 +15,13 @@
       "identifier": "core:event:allow-listen",
       "allow": [
         {
-          "event": "ada-wake"
+          "event": "hardy-wake"
         },
         {
-          "event": "ada-wake-error"
+          "event": "hardy-wake-error"
         },
         {
-          "event": "tray-ada-toggle"
+          "event": "tray-hardy-toggle"
         },
         {
           "event": "kaleo-setup-changed"

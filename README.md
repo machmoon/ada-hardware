@@ -9,7 +9,7 @@
 layout back — with the reasoning shown and every claim cited.**
 
 **Two names, one thing.** *Hardy* is who you talk to — the AI hardware engineer and
-the desktop app in [`app/`](app/). (The spoken wake word is still "Ada", from the
+the desktop app in [`app/`](app/). (The spoken wake word is still "Hardy", from the
 app's previous name.) *Silkscreen* is the engine underneath: the Python package, the
 `silkscreen` command, and this repository. Hardy is a client of Silkscreen; either
 can be used without the other.
@@ -80,7 +80,7 @@ CLI only: `./.venv/bin/silkscreen "a 3.3V LDO board" --model gemini-3.5-flash -o
   (`verified` / `proposed` / `unavailable`, `spoken: true` only when audio really played),
   and the demo recordings document what broke.
 
-![Hardy desktop workflow demo](docs/img/ada-desktop-demo.gif)
+![Hardy desktop workflow demo](docs/img/hardy-desktop-demo.gif)
 
 ![Generated STM32 board layout in KiCad](docs/img/board.png)
 
@@ -256,7 +256,7 @@ Platform-by-platform commands are in [docs/install.md](docs/install.md#kicad-opt
 | `frontend/` — Svelte review UI, served by the service | **Working** · persistent orchestrator chat, expandable traces, session JSON, review, schematic, placement and board tabs; spoken intent and findings read aloud via the browser's own Web Speech API (dictation on the intent and clarification fields in Chrome/Edge — Firefox has no recognition API and gets a notice; findings read by `speechSynthesis` with a stop control; never auto-started). Local-Whisper dictation is not built (`vendor/openwhispr/` is the reference) |
 | `engine/silkscreen/placement/` — verifier-grounded repair and company profiles | **Working** · deterministic and Gemini policies; experimental providers are opt-in |
 | `constraints.py` — approved build contract and post-route receipt | **Working** · opt-in, fail-closed, and deterministically tested |
-| Voice / talk input | **Working** · push-to-talk and "Ada" wake word in the desktop overlay (ear toggle, off by default, paid windows capped at 15); the web SPA's separate browser Web Speech dictation and read-aloud are listed under `frontend/` |
+| Voice / talk input | **Working** · push-to-talk and "Hardy" wake word in the desktop overlay (ear toggle, off by default, paid windows capped at 15); the web SPA's separate browser Web Speech dictation and read-aloud are listed under `frontend/` |
 | `app/` — the Hardy desktop overlay (Tauri) | **Working** · approval-gated step strip over a live KiCad, order step with GLB export, in-app 3D board viewer (`ModelViewer`), Workspace delivery panel |
 | Guided cursor | **Half built** · the in-webview pointer ships (`frontend/src/lib/guide.js`, `GuidePointer.svelte`, "Show me" on a finding); pointing at anything *outside* our own window — KiCad, a terminal, the OS — is **not built**, and there is no screen capture, accessibility-tree read or OS overlay behind it |
 | `spice/` — typed testbenches, decks, measurements, signed-margin assertions | **Working as a library** · reached today only by the MCP tools, `scripts/simulate_demo.py` and direct calls; **no pipeline stage, ADK node, CLI flag or service route builds a deck**, so a generated board is never simulated |

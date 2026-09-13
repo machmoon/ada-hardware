@@ -158,8 +158,8 @@ describe("overlayStateFor", () => {
       expect(at({ deskCaption: true })).toEqual({ state: "desk-caption", measured: false });
     });
 
-    it("is fixed for an Ada caption, clamped to four", () => {
-      expect(at({ commandNote: true })).toEqual({ state: "ada-caption", measured: false });
+    it("is fixed for an Hardy caption, clamped to four", () => {
+      expect(at({ commandNote: true })).toEqual({ state: "hardy-caption", measured: false });
     });
 
     it("does not measure the engine-down banner on its own", () => {

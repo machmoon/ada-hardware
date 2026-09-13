@@ -193,7 +193,7 @@ body {
 
    The dark-glass "strip" material was rolled back to the Card above; these
    four tokens survive it because the one voice control (VoiceControl, the
-   "Hey Ada" mute) says whether it is listening in colour, and a var() that
+   "Hey Hardy" mute) says whether it is listening in colour, and a var() that
    resolves to nothing would make unmuted and muted look identical. They are
    colour roles only: no fill, no radius, no material.
    --------------------------------------------------------------------------- */

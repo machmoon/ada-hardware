@@ -48,7 +48,7 @@ describe('the run store', () => {
       entries: [],
       needsClarification: false,
       actualModel: '',
-      orchestratorModel: 'gemini-3.7-flash',
+      orchestratorModel: 'auto',
       thinkingLevel: 'auto',
       actualThinkingLevel: '',
       quotaRpm: 'auto',
@@ -92,7 +92,7 @@ describe('what the run store logs', () => {
       no_solver_budget: false,
       review: true,
       ground: true,
-      orchestrator_model: 'gemini-3.7-flash',
+      orchestrator_model: 'auto',
       thinking_level: 'auto',
       quota_rpm: 'auto',
     })
@@ -1045,5 +1045,14 @@ describe('stageEvent: what clears it', () => {
 
     expect(IDLE.stages).toEqual({})
     expect(IDLE.feed).toEqual([])
+  })
+})
+
+describe('a proposal failure keeps what the user can act on', () => {
+  it('carries details through to the error state', () => {
+    startRun({ intent: 'x' })
+    const details = { attempts: 2, errors: ['e'], errorsTotal: 1, unsupported: ['u'], supportedPackages: 's' }
+    failRun({ name: 'ApiError', kind: 'proposal', status: 422, message: 'No valid circuit', details })
+    expect(get(run).error).toMatchObject({ kind: 'proposal', status: 422, details })
   })
 })

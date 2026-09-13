@@ -41,7 +41,7 @@ export type MicState =
  * The subset of the listener this control reads.
  *
  * `stoppedReason` is not on `WakeWord` yet — it is the patch this lane asked
- * the listener for (scratchpad/reviews/ada-product.md, patch A) — so it is
+ * the listener for (scratchpad/reviews/hardy-product.md, patch A) — so it is
  * optional and there is a fallback below. A `WakeWord` is assignable either
  * way, and the day the field lands this file needs no change.
  */
@@ -173,7 +173,7 @@ export interface VoiceControlProps {
 }
 
 /**
- * The strip's one voice control: a mute button for "Hey Ada".
+ * The strip's one voice control: a mute button for "Hey Hardy".
  *
  * Unmuted means I am listening for the wake word. Muted means I am not. That
  * is the whole model, and it replaced a pair of microphone-shaped affordances
@@ -280,7 +280,7 @@ export const VoiceControl = ({
     // the strip, so it has to do the thing the strip is currently doing: the
     // ear is already closed by the duck for the length of every reply, so
     // toggling the mute here would be a click nobody can hear — the founder's
-    // "there is no way to shut Ada up". Releasing the click un-ducks the ear
+    // "there is no way to shut Hardy up". Releasing the click un-ducks the ear
     // on its own (`announce`), so the mute is untouched either way.
     if (speaking) {
       speaker.stop();

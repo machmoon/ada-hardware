@@ -730,7 +730,7 @@ export async function deliverConfig(
 /**
  * Open Google's OAuth consent page via the engine, then wait for the redirect.
  *
- * Ada opens the URL with Tauri `openUrl` (the service often cannot open a
+ * Hardy opens the URL with Tauri `openUrl` (the service often cannot open a
  * browser from a worker thread). Needs `GOOGLEAPPS_CLIENT_ID` + `SECRET` on
  * the service process.
  */

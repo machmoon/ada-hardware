@@ -1,3 +1,3 @@
 fn main() {
-    ada_desktop_lib::run();
+    hardy_desktop_lib::run();
 }

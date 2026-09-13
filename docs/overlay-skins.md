@@ -171,9 +171,9 @@ Touch `app/src/pages/kaleo/components/VoiceOrb.tsx` and `app/src/hooks/useMicLev
 > - **`resize` is a real command.** A pty left at the 24×80 default is the most
 >   common bug in every terminal-in-Tauri repo named above.
 >
-> The Ada half shares the input line rather than sitting in a pane beside it,
+> The Hardy half shares the input line rather than sitting in a pane beside it,
 > following **Butterfish** (MIT) — the only prior art that does. The first
-> character the user typed decides: a capital letter asks Ada, `!` sets her to
+> character the user typed decides: a capital letter asks Hardy, `!` sets her to
 > work, anything else runs. Two rules are ours, both covering holes in that
 > set: a leading space forces the shell (`Rscript`, `Xvfb`, `Setup.exe` are
 > real capitalised commands), and nothing routes at all while the alternate
@@ -191,7 +191,7 @@ Touch `app/src/pages/kaleo/components/VoiceOrb.tsx` and `app/src/hooks/useMicLev
 > and Orb are still listed-but-unimplemented, so picking one of those today
 > leaves you on the bar.
 >
-> **Ada is wired.** `app/src/lib/silkscreen/chat.ts` drives `POST /chat/stream`,
+> **Hardy is wired.** `app/src/lib/silkscreen/chat.ts` drives `POST /chat/stream`,
 > which existed on the engine and had no client. One property of that endpoint
 > shapes the whole module: `service/app.py` hands the orchestrator a `generate`
 > callable, so **a typed sentence can start a paid board run**. So every frame
@@ -262,7 +262,7 @@ Built on Hammerspoon's application watcher (extensions/application/libapplicatio
 
 ### Build note
 
-Rust side, in app/src-tauri/src/: objc2-app-kit 0.3.2 is already in the graph, so no new crate and no Objective-C file. Use NSWorkspace::sharedWorkspace().notificationCenter() and add an observer for the static NSWorkspaceDidActivateApplicationNotification (objc2-app-kit src/generated/NSWorkspace.rs:664; NSWorkspaceApplicationKey at :634), read bundleIdentifier() off the NSRunningApplication, debounce, and app.emit("kaleo-frontmost-changed", bundle_id). Seed the initial value from NSWorkspace::sharedWorkspace().frontmostApplication() (:298) at startup so there is a value before the first activation. Pair every addObserver with removeObserver:name:object:nil in the window's teardown — Hammerspoon does, and a live observer over a freed object is the classic crash. Do NOT reuse app/src/hooks/useReviewedInKicad.ts for this: it listens to the webview's own `blur` and knows only that you left, never where you went. Frontend: add "core:event:allow-listen" for the new event name in app/src-tauri/capabilities/default.json alongside the existing ada-wake entries. Persistence: add tauri-plugin-store (Cargo.toml + @tauri-apps/plugin-store in package.json + `.plugin(tauri_plugin_store::Builder::default().build())`), add "store:default" to capabilities/default.json, and use `await Store.load('settings.json')` / store.set('followKicad', bool) — autoSave defaults to a 100 ms debounce. Move this one key off the localStorage path in app/src/contexts/theme.context.tsx so the Rust watcher can read the toggle without a round trip and so a webview data reset does not lose it. Fallback path only for org.kicad.kicad: tauri-plugin-macos-permissions is already a macOS dep and "macos-permissions:default" is already in capabilities — gate it behind "plugin:macos-permissions|check_screen_recording_permission", and only call request_screen_recording_permission from an explicit user click on that off-by-default row, never at launch.
+Rust side, in app/src-tauri/src/: objc2-app-kit 0.3.2 is already in the graph, so no new crate and no Objective-C file. Use NSWorkspace::sharedWorkspace().notificationCenter() and add an observer for the static NSWorkspaceDidActivateApplicationNotification (objc2-app-kit src/generated/NSWorkspace.rs:664; NSWorkspaceApplicationKey at :634), read bundleIdentifier() off the NSRunningApplication, debounce, and app.emit("kaleo-frontmost-changed", bundle_id). Seed the initial value from NSWorkspace::sharedWorkspace().frontmostApplication() (:298) at startup so there is a value before the first activation. Pair every addObserver with removeObserver:name:object:nil in the window's teardown — Hammerspoon does, and a live observer over a freed object is the classic crash. Do NOT reuse app/src/hooks/useReviewedInKicad.ts for this: it listens to the webview's own `blur` and knows only that you left, never where you went. Frontend: add "core:event:allow-listen" for the new event name in app/src-tauri/capabilities/default.json alongside the existing hardy-wake entries. Persistence: add tauri-plugin-store (Cargo.toml + @tauri-apps/plugin-store in package.json + `.plugin(tauri_plugin_store::Builder::default().build())`), add "store:default" to capabilities/default.json, and use `await Store.load('settings.json')` / store.set('followKicad', bool) — autoSave defaults to a 100 ms debounce. Move this one key off the localStorage path in app/src/contexts/theme.context.tsx so the Rust watcher can read the toggle without a round trip and so a webview data reset does not lose it. Fallback path only for org.kicad.kicad: tauri-plugin-macos-permissions is already a macOS dep and "macos-permissions:default" is already in capabilities — gate it behind "plugin:macos-permissions|check_screen_recording_permission", and only call request_screen_recording_permission from an explicit user click on that off-by-default row, never at launch.
 
 ### Unverified
 

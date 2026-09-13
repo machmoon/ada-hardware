@@ -867,7 +867,10 @@ def propose_plan(
     for round_no in range(max_repairs + 1):
         # A transport failure is NOT wrapped: ModelError propagates so a
         # FallbackModel's failover -- and the service's 502 -- stay intact.
-        raw = model.generate(prompt, temperature=0.0, max_output_tokens=4096)
+        # 16384, the propose budget: on Gemini 3 the reasoning tokens share
+        # this budget, and a multi-subsystem request (a robot-arm controller:
+        # MCU module, PWM driver, buck, USB-C) was cut mid-answer at 4096.
+        raw = model.generate(prompt, temperature=0.0, max_output_tokens=16384)
         try:
             plan = parse_plan_response(raw, vocab=vocab)
         except PlanValidationError as exc:

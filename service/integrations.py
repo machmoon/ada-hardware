@@ -36,7 +36,7 @@ the nine integrations that were fine.
 
 The ``google`` entry is derived from :func:`service.deliver.config_report`
 rather than re-deriving it, so ``GET /integrations`` and ``GET
-/deliver/config`` cannot disagree about whether Ada can send mail.
+/deliver/config`` cannot disagree about whether Hardy can send mail.
 """
 
 from __future__ import annotations

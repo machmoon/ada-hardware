@@ -28,7 +28,7 @@ const line = (frame: Record<string, unknown>) => `${JSON.stringify(frame)}\n`;
 
 beforeEach(() => fetchMock.mockReset());
 
-describe("asking Ada from the terminal", () => {
+describe("asking Hardy from the terminal", () => {
   it("returns her reply", async () => {
     fetchMock.mockResolvedValue(
       stream([line({ event: "chat.done", assistant: "Because U3 has no footprint." })]),

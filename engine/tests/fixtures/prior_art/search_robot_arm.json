@@ -1,0 +1,143 @@
+{
+ "total_count": 29040,
+ "incomplete_results": false,
+ "items": [
+  {
+   "full_name": "cactus-compute/cactus",
+   "html_url": "https://github.com/cactus-compute/cactus",
+   "description": "Quantization, kernels, runtime and inference engine for mobiles, wearables, smart home and robots. ",
+   "stargazers_count": 6010,
+   "forks_count": 501,
+   "pushed_at": "2026-09-08T13:54:15Z",
+   "archived": false,
+   "fork": false,
+   "default_branch": "main",
+   "topics": [
+    "ai",
+    "android",
+    "arm",
+    "edge",
+    "edge-ai",
+    "framework",
+    "ios",
+    "llamacpp",
+    "llm",
+    "llm-inference",
+    "llms",
+    "mobile",
+    "mobile-inference",
+    "on-device-ai",
+    "quantiz",
+    "rag",
+    "smartphone",
+    "speech",
+    "transformer",
+    "whisper"
+   ],
+   "license": {
+    "key": "other",
+    "name": "Other",
+    "spdx_id": "NOASSERTION"
+   }
+  },
+  {
+   "full_name": "Vector-Wangel/XLeRobot",
+   "html_url": "https://github.com/Vector-Wangel/XLeRobot",
+   "description": "XLeRobot: Practical Dual-Arm Mobile Home Robot for $660",
+   "stargazers_count": 5517,
+   "forks_count": 610,
+   "pushed_at": "2026-07-22T20:26:45Z",
+   "archived": false,
+   "fork": false,
+   "default_branch": "main",
+   "topics": [],
+   "license": {
+    "key": "apache-2.0",
+    "name": "Apache License 2.0",
+    "spdx_id": "Apache-2.0"
+   }
+  },
+  {
+   "full_name": "Source-Robotics/PAROL6-Desktop-robot-arm",
+   "html_url": "https://github.com/Source-Robotics/PAROL6-Desktop-robot-arm",
+   "description": "BOM, STL files and instructions for PAROL6 3D printed robot arm",
+   "stargazers_count": 3234,
+   "forks_count": 372,
+   "pushed_at": "2026-09-07T15:55:30Z",
+   "archived": false,
+   "fork": false,
+   "default_branch": "main",
+   "topics": [
+    "ai",
+    "lerobot",
+    "parol6",
+    "python",
+    "robotics"
+   ],
+   "license": {
+    "key": "gpl-3.0",
+    "name": "GNU General Public License v3.0",
+    "spdx_id": "GPL-3.0"
+   }
+  },
+  {
+   "full_name": "BCN3D/BCN3D-Moveo",
+   "html_url": "https://github.com/BCN3D/BCN3D-Moveo",
+   "description": "Open Source 3D Printed Robotic Arm for educational purposes",
+   "stargazers_count": 1961,
+   "forks_count": 566,
+   "pushed_at": "2022-03-01T11:37:05Z",
+   "archived": false,
+   "fork": false,
+   "default_branch": "master",
+   "topics": [],
+   "license": {
+    "key": "mit",
+    "name": "MIT License",
+    "spdx_id": "MIT"
+   }
+  },
+  {
+   "full_name": "AngelLM/Thor",
+   "html_url": "https://github.com/AngelLM/Thor",
+   "description": "DIY 3D Printable Robotic Arm",
+   "stargazers_count": 1593,
+   "forks_count": 271,
+   "pushed_at": "2025-05-09T14:25:31Z",
+   "archived": false,
+   "fork": false,
+   "default_branch": "main",
+   "topics": [
+    "3d-printed",
+    "diy",
+    "freecad",
+    "maker",
+    "opensource",
+    "robot-arm",
+    "robotics"
+   ],
+   "license": {
+    "key": "cc-by-sa-4.0",
+    "name": "Creative Commons Attribution Share Alike 4.0 International",
+    "spdx_id": "CC-BY-SA-4.0"
+   }
+  },
+  {
+   "full_name": "SkyentificGit/SmallRobotArm",
+   "html_url": "https://github.com/SkyentificGit/SmallRobotArm",
+   "description": "This is the open source project of the 6DoF robot arm based on stepper motors",
+   "stargazers_count": 1474,
+   "forks_count": 406,
+   "pushed_at": "2019-09-09T09:26:00Z",
+   "archived": false,
+   "fork": false,
+   "default_branch": "master",
+   "topics": [],
+   "license": {
+    "key": "gpl-3.0",
+    "name": "GNU General Public License v3.0",
+    "spdx_id": "GPL-3.0"
+   }
+  }
+ ]
+}

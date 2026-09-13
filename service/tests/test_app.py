@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -39,15 +40,15 @@ except ImportError:  # a base install has no google.adk; the ADK test skips
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 CIRCUIT = {
-    "devices": {"AMS1117-3.3": {"pins": {"1": "GND", "2": "VOUT", "3": "VIN"}}},
+    "devices": {"AMS1117-3.3": {"pins": {"GND": "1", "VOUT": "2", "VIN": "3"}}},
     "passives": {
         "C1": {"type": "capacitor", "value": "10uF"},
         "C2": {"type": "capacitor", "value": "100nF"},
     },
     "nets": {
-        "VIN": ["AMS1117-3.3.3", "C1.1"],
-        "GND": ["AMS1117-3.3.1", "C1.2", "C2.2"],
-        "VOUT": ["AMS1117-3.3.2", "C2.1"],
+        "VIN": ["AMS1117-3.3.VIN", "C1.1"],
+        "GND": ["AMS1117-3.3.GND", "C1.2", "C2.2"],
+        "VOUT": ["AMS1117-3.3.VOUT", "C2.1"],
     },
 }
 
@@ -1058,15 +1059,15 @@ def test_a_finding_that_carries_provenance_keeps_it():
 #: client keying off finding.parts appears to work there and matches nothing on
 #: any real board. This fixture is what keeps that from passing again.
 NAMED_CIRCUIT = {
-    "devices": {"AMS1117-3.3": {"pins": {"1": "GND", "2": "VOUT", "3": "VIN"}}},
+    "devices": {"AMS1117-3.3": {"pins": {"GND": "1", "VOUT": "2", "VIN": "3"}}},
     "passives": {
         "c_bulk_vin": {"type": "capacitor", "value": "10uF"},
         "c_dec_vout": {"type": "capacitor", "value": "100nF"},
     },
     "nets": {
-        "VIN": ["AMS1117-3.3.3", "c_bulk_vin.1"],
-        "GND": ["AMS1117-3.3.1", "c_bulk_vin.2", "c_dec_vout.2"],
-        "VOUT": ["AMS1117-3.3.2", "c_dec_vout.1"],
+        "VIN": ["AMS1117-3.3.VIN", "c_bulk_vin.1"],
+        "GND": ["AMS1117-3.3.GND", "c_bulk_vin.2", "c_dec_vout.2"],
+        "VOUT": ["AMS1117-3.3.VOUT", "c_dec_vout.1"],
     },
 }
 NAMED_REVIEW = {
@@ -3354,30 +3355,89 @@ def test_an_order_and_grounding_coexist(ground_server):
 
 
 def test_build_model_chain_ends_on_the_gemma_rung(monkeypatch):
-    """Two Gemini tiers, then open-weights Gemma as the last resort.
+    """Three Gemini tiers, then open-weights Gemma as the last resort.
 
     Gemma is a different model family behind the same API, so an outage or a
     quota pool shared by the Gemini tiers still leaves one rung standing. One
-    attempt only: by then the caller has waited through four Gemini attempts.
+    attempt only: by then the caller has waited through six Gemini attempts.
     """
-    from silkscreen.agents.model import CHEAP_MODEL, DEFAULT_MODEL, GEMMA_MODEL
+    from silkscreen.agents.model import (
+        CHEAP_MODEL,
+        DEFAULT_MODEL,
+        FALLBACK_MODEL,
+        GEMMA_MODEL,
+    )
 
     from service.app import build_model
 
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    monkeypatch.delenv("SILKSCREEN_MODEL", raising=False)
     chain = build_model()
 
     assert [p.name for p in chain.providers] == [
         "gemini-primary",
+        "gemini-flash",
         "gemini-cheap",
         "gemma-open",
     ]
     assert [p.model.model for p in chain.providers] == [
         DEFAULT_MODEL,
+        FALLBACK_MODEL,
         CHEAP_MODEL,
         GEMMA_MODEL,
     ]
     assert chain.providers[-1].attempts == 1
+
+
+def test_silkscreen_model_sets_the_primary_and_folds_a_duplicate_rung(monkeypatch):
+    """The 2026-09-13 demo: 3.7-flash's daily cap was gone and nothing but a
+    source edit could make the worker lead with 3.5-flash."""
+    from silkscreen.agents.model import FALLBACK_MODEL
+
+    from service.app import build_model
+
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    monkeypatch.setenv("SILKSCREEN_MODEL", FALLBACK_MODEL)
+    chain = build_model()
+    ids = [p.model.model for p in chain.providers]
+    assert ids[0] == FALLBACK_MODEL
+    assert ids.count(FALLBACK_MODEL) == 1, "the same model twice is not failover"
+
+
+def test_a_daily_quota_refusal_is_remembered_across_requests(monkeypatch):
+    """build_model runs once per request; the cooldown must outlive it, and a
+    per-day cap is parked until the reset, not for the retryDelay it names."""
+    from silkscreen.agents import resilience
+    from silkscreen.agents.model import DEFAULT_MODEL, GeminiModel, ModelError
+
+    from service.app import build_model
+
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    monkeypatch.delenv("SILKSCREEN_MODEL", raising=False)
+    monkeypatch.setattr(resilience, "SHARED_COOLDOWNS", {})
+    monkeypatch.setattr(resilience, "seconds_until_quota_reset", lambda now=None: 5000.0)
+    calls: list[str] = []
+
+    def fake_generate(self, prompt, **kwargs):
+        calls.append(self.model)
+        if self.model == DEFAULT_MODEL:
+            raise ModelError(
+                f"{self.model} call failed: 429 RESOURCE_EXHAUSTED. "
+                "'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier' "
+                "Please retry in 34.9s. 'retryDelay': '34s'"
+            )
+        return "ok"
+
+    monkeypatch.setattr(GeminiModel, "generate", fake_generate)
+    assert build_model().generate("hi") == "ok"
+    second = build_model()
+    assert second.generate("hi") == "ok"
+    assert calls.count(DEFAULT_MODEL) == 1, "the second request re-asked it"
+    skipped = [a for a in second.log if "skipped" in (a.error or "")]
+    assert [a.provider for a in skipped] == ["gemini-primary"]
+    assert second.last_provider == "gemini-flash"
+    (until,) = resilience.SHARED_COOLDOWNS.values()
+    assert until - time.monotonic() > 4000
 
 
 # ---------------------------------------------------------------- sourcing
@@ -3493,7 +3553,7 @@ def test_transcribe_uses_the_cheap_factory_and_is_paced(server):
         model = "gemini-transcribe-test"
 
     cheap = NamedScripted(
-        by_marker={"transcribing a spoken request": " ada, an LDO board \n"}
+        by_marker={"transcribing a spoken request": " hardy, an LDO board \n"}
     )
     primary_calls = []
 
@@ -3530,7 +3590,7 @@ def test_transcribe_uses_the_cheap_factory_and_is_paced(server):
         Handler.model_factory = staticmethod(scripted)
 
     assert status == 200, body
-    assert body == {"text": "ada, an LDO board", "model": "gemini-transcribe-test"}
+    assert body == {"text": "hardy, an LDO board", "model": "gemini-transcribe-test"}
     assert dictate_status == 200
     assert len(cheap.calls) == 2
     assert primary_calls == []
@@ -3582,7 +3642,7 @@ def test_transcribe_wake_does_not_burn_the_shared_pacer(server):
         model = "gemini-transcribe-test"
 
     cheap = NamedScripted(
-        by_marker={"transcribing a spoken request": " ada, an LDO board \n"}
+        by_marker={"transcribing a spoken request": " hardy, an LDO board \n"}
     )
     shared = RecordingPacer()
     voice = RecordingPacer()
@@ -3623,3 +3683,81 @@ def test_build_transcribe_model_is_one_cheap_provider_with_one_attempt(monkeypat
     model = build_transcribe_model()
     assert [(p.name, p.attempts) for p in model.providers] == [("gemini-cheap", 1)]
     assert model.providers[0].model.model == CHEAP_MODEL
+
+
+# ------------------------------------------ a proposal that never validated
+# 2026-09-13 robotic-arm demo: ProposalError reached the SPA as a 500
+# "internal error". It is the requester's to act on, so it is a named 422.
+
+
+def _proposal_error():
+    from silkscreen.agents.propose import ProposalAttempt, ProposalError
+
+    unsupported = "connector 'NANO' has unsupported package 'arduino_nano'; supported: [...]"
+    attempts = [
+        ProposalAttempt(round=0, raw="{}", errors=[unsupported]),
+        ProposalAttempt(
+            round=1,
+            raw="{}",
+            errors=[unsupported] + [f"net N{i} names pin X{i}" for i in range(20)]
+            + ["x" * 5000],
+        ),
+    ]
+    return ProposalError("No valid circuit after 2 attempts.", attempts, unsupported=[unsupported])
+
+
+def test_a_proposal_that_never_validates_is_a_named_422_with_bounded_errors(
+    monkeypatch, server
+):
+    import service.app as app
+
+    def boom(*a, **kw):
+        raise _proposal_error()
+
+    monkeypatch.setattr(app, "generate_pcb", boom)
+    status, body = post(server, {"intent": "a robotic arm", "time_limit_s": 5})
+    assert status == 422
+    assert body["reason"] == "proposal_invalid"
+    assert body["attempts"] == 2
+    assert "cannot draw" in body["error"]
+    assert len(body["errors"]) == app.MAX_PROPOSAL_ERRORS
+    assert body["errors_total"] == 22
+    assert all(len(e) <= app.MAX_PROPOSAL_ERROR_CHARS for e in body["errors"])
+    assert "arduino_nano" in body["unsupported"][0]
+    assert "connector" in body["supported_packages"]
+    assert "error_id" not in body
+
+
+def test_a_streamed_proposal_failure_is_a_422_run_error(monkeypatch, server):
+    import service.app as app
+
+    monkeypatch.setattr(app, "generate_pcb", _pipeline_that_raises(_proposal_error()))
+    _, _, frames = post_stream(server, REQUEST)
+    assert frames[-1]["event"] == "run.error"
+    assert frames[-1]["status"] == 422
+    assert frames[-1]["reason"] == "proposal_invalid"
+    assert frames[-1]["unsupported"]
+
+
+def test_chat_stream_names_a_proposal_failure_from_the_board_tool(server):
+    previous_catalog = Handler.__dict__["model_catalog_factory"]
+    previous_runner = Handler.__dict__["orchestrator_runner"]
+    Handler.model_catalog_factory = staticmethod(
+        lambda: {"auto_model": "gemini-test", "models": [{"id": "gemini-test"}]}
+    )
+
+    def orchestrate(**kwargs):
+        raise _proposal_error()
+
+    Handler.orchestrator_runner = staticmethod(orchestrate)
+    try:
+        status, _, frames = post_stream(
+            server, {"intent": "a robotic arm"}, path="/chat/stream"
+        )
+    finally:
+        Handler.model_catalog_factory = previous_catalog
+        Handler.orchestrator_runner = previous_runner
+    assert status == 200
+    assert frames[-1]["event"] == "chat.error"
+    assert frames[-1]["status"] == 422
+    assert frames[-1]["reason"] == "proposal_invalid"

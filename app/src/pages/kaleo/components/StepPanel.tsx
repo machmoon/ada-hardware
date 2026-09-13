@@ -26,6 +26,7 @@ import {
   NOTHING_SUBMITTED,
   orderDetails,
   placeDetails,
+  priorArtDetails,
   railRows,
   receiptLine,
   reviewDetails,
@@ -565,6 +566,45 @@ const OrderOutcome = ({
   );
 };
 
+/** The prior art the propose step researched: top projects with licence and link. */
+const PriorArtOutcome = ({ details }: { details: NonNullable<ReturnType<typeof priorArtDetails>> }) => {
+  const [note, setNote] = useState<string | null>(null);
+  return (
+    <div className="flex flex-col gap-1 rounded-md border border-input/40 p-2" data-testid="prior-art-outcome" data-status={details.status}>
+      <p className="text-[11px] text-muted-foreground" data-testid="prior-art-headline">
+        {details.headline}
+        {details.total > details.projects.length ? ` · top ${details.projects.length} of ${details.total}` : ""}
+      </p>
+      {details.projects.map((project) => (
+        <div key={project.name} className="flex items-center justify-between gap-2 text-[11px]" data-testid="prior-art-project">
+          {project.url ? (
+            <button
+              type="button"
+              className="truncate text-left underline"
+              onClick={() =>
+                openUrl(project.url as string).catch(() => setNote(`No browser opened it. It is at ${project.url}`))
+              }
+            >
+              {project.name}
+            </button>
+          ) : (
+            <span className="truncate">{project.name}</span>
+          )}
+          <span className="shrink-0 text-muted-foreground">
+            {project.license} · ★ {project.stars} · {project.facts} cited
+          </span>
+        </div>
+      ))}
+      {details.warnings.map((warning) => (
+        <p key={warning} className="text-[11px] text-muted-foreground" data-testid="prior-art-warning">
+          {warning}
+        </p>
+      ))}
+      {note ? <p className="break-all text-[11px] text-muted-foreground">{note}</p> : null}
+    </div>
+  );
+};
+
 /**
  * The BOM the sourcing step produced, under the order outcome or on its own.
  *
@@ -829,6 +869,7 @@ export const StepPanel = ({
   const review = reviewDetails(latest);
   const route = routeDetails(latest);
   const place = placeDetails(latest);
+  const priorArt = priorArtDetails(latest);
 
   // The case step's two inputs (`service/steps.py::_case`): a style, and the
   // rigorous flag. Either one makes the engine design afresh — one more model
@@ -1132,7 +1173,7 @@ export const StepPanel = ({
         </div>
       ) : null}
 
-      {review || caseOutcome || order || sourcing || route || place ? (
+      {review || caseOutcome || order || sourcing || route || place || priorArt ? (
         // The receipts scroll inside their own box: the window stops growing
         // at OVERLAY_MAX_HEIGHT, and a BOM below that edge was simply gone,
         // with nothing to say so. The buttons above stay put.
@@ -1150,6 +1191,7 @@ export const StepPanel = ({
                 them. Findings first -- a blocker is a decision to make and a
                 table of parts is not. */}
             {stageReceipt ? <StageReceipt response={stageReceipt} /> : null}
+            {priorArt ? <PriorArtOutcome details={priorArt} /> : null}
             {place ? <PlaceOutcome details={place} /> : null}
             {route ? <RouteOutcome details={route} /> : null}
             {review ? <ReviewOutcome details={review} /> : null}

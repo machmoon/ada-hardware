@@ -14,6 +14,7 @@ if KiCad's own parser cannot read what we wrote, the tests fail.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from .footprints import (
     cathode_mark,
     connector,
     dual_row_header,
+    esp32_wroom_32e,
     for_passive,
     lqfp,
     pin1_mark,
@@ -36,6 +38,8 @@ from .footprints import (
     soic,
     sot223,
     switch,
+    ti_powerpad_so8,
+    tssop,
 )
 from .ids import stable_uuid
 from .models3d import model_for
@@ -254,6 +258,76 @@ _MODULE_PACKAGES: dict[str, _ModulePackage] = {
 }
 
 
+@dataclass(frozen=True)
+class _NamedChip:
+    """A chip whose land pattern is chosen by its part number, not its count.
+
+    The pin-count rule answers "a 28-pin IC is a SOIC-28", which is false for
+    every part that is never made in SOIC -- a PCA9685 comes in TSSOP-28 and
+    HVQFN-28 and nothing else, so the count rule drew a package that does not
+    exist and nothing raised. The IR already keys an IC by its manufacturer
+    part number (propose rule 11), so the name is available to decide on, the
+    same way :data:`_MODULE_PACKAGES` decides a module. The count is then
+    checked, never trusted.
+    """
+
+    label: str
+    pin_count: int
+    build: Callable[[dict[str, str]], Footprint]
+
+
+#: Part-number stems with a characterised land pattern. Matched as tokens of
+#: the normalised device name, longest key first, so a suffix that names a
+#: different package (``_CHIP_REFUSALS``) is seen before the stem it extends.
+_NAMED_CHIPS: dict[str, _NamedChip] = {
+    # NXP PCA9685PW: TSSOP-28, 4.4 mm body (NXP PCA9685 datasheet, package
+    # outline SOT361-1; Adafruit's open servo-driver board uses this part).
+    "pca9685": _NamedChip("PCA9685 (TSSOP-28)", 28, lambda nets: tssop(28, nets)),
+    # Espressif ESP32-WROOM-32E: 38 castellated pins plus the GND slug as
+    # pin 39, KiCad's RF_Module:ESP32-WROOM-32E symbol numbering.
+    "esp32_wroom_32e": _NamedChip("ESP32-WROOM-32E module", 39, esp32_wroom_32e),
+    # TI TPS5430 (3 A) and TPS5450 (5 A) buck converters: both ship only in
+    # the 8-lead DDA PowerPAD SO, and KiCad's Regulator_Switching:TPS5430DDA
+    # symbol numbers the exposed pad 9 (GNDPAD). A plain SOIC-8 would leave
+    # the pad the datasheet requires grounded floating.
+    "tps5430": _NamedChip("TPS5430 (TI SO PowerPAD-8, pad 9 GND)", 9, ti_powerpad_so8),
+    "tps5450": _NamedChip("TPS5450 (TI SO PowerPAD-8, pad 9 GND)", 9, ti_powerpad_so8),
+}
+
+#: Part numbers a stem above would match that are a *different* package.
+#: Refused by name rather than drawn as the stem's pattern.
+_CHIP_REFUSALS: dict[str, str] = {
+    "pca9685bs": "the PCA9685BS is the HVQFN-28 package, which is not drawn; "
+    "use the PCA9685PW (TSSOP-28)",
+}
+
+
+def _normalised(name: str) -> str:
+    return "".join(c if c.isalnum() else "_" for c in name.lower())
+
+
+def _named_chip_footprint(
+    name: str, pin_count: int, nets: dict[str, str]
+) -> Footprint | None:
+    """The part-number rule, or None when the name names no known chip."""
+    normalised = _normalised(name)
+    for key, reason in _CHIP_REFUSALS.items():
+        if key in normalised:
+            raise UnsupportedPackage(f"{name!r}: {reason}.")
+    for key in sorted(_NAMED_CHIPS, key=len, reverse=True):
+        if key not in normalised:
+            continue
+        chip = _NAMED_CHIPS[key]
+        if pin_count != chip.pin_count:
+            raise UnsupportedPackage(
+                f"{name!r} is the {chip.label}, which has {chip.pin_count} "
+                f"pins, but the circuit declares {pin_count} (highest pin "
+                f"number). Number its pins as the part's own pinout does."
+            )
+        return chip.build(nets)
+    return None
+
+
 def _module_key(name: str) -> str | None:
     """The module registry key this device name names, if any.
 
@@ -369,6 +443,9 @@ def _footprint_for_device(
             body_h_mm=module.body_h_mm,
             nets=nets,
         )
+    named = _named_chip_footprint(name, pin_count, nets)
+    if named is not None:
+        return named
     if pin_count == 3:
         return sot223(nets)
     if pin_count in SOIC_PINS:
@@ -409,6 +486,13 @@ def supported_packages_text() -> str:
     return (
         f"kind 'ic': 3 pins (SOT-223), {soic} pins (SOIC), {lqfp_pins} pins "
         f"(LQFP), and the named modules {sorted(_MODULE_PACKAGES)}. "
+        f"Chips drawn by PART NUMBER rather than pin count (the part number "
+        f"must appear in the device key, and the pin count must match): "
+        + "; ".join(
+            f"{c.label} for a key containing {k!r}, {c.pin_count} pins"
+            for k, c in sorted(_NAMED_CHIPS.items())
+        )
+        + ". "
         f"kind 'connector', by package name: {sorted(CONNECTOR_PACKAGES)}. "
         f"kind 'battery', by package name: {sorted(BATTERY_PACKAGES)}. "
         f"kind 'switch', by package name: {sorted(SWITCH_PACKAGES)}. "
@@ -426,17 +510,128 @@ def package_errors(spec: CircuitSpec) -> list[str]:
     """
     errors: list[str] = []
     for device in spec.devices:
+        nets = _device_pin_nets(spec, device)
         try:
-            _footprint_for_device(
+            fp = _footprint_for_device(
                 device.name,
                 _package_pin_count(device.pins),
-                {},
+                nets,
                 kind=device.kind,
                 package=device.package,
             )
         except UnsupportedPackage as exc:
             errors.append(str(exc))
+            continue
+        errors.extend(_pad_errors(device, fp))
+    for passive in spec.passives:
+        errors.extend(_polarity_errors(spec, passive))
     return errors
+
+
+def _passive_legs(spec: CircuitSpec, name: str) -> dict[str, str]:
+    legs = {"1": "", "2": ""}
+    for conn in spec.connections:
+        for endpoint in conn.endpoints:
+            part, _, leg = endpoint.rpartition(".")
+            if part == name and leg in legs:
+                legs[leg] = conn.net
+    return legs
+
+
+def _is_ground(net: str) -> bool:
+    lowered = net.lower().lstrip("+-/")
+    return lowered.startswith(("gnd", "vss", "agnd", "dgnd", "pgnd"))
+
+
+def _polarity_errors(spec: CircuitSpec, passive) -> list[str]:
+    """A capacitor drawn as an electrolytic with its + leg on ground.
+
+    From 100 uF up ``for_passive`` draws an aluminium electrolytic, whose pad 1
+    is +. The IR's capacitor legs carry no polarity, so the model's choice of
+    which leg is "1" becomes the can's orientation on the board; an
+    electrolytic fitted reversed across a 5 V servo rail vents. Refused in
+    words so the repair round swaps the legs, never flipped silently (that
+    would put the schematic's pin 1 on a different net from the board's pad 1,
+    which KiCad's parity check reports).
+    """
+    if passive.type.value != "capacitor":
+        return []
+    fp = for_passive(passive.type.value, passive.value)
+    if not fp.polarised:
+        return []
+    legs = _passive_legs(spec, passive.name)
+    if _is_ground(legs["1"]) and not _is_ground(legs["2"]):
+        return [
+            f"capacitor {passive.name!r} ({passive.value}) is drawn as an "
+            f"aluminium electrolytic, whose leg 1 is + and leg 2 is -; the "
+            f"circuit puts leg 1 on {legs['1']} and leg 2 on {legs['2']}. "
+            f"Put leg 1 on the positive net and leg 2 on ground."
+        ]
+    return []
+
+
+def _device_pin_nets(spec: CircuitSpec, device) -> dict[str, str]:
+    """``{pad number: net}`` for one device, from the spec's connections."""
+    pin_nets: dict[str, str] = {}
+    for conn in spec.connections:
+        for endpoint in conn.endpoints:
+            part, _, pin_name = endpoint.rpartition(".")
+            if part == device.name:
+                number = device.pins.get(pin_name)
+                if number:
+                    pin_nets[str(number)] = conn.net
+    return pin_nets
+
+
+def _pad_errors(device, fp: Footprint) -> list[str]:
+    """Pins the land pattern has no pad for, and stacked pads split across nets.
+
+    A pin numbered for a pad the pattern does not have used to be dropped in
+    silence: ``build_board`` looks the pad up by exact number, finds nothing,
+    and the net simply never reaches the part. Measured 2026-09-13 on a
+    robot-arm controller whose USB-C receptacle was declared with pins "1".."6"
+    and D+/D- on a power-only part -- the board placed, the connector carried
+    no copper, and the CH340's USB lines went nowhere.
+
+    Pads that share a position but not a number (a USB-C receptacle's A1/B12,
+    which are one land on the part) are one piece of copper, so the pins they
+    carry must be on one net; anything else is a short the part itself makes.
+    """
+    errors: list[str] = []
+    pads = {pad.number for pad in fp.pads}
+    missing = sorted(
+        f"{name}={number}"
+        for name, number in device.pins.items()
+        if str(number) not in pads
+    )
+    if missing:
+        errors.append(
+            f"{device.name!r} ({fp.name}) has no pad for pin(s) {missing}; its "
+            f"pads are numbered {sorted(pads, key=_pad_sort_key)}. Number each "
+            f"pin with the pad it lands on, and do not wire a signal to a part "
+            f"that has no pin for it."
+        )
+    by_position: dict[tuple[int, int], set[str]] = {}
+    for pad in fp.pads:
+        by_position.setdefault((pad.x_nm, pad.y_nm), set()).add(pad.number)
+    nets_of = {pad.number: pad.net for pad in fp.pads}
+    for numbers in by_position.values():
+        if len(numbers) < 2:
+            continue
+        nets = {nets_of[n] for n in numbers}
+        if len(nets) > 1:
+            errors.append(
+                f"{device.name!r} ({fp.name}) pads {sorted(numbers)} are one "
+                f"land on the part, so they must be on one net; the circuit "
+                f"puts them on {sorted(n or '(unconnected)' for n in nets)}."
+            )
+    return errors
+
+
+def _pad_sort_key(number: str) -> tuple[str, int]:
+    head = number.rstrip("0123456789")
+    tail = number[len(head):]
+    return (head, int(tail) if tail else -1)
 
 
 def _package_pin_count(pins: dict[str, str]) -> int:
@@ -529,14 +724,7 @@ def build_board(
     spacing_of: dict[str, int] = {}
 
     for device in spec.devices:
-        pin_nets: dict[str, str] = {}
-        for conn in spec.connections:
-            for endpoint in conn.endpoints:
-                part, _, pin_name = endpoint.rpartition(".")
-                if part == device.name:
-                    number = device.pins.get(pin_name)
-                    if number:
-                        pin_nets[str(number)] = conn.net
+        pin_nets = _device_pin_nets(spec, device)
         fp = _footprint_for_device(
             device.name,
             _package_pin_count(device.pins),
@@ -544,6 +732,9 @@ def build_board(
             kind=device.kind,
             package=device.package,
         )
+        pad_problems = _pad_errors(device, fp)
+        if pad_problems:
+            raise UnsupportedPackage(" ".join(pad_problems))
         ref = ref_of[device.name]
         placed.append(PlacedPart(ref=ref, footprint=fp, value=device.name))
         spacing_of[ref] = IC_SPACING_NM

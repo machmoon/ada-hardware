@@ -3,7 +3,7 @@
 Someone types "a 3.3 V LDO board for the sensor" into Slack from their phone.
 The laptop has no public URL, so Slack cannot call it; the Slack bridge
 (``slackbot/bridge.py``, over Socket Mode) runs *on* the laptop and posts the
-idea here. The Ada overlay polls ``GET /inbox``, accepts one, and starts the
+idea here. The Hardy overlay polls ``GET /inbox``, accepts one, and starts the
 ordinary approval-gated step run with it -- so the engineer still presses every
 paid step after the first, exactly as if the sentence had been typed into the
 bar. This module is only the hand-off between those two processes: it stores
@@ -18,7 +18,7 @@ jobs/{id}/start``, ``GetJobState`` is ``GET jobs/{id}``). The same three states
 fit here for the same reasons:
 
 * **accept is exclusive.** Two overlays (a laptop and a desktop both running
-  Ada) polling one service must not both start a paid run for one message. The
+  Hardy) polling one service must not both start a paid run for one message. The
   first accept wins; the second gets 409, this repo's word for "well-formed,
   and the state refused it" (``StepOrderError`` in ``service/app.py``).
 * **start carries the step session id.** That id is what lets the Slack side

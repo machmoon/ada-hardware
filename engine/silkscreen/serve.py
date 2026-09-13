@@ -48,8 +48,8 @@ DESKTOP_DEV_PORT = 1420
 #: Where a release install of the overlay lives (``productName`` "Hardy").
 INSTALLED_APP = Path("/Applications/Hardy.app")
 
-#: Releases built before the rename (v0.3.1 and earlier) install as ``Ada.app``.
-LEGACY_INSTALLED_APP = Path("/Applications/Ada.app")
+#: Releases built before the rename (v0.3.1 and earlier) install as ``Hardy.app``.
+LEGACY_INSTALLED_APP = Path("/Applications/Hardy.app")
 
 
 def _port_in_use(port: int) -> bool:

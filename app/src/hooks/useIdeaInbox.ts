@@ -6,8 +6,8 @@ import { authHeaders } from "@/lib/silkscreen/client";
 //
 // The Slack bridge (`slackbot/bridge.py`, Socket Mode, on this laptop) files a
 // message into the engine's inbox (`service/inbox.py`). This hook is the other
-// half: it polls `GET /inbox` while Ada is idle, *accepts* the oldest idea
-// (exclusive — a second Ada on another machine gets 409 and moves on), hands
+// half: it polls `GET /inbox` while Hardy is idle, *accepts* the oldest idea
+// (exclusive — a second Hardy on another machine gets 409 and moves on), hands
 // the sentence to the same `steps.start` the prompt bar uses, and then reports
 // the step session id with `start` so the bridge can follow the run through
 // the engine's own `GET /steps/<id>`. Accept-then-start is Buildkite's agent
@@ -70,7 +70,7 @@ function newClaimant(): string {
     typeof c?.randomUUID === "function"
       ? c.randomUUID().slice(0, 8)
       : Math.random().toString(16).slice(2, 10);
-  return `ada-desktop-${tail}`;
+  return `hardy-desktop-${tail}`;
 }
 
 export function useIdeaInbox({
@@ -117,7 +117,7 @@ export function useIdeaInbox({
         const accepted = await post(baseUrl, token, `/inbox/${encodeURIComponent(next.id)}/accept`, {
           claimant: claimant.current,
         });
-        // 409: another Ada took it, or it expired. Either way, not ours.
+        // 409: another Hardy took it, or it expired. Either way, not ours.
         if (accepted.status !== 200 || !mounted.current) return;
         claimed.current = { id: next.id, before: live.current.session };
         live.current.onIdea(next);

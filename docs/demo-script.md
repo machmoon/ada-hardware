@@ -50,7 +50,7 @@ Do these in order. The demo has no live-fixable failure mode for a skipped step.
    `http://127.0.0.1:8081/healthz` — locally `/healthz` works fine; the
    404-at-the-edge gotcha (below) is cloud-only.
 4. Launch **Hardy** (the v0.3.1 release predates the rename and still installs
-   as `/Applications/Ada.app`, from `Ada_0.3.1_aarch64.dmg` on the tagged GitHub
+   as `/Applications/Hardy.app`, from `Ada_0.3.1_aarch64.dmg` on the tagged GitHub
    release; later builds install as `Hardy.app` — **Apple silicon
    only**; do not plan this demo on an Intel Mac). In its Engine page, set the
    base URL to `http://127.0.0.1:8081` and watch the health check go green.

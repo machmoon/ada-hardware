@@ -1,4 +1,4 @@
-//! Allowlisted command-line tools Ada may run on this machine.
+//! Allowlisted command-line tools Hardy may run on this machine.
 //!
 //! The overlay is a desktop app sitting on a checkout: when something already
 //! exists as a CLI (`python -m googleapps auth`, `kicad-cli`, …) the app should
@@ -33,7 +33,7 @@ pub struct CliToolInfo {
 }
 
 fn repository_root() -> Result<PathBuf, String> {
-    let candidate = env::var_os("ADA_REPO_ROOT")
+    let candidate = env::var_os("HARDY_REPO_ROOT")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .or_else(|| env::var_os("SILKSCREEN_ROOT").filter(|v| !v.is_empty()).map(PathBuf::from))
@@ -43,7 +43,7 @@ fn repository_root() -> Result<PathBuf, String> {
         .map_err(|error| format!("could not resolve the Hardy repository root: {error}"))?;
     if !root.join("pyproject.toml").is_file() {
         return Err(format!(
-            "{} is not a Hardy checkout (pyproject.toml is missing); set ADA_REPO_ROOT",
+            "{} is not a Hardy checkout (pyproject.toml is missing); set HARDY_REPO_ROOT",
             root.display()
         ));
     }
@@ -51,7 +51,7 @@ fn repository_root() -> Result<PathBuf, String> {
 }
 
 fn python_interpreter(root: &Path) -> Result<OsString, String> {
-    if let Some(value) = env::var_os("ADA_PYTHON")
+    if let Some(value) = env::var_os("HARDY_PYTHON")
         .or_else(|| env::var_os("SILKSCREEN_PYTHON"))
         .filter(|value| !value.is_empty())
     {
@@ -63,7 +63,7 @@ fn python_interpreter(root: &Path) -> Result<OsString, String> {
             return Ok(candidate.into_os_string());
         }
     }
-    Err("Hardy's Python environment is missing; run ./scripts/install.sh or set ADA_PYTHON".into())
+    Err("Hardy's Python environment is missing; run ./scripts/install.sh or set HARDY_PYTHON".into())
 }
 
 fn which(name: &str) -> Option<PathBuf> {
@@ -127,7 +127,7 @@ fn reject_unsafe_arg(arg: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Tools Ada may invoke. The id is what the frontend passes as `tool`.
+/// Tools Hardy may invoke. The id is what the frontend passes as `tool`.
 fn resolve_invocation(
     tool: &str,
     args: &[String],
@@ -184,7 +184,7 @@ fn resolve_invocation(
 
 fn load_dotenv_into(cmd: &mut Command, root: &Path) {
     // Mirror the CLIs: the service does not read .env, but `python -m googleapps`
-    // / `silkscreen` do. When Ada spawns them it should see the same file.
+    // / `silkscreen` do. When Hardy spawns them it should see the same file.
     let path = root.join(".env");
     let Ok(text) = std::fs::read_to_string(&path) else {
         return;
@@ -307,7 +307,7 @@ pub fn list_cli_tools() -> Vec<CliToolInfo> {
             available: python.is_some(),
             detail: match &python {
                 Some(p) => format!("interpreter {}", p.to_string_lossy()),
-                None => "venv missing; set ADA_PYTHON".into(),
+                None => "venv missing; set HARDY_PYTHON".into(),
             },
         },
         CliToolInfo {

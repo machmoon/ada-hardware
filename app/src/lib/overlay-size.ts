@@ -62,7 +62,7 @@ export const OVERLAY_PILL_LISTENING_WIDTH = 280;
 export type OverlayState =
   /** 1 — the idle pill. */
   | "pill"
-  /** 2 — the pill with the mic open or Ada speaking. */
+  /** 2 — the pill with the mic open or Hardy speaking. */
   | "pill-listening"
   /** 3, 4 — the full bar, idle or listening. The listening swap is
    *  height-neutral by construction (`ListeningPanel` is `h-9` like the
@@ -72,8 +72,8 @@ export type OverlayState =
   | "desk-caption"
   /** 6 — the engine-unreachable banner with its Retry button. */
   | "engine-down"
-  /** 7 — the Ada caption / command note with its Dismiss. */
-  | "ada-caption"
+  /** 7 — the Hardy caption / command note with its Dismiss. */
+  | "hardy-caption"
   /** 8, 9 — a one-shot run in flight, feed closed. Sized for the taller of
    *  the two (the "no events yet" note) so the first stage frame is not its
    *  own resize. */
@@ -119,7 +119,7 @@ export const OVERLAY_SIZES: Readonly<Record<OverlayState, OverlaySize>> =
     "engine-down": bar(110),
     // 58 + gap 8 + four lines at 17. The visibility-guard sentence is the
     // longest copy in the page; needs `line-clamp-4`.
-    "ada-caption": bar(134),
+    "hardy-caption": bar(134),
     // 58 + gap 8 + RunProgress (7 stage rows is a constant) + the two-line
     // "no events yet" note, which is included in the constant so that the
     // note going away is not a resize.

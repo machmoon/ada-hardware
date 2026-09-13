@@ -30,10 +30,19 @@ Supported today, by kind and package name (rendered in words by
 so this list is a copy and that function is the truth):
 
   kind 'ic'         SOT-223 (3 pins), SOIC (4/6/8/10/14/16/20/24/28),
-                    LQFP (32/44/48/64/100/144), and the named plug-in modules
+                    LQFP (32/44/48/64/100/144), and the named plug-in modules;
+                    by PART NUMBER in the device key (count checked, not
+                    trusted): PCA9685 -> TSSOP-28 4.4x9.7mm P0.65mm (the
+                    PCA9685BS/HVQFN-28 is refused), ESP32-WROOM-32E -> the
+                    module, 39 pins with the GND slug as pin 39 (antenna
+                    keep-out and slug thermal vias not drawn), TPS5430 /
+                    TPS5450 -> TI_SO-PowerPAD-8, 9 pins with pad 9 = GND
   kind 'connector'  Barrel_Jack_5.5x2.1mm, TerminalBlock_2P_5.08mm,
                     JST_PH_2P/3P/4P, PinHeader_1x02/03/04/05/06/08/10_P2.54mm,
-                    USB_C_Receptacle_Power (6-way, power only)
+                    USB_C_Receptacle_Power (6-way, power only),
+                    USB_C_Receptacle_USB2.0_16P (GCT USB4105, D+/D-; A1/B12,
+                    B1/A12, A4/B9, B4/A9 are stacked lands and must share a
+                    net)
   kind 'battery'    BatteryHolder_CR2032, BatteryHolder_AAA_1x
   kind 'switch'     SW_SPST_TL3305A (SMD tactile push button)
   kind 'testpoint'  TestPoint_Pad_1.5x1.5mm
@@ -42,7 +51,7 @@ so this list is a copy and that function is the truth):
 Still out of demo requests, because nothing draws them: pin *sockets*, IDC and
 ribbon headers, dual-row 2.54 mm headers other than the named modules, slide
 and DIP switches, rotary encoders, relays, USB-A/micro/mini, RJ45, SD sockets,
-Keystone test posts and loops, and any USB-C receptacle with data pins. A
+Keystone test posts and loops, and USB-C 3.x (24-pin) receptacles. A
 request naming one of those is refused by `_footprint_for_device` with the
 list above -- it does not silently become something else -- but a demo that
 gets refused is still a demo that fails.
@@ -712,8 +721,8 @@ feature is tracked under feature 12.
                                                                      rather than showing a blank canvas, survives a
                                                                      lost context. "Open 3D model" in KiCad remains
 
- 21  Ada voice + desk (2-week lock, 2026-09-06)        [LOCKED]      Tech Lead. Do not invent a parallel plan.
-     North star: "Hey Ada" feels like Hey Siri —
+ 21  Hardy voice + desk (2-week lock, 2026-09-06)        [LOCKED]      Tech Lead. Do not invent a parallel plan.
+     North star: "Hey Hardy" feels like Hey Siri —
      always-on tiny LOCAL wake classifier, then STT.
      Apple does not expose custom OS wake. Third
      parties use Porcupine or openWakeWord.
@@ -723,14 +732,14 @@ feature is tracked under feature 12.
      Picovoice dependency exists; wake/mod.rs:6
      says "Picovoice is not used". What shipped is
      livekit-wakeword (Apache-2.0) with a locally
-     trained hey_ada head: recall 0.867, zero false
+     trained hey_hardy head: recall 0.867, zero false
      accepts/hour at threshold 0.7. cpal owns the mic in Rust. WKWebView is
      UI only. Gemini POST /transcribe ONLY after
      wake or PTT — never idle wake spotting.
      Desk: stop lying that the PNG was used;
      POST /desk/resolve vision → caption + optional
      SPA GuidePointer. No KiCad edits.
-     Tree: app/ is Ada. desktop/ is the old sidecar
+     Tree: app/ is Hardy. desktop/ is the old sidecar
      — do not add cpal/Porcupine there
      (test_desktop_tauri_contract.py forbids it).
      Exception, and it matters: desktop/kicad_live.py
@@ -755,7 +764,7 @@ feature is tracked under feature 12.
                                                                      _transcribe (wake-hot-loop → PTT/post-wake
                                                                      only); README.md voice row. Do not touch
                                                                      Rust KWS, /desk/resolve, or desktop/.
- ----- W1–2 local KWS ("hey Ada")                      [PARTIAL]     Agent 2. Rust spotter + ada-wake shipped
+ ----- W1–2 local KWS ("hey Hardy")                      [PARTIAL]     Agent 2. Rust spotter + hardy-wake shipped
                                                                      (wake/, livekit-wakeword via ort-tract, oww
                                                                      stub, mock). NOT libloading Porcupine — that
                                                                      was planned and never built. Agent 4 still wires post-wake STT
@@ -808,7 +817,7 @@ feature is tracked under feature 12.
                                                                      new markdown docs; commit/push.
  ----- DoD: "feels like Hey Siri" MVP                  [LOCKED]      (1) Ear default off. (2) Always-on listen
                                                                      is local KWS only — zero Gemini bytes
-                                                                     while idle. (3) After "hey Ada" or PTT,
+                                                                     while idle. (3) After "hey Hardy" or PTT,
                                                                      one command clip → one POST /transcribe.
                                                                      (4) Settings/ear name the backend (local
                                                                      | off), never "engine clips" while
@@ -1046,7 +1055,7 @@ feature is tracked under feature 12.
                                                                      PKCE like googleapps/auth.py, token file + refresh
  ----- Live coach marks inside the strip               [OPEN]        58 px non-activating panel; per-skin stop lists;
                                                                      one caption under the strip ships instead
- ----- Notification click-back, "Ada" branding in dev  [OPEN]        the plugin discards the handle on macOS; dev builds
+ ----- Notification click-back, "Hardy" branding in dev  [OPEN]        the plugin discards the handle on macOS; dev builds
                                                                      say "Terminal"; delivery unverified on this macOS
  ----- Menu-bar (tray) item                            [OPEN]        tray-icon feature, template icon asset, engine state
                                                                      push; a way back for Accessory-mode users
@@ -1329,7 +1338,7 @@ feature is tracked under feature 12.
  ----- Not yet drawn, and refused rather than guessed  [OPEN]        pin sockets, IDC/ribbon, generic dual-row 2.54
                                                                      headers, slide and DIP switches, encoders,
                                                                      relays, USB-A/micro/mini, RJ45, SD, Keystone
-                                                                     test posts, and any USB-C with data pins. Each
+                                                                     test posts, and USB-C 3.x (24-pin). Each       
                                                                      is a refusal naming the supported list, never a
                                                                      substitution.
  ----- sourcing._PREFIX_KINDS had no SW or TP          [DONE]        Fixed in the 2026-09-08 integration pass.
@@ -1556,7 +1565,7 @@ OPEN WORK, SUMMARISED
 Everything actionable reduces to: feature 2 in full (parallel reads, now the
 R11 rung under 12), finding-level hallucination filtering under 4, the request
 timeout under 5, feature 6 in full (confirmation gates), the deploy and smoke
-check under 7, the ops polish under 8, Ada voice/desk under 21 (feature 9's
+check under 7, the ops polish under 8, Hardy voice/desk under 21 (feature 9's
 voice row is no longer done; the SPA's own browser Web Speech dictation and
 read-aloud row under 9 is done and separate from it), the error taxonomy under
 10 (from PR #5 review), and the stream-fallback tightening under 11 (from PR #9
@@ -1617,7 +1626,7 @@ the whole test suite passed over. See "Verifying against real KiCad" in
 CLAUDE.md. It is a local gate, not a CI one.
 
 ────────────────────────────────────────────────────────────────────────────
-Feature 26 — Ada as a coworker: local listening, joining calls, guided cursor
+Feature 26 — Hardy as a coworker: local listening, joining calls, guided cursor
 [NOT STARTED — parked 2026-09-06 as not important right now]
 ────────────────────────────────────────────────────────────────────────────
 
@@ -1641,7 +1650,7 @@ STAGE 1, local listening. The only hard part is macOS system audio.
   Windows (WASAPI loopback) and Linux (Pulse .monitor). macOS was ALWAYS a
   stub: upstream used a CoreAudio process tap via `cidre`, whose build shells
   out to xcodebuild and so needs a full ~10 GB Xcode install. Today, on a call,
-  Ada hears only what leaks from the speakers into the microphone.
+  Hardy hears only what leaks from the speakers into the microphone.
   Two verified fixes:
     - screencapturekit crate 9.0.1 — system audio, macOS 13+, Command Line
       Tools only. Screen Recording is already granted (desk.rs shells out to
@@ -1706,5 +1715,5 @@ capture layer.
 NOT VERIFIED: no live AX dump against a running KiCad (all of the above is
 static inspection); nothing was compiled; PostEvent semantics are documented
 only in Apple forum answers, not the reference docs; whether wx DIALOG controls
-carry usable AXTitles is open, and it decides whether Ada can point inside the
+carry usable AXTitles is open, and it decides whether Hardy can point inside the
 DRC dialog or only get you to it.

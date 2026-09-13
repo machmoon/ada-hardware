@@ -6,17 +6,17 @@ import { closePty, decodeBytes, openPty, resizePty, writePty, writeText } from "
 import { LEGEND, route, type Destination } from "@/lib/terminal-sigil";
 
 /**
- * The overlay's terminal skin: a literal terminal that doubles as Ada.
+ * The overlay's terminal skin: a literal terminal that doubles as Hardy.
  *
- * "The terminal skin was a literal terminal so it doubles as ada and
+ * "The terminal skin was a literal terminal so it doubles as hardy and
  * terminal" — so this is a real shell on a real pty (`src-tauri/src/pty.rs`),
  * not a chat window styled to look like one. `vim`, `htop`, tab completion,
  * Ctrl-C and the user's own prompt all work, because the process on the other
  * end is talking to a tty.
  *
- * The Ada half shares the same input line rather than sitting in a pane
+ * The Hardy half shares the same input line rather than sitting in a pane
  * beside it, and the split is decided by the first character the user typed
- * (`@/lib/terminal-sigil`) — capital letter asks Ada, `!` sets her to work,
+ * (`@/lib/terminal-sigil`) — capital letter asks Hardy, `!` sets her to work,
  * anything else runs. Because the rule is a character and not a classifier,
  * the destination can be shown *while typing*: the strip under the terminal
  * names where Enter will send the line, so nobody is surprised after the
@@ -31,7 +31,7 @@ import { LEGEND, route, type Destination } from "@/lib/terminal-sigil";
 
 const DESTINATION_LABEL: Record<Destination, string> = {
   shell: "shell",
-  ada: "Hardy",
+  hardy: "Hardy",
   agent: "Hardy · working",
 };
 
@@ -39,23 +39,23 @@ export interface TerminalSkinProps {
   /** Where the shell starts. Defaults to the shell's own default. */
   cwd?: string;
   /** Sigil routing off makes this an ordinary terminal. */
-  adaEnabled?: boolean;
+  hardyEnabled?: boolean;
   /**
-   * Hand a line to Ada. Returns the final text to print.
+   * Hand a line to Hardy. Returns the final text to print.
    *
-   * `write` is passed in rather than the caller buffering, because an Ada
+   * `write` is passed in rather than the caller buffering, because an Hardy
    * turn can start a paid board run: those take minutes, and a terminal that
    * sat silent until the end would read as hung. Each line it is given is
    * printed the moment it arrives.
    */
   onAsk?: (
     text: string,
-    mode: "ada" | "agent",
+    mode: "hardy" | "agent",
     write: (line: string) => void,
   ) => Promise<string>;
 }
 
-export const TerminalSkin = ({ cwd, adaEnabled = true, onAsk }: TerminalSkinProps) => {
+export const TerminalSkin = ({ cwd, hardyEnabled = true, onAsk }: TerminalSkinProps) => {
   const host = useRef<HTMLDivElement | null>(null);
   const term = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
@@ -70,11 +70,11 @@ export const TerminalSkin = ({ cwd, adaEnabled = true, onAsk }: TerminalSkinProp
   const [thinking, setThinking] = useState(false);
 
   const ask = useCallback(
-    async (text: string, mode: "ada" | "agent") => {
+    async (text: string, mode: "hardy" | "agent") => {
       const view = term.current;
       if (!view) return;
       if (!onAsk) {
-        view.write("\r\n\x1b[2mAda is not connected in this window.\x1b[0m\r\n");
+        view.write("\r\n\x1b[2mHardy is not connected in this window.\x1b[0m\r\n");
         await writeText(sessionId.current, "\r");
         return;
       }
@@ -84,7 +84,7 @@ export const TerminalSkin = ({ cwd, adaEnabled = true, onAsk }: TerminalSkinProp
       view.write(`\r\n\x1b[38;5;110m${mode === "agent" ? "!" : ""}${text}\x1b[0m\r\n`);
       try {
         const answer = await onAsk(text, mode, (line) => {
-          // Dim, so streamed progress reads as machinery and Ada's actual
+          // Dim, so streamed progress reads as machinery and Hardy's actual
           // answer below it reads as the reply.
           view.write(`\x1b[2m  ${line.replace(/\r?\n/g, " ")}\x1b[0m\r\n`);
         });
@@ -150,25 +150,25 @@ export const TerminalSkin = ({ cwd, adaEnabled = true, onAsk }: TerminalSkinProp
       // While a full-screen program owns the screen, every byte is its own.
       // Tracking a "line" there would be meaningless and intercepting Enter
       // would swallow a `:wq`.
-      if (buffer === "alternate" || !adaEnabled) {
+      if (buffer === "alternate" || !hardyEnabled) {
         void writePty(id, new TextEncoder().encode(data)).catch(() => undefined);
         return;
       }
 
       if (data === "\r") {
         const line = draft.current;
-        const routed = route(line, { buffer, adaEnabled });
+        const routed = route(line, { buffer, hardyEnabled });
         draft.current = "";
         setHint({ destination: "shell", why: "runs in your shell" });
         if (routed.destination === "shell") {
           void writePty(id, new TextEncoder().encode(data)).catch(() => undefined);
           return;
         }
-        // Ada's line must never reach the shell. Erase what the shell has
+        // Hardy's line must never reach the shell. Erase what the shell has
         // echoed so far (Ctrl-U kills the line) before answering, or the
         // question sits at the prompt waiting to be run as a command.
         void writePty(id, new TextEncoder().encode("\x15"))
-          .then(() => ask(routed.text, routed.destination === "agent" ? "agent" : "ada"))
+          .then(() => ask(routed.text, routed.destination === "agent" ? "agent" : "hardy"))
           .catch(() => undefined);
         return;
       }
@@ -180,7 +180,7 @@ export const TerminalSkin = ({ cwd, adaEnabled = true, onAsk }: TerminalSkinProp
       } else if (data >= " " || data === "\t") {
         draft.current += data;
       }
-      setHint(route(draft.current, { buffer, adaEnabled }));
+      setHint(route(draft.current, { buffer, hardyEnabled }));
       void writePty(id, new TextEncoder().encode(data)).catch(() => undefined);
     });
 
@@ -210,7 +210,7 @@ export const TerminalSkin = ({ cwd, adaEnabled = true, onAsk }: TerminalSkinProp
     };
     // `cwd` is read once, at open: changing it would mean a different shell.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adaEnabled, ask, cwd]);
+  }, [hardyEnabled, ask, cwd]);
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="terminal-skin">

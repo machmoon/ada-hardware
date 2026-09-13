@@ -16,7 +16,7 @@ import { listCliTools, type CliToolInfo } from "@/lib/cli";
  * * **Unavailable has to be actionable.** Rust returns `detail` as free text
  *   ("not found"), which tells the user nothing about what to do. The fix
  *   line below names the install or the exact environment variable, spelled
- *   the way `cli.rs` reads it — a near-miss like `ADA_PYTHON_PATH` sends
+ *   the way `cli.rs` reads it — a near-miss like `HARDY_PYTHON_PATH` sends
  *   someone off exporting a variable nothing consults.
  * * **This is not the terminal skin.** `cli.rs` spawns argv directly, never
  *   through a shell, and only these four ids; `pty.rs` hands the user their
@@ -27,11 +27,11 @@ import { listCliTools, type CliToolInfo } from "@/lib/cli";
 /** Why a tool is missing and what fixes it. Keyed by the id `cli.rs` returns. */
 const FIXES: Record<string, string> = {
   googleapps:
-    "Needs the Hardy checkout and its virtualenv. Run ./scripts/install.sh, or point ADA_REPO_ROOT at the checkout if the app is not sitting inside one.",
+    "Needs the Hardy checkout and its virtualenv. Run ./scripts/install.sh, or point HARDY_REPO_ROOT at the checkout if the app is not sitting inside one.",
   silkscreen:
-    "Needs the checkout's Python. Run ./scripts/install.sh, or set ADA_PYTHON to an interpreter that has Hardy installed.",
+    "Needs the checkout's Python. Run ./scripts/install.sh, or set HARDY_PYTHON to an interpreter that has Hardy installed.",
   python:
-    "No .venv/bin/python under the checkout. Run ./scripts/install.sh, or set ADA_PYTHON to the interpreter you want Hardy to use.",
+    "No .venv/bin/python under the checkout. Run ./scripts/install.sh, or set HARDY_PYTHON to the interpreter you want Hardy to use.",
   "kicad-cli":
     "Install KiCad, or set KICAD_CLI to the kicad-cli binary if it lives somewhere off PATH.",
 };

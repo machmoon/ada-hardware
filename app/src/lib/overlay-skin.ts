@@ -96,17 +96,17 @@ export function skinInfo(id: SkinId): SkinInfo {
 }
 
 /**
- * Whether the terminal skin routes to Ada at all.
+ * Whether the terminal skin routes to Hardy at all.
  *
  * Default **on**, because a terminal skin whose whole point is that it
- * doubles as Ada would be a plain terminal without it. Off makes it exactly
+ * doubles as Hardy would be a plain terminal without it. Off makes it exactly
  * that — an ordinary shell — which is the escape hatch for anyone who finds
  * the capital-letter rule surprising.
  */
-export function getTerminalAda(): boolean {
+export function getTerminalHardy(): boolean {
   return safeLocalStorage.getItem(KALEO_STORAGE_KEYS.TERMINAL_ADA) !== "0";
 }
 
-export function setTerminalAda(enabled: boolean): void {
+export function setTerminalHardy(enabled: boolean): void {
   safeLocalStorage.setItem(KALEO_STORAGE_KEYS.TERMINAL_ADA, enabled ? "1" : "0");
 }

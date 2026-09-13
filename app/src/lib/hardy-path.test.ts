@@ -3,13 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   DESK_FAILED_CAPTION,
   NO_DESK_CAPTION,
-  fulfillAdaDecision,
+  fulfillHardyDecision,
   isDeicticUtterance,
   routeSpokenUtterance,
   stripDeskAnnotation,
   usableDeskSnap,
   wouldStartBoard,
-} from "./ada-path";
+} from "./hardy-path";
 import type { DeskSnapshot } from "./desk-context";
 
 const idle = { busy: false, stepsStatus: "idle" as const };
@@ -147,14 +147,14 @@ describe("routeSpokenUtterance", () => {
   });
 });
 
-describe("fulfillAdaDecision", () => {
+describe("fulfillHardyDecision", () => {
   it("turns desk into a caption and never into start", async () => {
     const resolveDesk = vi.fn(async () => ({
       caption: "That’s the review finding on C3.",
       abstain: false,
       target: { testid: "finding", attrs: { sev: "blocker" } },
     }));
-    const out = await fulfillAdaDecision(
+    const out = await fulfillHardyDecision(
       { kind: "desk", utterance: "what's this", snap: realSnap() },
       { resolveDesk }
     );
@@ -170,14 +170,14 @@ describe("fulfillAdaDecision", () => {
 
   it("a missing or failing resolver is a caption, not a board", async () => {
     expect(
-      await fulfillAdaDecision({
+      await fulfillHardyDecision({
         kind: "desk",
         utterance: "this",
         snap: realSnap(),
       })
     ).toEqual({ kind: "caption", text: DESK_FAILED_CAPTION, abstain: true });
 
-    const out = await fulfillAdaDecision(
+    const out = await fulfillHardyDecision(
       { kind: "desk", utterance: "this", snap: realSnap() },
       { resolveDesk: async () => Promise.reject(new Error("offline")) }
     );
@@ -187,6 +187,6 @@ describe("fulfillAdaDecision", () => {
 
   it("passes start / command through unchanged", async () => {
     const start = { kind: "start" as const, intent: "an LDO" };
-    expect(await fulfillAdaDecision(start)).toEqual(start);
+    expect(await fulfillHardyDecision(start)).toEqual(start);
   });
 });

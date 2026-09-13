@@ -1,6 +1,6 @@
 # Desktop development
 
-Ada has two checkout-only desktop launchers. The native macOS shell under
+Hardy has two checkout-only desktop launchers. The native macOS shell under
 `desktop/src-tauri/` is the path forward; `desktop/silkscreen-app` remains a
 portable fallback that opens the same Svelte UI in a Chromium app window.
 
@@ -17,10 +17,10 @@ cargo run --manifest-path desktop/src-tauri/Cargo.toml
 The host starts `python -m desktop.sidecar` on an OS-assigned
 `127.0.0.1` port, waits for `/healthz`, and injects that exact origin into the
 embedded Svelte app. `CommandOrControl+Shift+K` hides or restores the window,
-and text exports use the native Save dialog. Closing Ada closes the child
+and text exports use the native Save dialog. Closing Hardy closes the child
 service and releases its port.
 
-`ADA_REPO_ROOT` can select another checkout and `ADA_PYTHON` can select its
+`HARDY_REPO_ROOT` can select another checkout and `HARDY_PYTHON` can select its
 interpreter. By default the shell uses this repository and `.venv/bin/python`.
 
 This is a developer shell, not a distributable app. Tauri bundling is disabled

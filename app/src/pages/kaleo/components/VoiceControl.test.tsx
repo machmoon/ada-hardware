@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // One voice control, and the founder's model for it: a mute button for
-// "Hey Ada". The tests pin the three things it must never stop saying —
+// "Hey Hardy". The tests pin the three things it must never stop saying —
 // unmuted costs money and is capped, a refusal is not the same as being
 // muted, and press-and-hold still records, because that is the path that
 // actually works.
@@ -273,7 +273,7 @@ describe("VoiceControl", () => {
   it("shows what it heard on the same control", () => {
     draw({ wake: wakeWord({ justHeard: true, lastHeard: "route the copper" }) });
     expect(screen.getByTestId("voice-heard").textContent).toContain(
-      "heard “Ada, route the copper”"
+      "heard “Hardy, route the copper”"
     );
   });
 

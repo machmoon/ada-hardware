@@ -38,9 +38,11 @@ from ..stages import (
     ReviewJob,
     SimulationJob,
     SourcingJob,
+    design_brief,
     place_stage,
     placement_repair_stage,
     plan_stage,
+    prior_art_stage,
     propose_stage,
     read_stage,
     route_stage,
@@ -80,6 +82,16 @@ def plan(node_input: str) -> str:
     """
     run = run_context(node_input)
     with recording(run):
+        # Prior art rides the plan node rather than a node of its own, so the
+        # graph is unchanged when it is off -- which is every run by default.
+        run.prior_art_result = prior_art_stage(
+            run.models.for_stage("prior_art"),
+            intent=run.intent,
+            prior_art=run.prior_art,
+            emit=run.emit,
+            enter=run.enter,
+            transport=run.prior_art_transport,
+        )
         run.plan_result = plan_stage(
             run.models.for_stage("plan"),
             intent=run.intent,
@@ -102,11 +114,7 @@ def propose(node_input: str) -> str:
             # Parity with the straight-line driver: the plan is what the bare
             # intent meant, so propose designs against it in both engines or
             # the two produce different boards from one request.
-            brief=(
-                run.plan_result.plan.brief_text()
-                if run.plan_result is not None and run.plan_result.plan is not None
-                else None
-            ),
+            brief=design_brief(run.plan_result, run.prior_art_result),
             max_repairs=run.max_repairs,
             emit=run.emit,
             enter=run.enter,

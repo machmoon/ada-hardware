@@ -23,6 +23,9 @@ __all__ = [
     "Document",
     "strip_code_fence",
     "default_model",
+    "primary_model",
+    "MODEL_ENV_VAR",
+    "FALLBACK_MODEL",
     "DEFAULT_TIMEOUT_S",
     "TIMEOUT_ENV_VAR",
     "request_timeout_ms",
@@ -32,6 +35,21 @@ __all__ = [
 #: pinout table and package drawing are *pictures*, and text extraction throws
 #: away exactly the information this pipeline needs.
 DEFAULT_MODEL = "gemini-3.7-flash"
+
+#: Environment override for the primary tier. Read at call time by
+#: :func:`primary_model`, never at import, so a ``.env`` loaded after this
+#: module was imported (the CLI parses its arguments first) still counts.
+#:
+#: Why it exists (2026-09-13 demo): a free-tier key's 20-requests-per-day cap on
+#: ``gemini-3.7-flash`` ran out, and with the id hard-coded here and in
+#: ``service/app.py::build_model`` there was no way to make a service or CLI
+#: lead with a tier that still had quota short of editing source.
+MODEL_ENV_VAR = "SILKSCREEN_MODEL"
+
+#: The middle rung: a full Flash model one generation back, which on the same
+#: key has its own quota pool. Before this rung existed an exhausted primary
+#: fell straight through to flash-lite, a markedly weaker proposer.
+FALLBACK_MODEL = "gemini-3.5-flash"
 
 #: Cheaper tier for high-volume mechanical passes.
 CHEAP_MODEL = "gemini-3.5-flash-lite"
@@ -57,6 +75,17 @@ TIMEOUT_ENV_VAR = "SILKSCREEN_MODEL_TIMEOUT_S"
 
 class ModelError(RuntimeError):
     """The model call failed or returned something unusable."""
+
+
+def primary_model() -> str:
+    """The primary model id: :data:`MODEL_ENV_VAR` when set, else the default.
+
+    Blank counts as unset, the ``request_timeout_ms`` reading of an empty
+    variable, so ``SILKSCREEN_MODEL=`` copied out of ``.env.example`` does not
+    turn into a request for a model named ``""``.
+    """
+    raw = os.getenv(MODEL_ENV_VAR, "").strip()
+    return raw or DEFAULT_MODEL
 
 
 def request_timeout_ms(timeout_s: float | None = None) -> int:
@@ -173,7 +202,7 @@ class GeminiModel:
 
     def __init__(
         self,
-        model: str = DEFAULT_MODEL,
+        model: str | None = None,
         *,
         api_key: str | None = None,
         media_resolution: str = "MEDIA_RESOLUTION_HIGH",
@@ -209,7 +238,9 @@ class GeminiModel:
         self._client = genai.Client(
             api_key=key, http_options={"timeout": timeout_ms}
         )
-        self.model = model
+        # ``None`` means "the configured primary", resolved here rather than as
+        # a parameter default so the environment is read per construction.
+        self.model = model or primary_model()
         # Datasheet pin tables are small type; high resolution is the lever
         # that makes them legible, at the cost of more image tokens per page.
         # Use the API enum value, not the display label "high": the latter is

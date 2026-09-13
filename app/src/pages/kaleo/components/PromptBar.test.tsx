@@ -198,7 +198,7 @@ describe("PromptBar", () => {
     const listening = draw({ wake: { enabled: true, listening: true } as never });
     expect(screen.queryByTestId("prompt-input")).toBeNull();
     expect(screen.getByTestId("prompt-listening").textContent).toContain(
-      "I’m listening for “Hey Ada”."
+      "I’m listening for “Hey Hardy”."
     );
     // No Stop button: the panel is a status. Both things it used to stop
     // live on the microphone beside it (see VoiceControl.test.tsx).

@@ -1,7 +1,7 @@
 /**
  * What the page does with a wake-word detection, as data.
  *
- * "Ada, make me a 3.3 V LDO board" and "Ada, route it again" arrive through
+ * "Hardy, make me a 3.3 V LDO board" and "Hardy, route it again" arrive through
  * the same ear, and the difference between them is a paid board and a reply
  * to the run already open. The decision lives here, pure, so the page cannot
  * quietly grow a path where a sentence spoken at the wrong moment starts a
@@ -9,7 +9,7 @@
  */
 
 export interface WakeFlowInput {
-  /** What followed the wake word; empty means the engineer only said "Ada". */
+  /** What followed the wake word; empty means the engineer only said "Hardy". */
   utterance: string;
   /** A run is in flight in either state machine. */
   busy: boolean;
@@ -22,7 +22,7 @@ export type WakeAction =
    * The sentence cannot be acted on and is dropped. This is no longer the
    * answer to "you spoke while a run was in flight" — that is a `command`
    * now, which the page parks. It survives for the deictic case in
-   * `ada-path.ts`, where there is genuinely nothing to point at yet.
+   * `hardy-path.ts`, where there is genuinely nothing to point at yet.
    */
   | { kind: "ignore"; reason: string }
   /** A step run is open: the sentence is a reply to it (approve, restart). */

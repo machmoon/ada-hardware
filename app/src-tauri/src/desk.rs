@@ -88,7 +88,7 @@ pub fn capture_desk_context() -> DeskSnapshot {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_millis())
             .unwrap_or(0);
-        let path = std::env::temp_dir().join(format!("ada-desk-{stamp}.png"));
+        let path = std::env::temp_dir().join(format!("hardy-desk-{stamp}.png"));
         let path_str = match path.to_str() {
             Some(s) => s.to_string(),
             None => return empty_error("could not build a temp path for the screenshot"),

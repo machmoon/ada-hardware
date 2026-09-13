@@ -1598,3 +1598,39 @@ describe('an addressable run', () => {
     expect(newRunId().startsWith('run_')).toBe(true)
   })
 })
+
+describe('a proposal that never validated (422 proposal_invalid)', () => {
+  it('is its own kind, carrying the parts to change and what can be drawn', async () => {
+    stubFetch(
+      jsonResponse(422, {
+        error: 'No valid circuit after 2 attempt(s). Edit the request and try again.',
+        reason: 'proposal_invalid',
+        attempts: 2,
+        errors: Array.from({ length: 40 }, (_, i) => `error ${i} ${'x'.repeat(i === 0 ? 900 : 1)}`),
+        errors_total: 40,
+        unsupported: ["connector 'NANO' has unsupported package 'arduino_nano'"],
+        supported_packages: "kind 'connector', by package name: [...]",
+      }),
+    )
+    const err = await generate({ intent: 'x' }).catch((e) => e)
+    expect(err).toMatchObject({ kind: 'proposal', status: 422 })
+    expect(err.details.unsupported[0]).toContain('arduino_nano')
+    expect(err.details.errors).toHaveLength(12)
+    expect(err.details.errors[0].length).toBeLessThanOrEqual(300)
+    expect(err.details.errorsTotal).toBe(40)
+    expect(err.details.supportedPackages).toContain('connector')
+  })
+
+  it('a 422 without the reason stays an ordinary upstream failure', async () => {
+    stubFetch(jsonResponse(422, { error: 'something else' }))
+    await expect(generate({ intent: 'x' })).rejects.toMatchObject({ kind: 'upstream' })
+  })
+})
+
+describe('the prior-art opt-in', () => {
+  it('is sent only when asked for', () => {
+    expect(normalizeRequest({ prior_art: true }).prior_art).toBe(true)
+    expect(normalizeRequest({ prior_art: false })).not.toHaveProperty('prior_art')
+    expect(normalizeRequest({})).not.toHaveProperty('prior_art')
+  })
+})

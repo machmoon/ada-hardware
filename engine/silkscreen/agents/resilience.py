@@ -17,6 +17,7 @@ import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta, timezone
 
 from .model import Document, Model, ModelError
 
@@ -30,6 +31,10 @@ __all__ = [
     "MAX_QUOTA_COOLDOWN_S",
     "provider_is_down",
     "retry_delay_s",
+    "daily_quota_exhausted",
+    "seconds_until_quota_reset",
+    "quota_cooldown_s",
+    "SHARED_COOLDOWNS",
 ]
 
 
@@ -119,6 +124,82 @@ def retry_delay_s(error: str) -> float | None:
     return None
 
 
+#: The quota id a *daily* cap carries, e.g.
+#: ``'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier'``.
+#:
+#: Measured 2026-09-13 against the exhausted ``gemini-3.7-flash`` free-tier cap:
+#: that refusal still says ``retryDelay: '34s'``. The number is the per-minute
+#: window's and it is wrong for this wall -- honouring it re-asked a provider
+#: whose allowance was gone until midnight every 34 s, on every request. So a
+#: refusal naming a per-day quota is parked until the day's reset instead.
+_DAILY_QUOTA = re.compile(r"PerDay", re.IGNORECASE)
+
+#: Gemini API daily quotas reset at midnight Pacific time
+#: (https://ai.google.dev/gemini-api/docs/rate-limits: "Requests per day (RPD)
+#: quotas reset at midnight Pacific time").
+_QUOTA_RESET_TZ = "America/Los_Angeles"
+
+#: Ceiling on a daily cooldown. A day, plus nothing: the reset is computed
+#: locally, not read off the network, but a clock or tz-database surprise must
+#: still not park a model for longer than the quota it is waiting on.
+MAX_DAILY_QUOTA_COOLDOWN_S = 24 * 3600.0
+
+
+def daily_quota_exhausted(error: str) -> bool:
+    """True when ``error`` is a quota refusal for a per-day cap."""
+    return provider_is_down(error) and bool(_DAILY_QUOTA.search(error))
+
+
+def seconds_until_quota_reset(now_utc: datetime | None = None) -> float:
+    """Seconds from ``now_utc`` to the next midnight Pacific."""
+    now_utc = now_utc or datetime.now(UTC)
+    try:
+        from zoneinfo import ZoneInfo
+
+        local = now_utc.astimezone(ZoneInfo(_QUOTA_RESET_TZ))
+    except Exception:  # pragma: no cover - no tz database on this host
+        # Pacific standard time is UTC-8; an hour early is the safe error,
+        # since a probe after the cooldown is what corrects it.
+        local = now_utc.astimezone(timezone(timedelta(hours=-8)))
+    tomorrow = (local + timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return max(1.0, min((tomorrow - local).total_seconds(), MAX_DAILY_QUOTA_COOLDOWN_S))
+
+
+def quota_cooldown_s(error: str, *, now_utc: datetime | None = None) -> float:
+    """How long a quota-refused provider should be left alone.
+
+    A per-day refusal waits for the day's reset; anything else honours the
+    delay the refusal named (clamped), or the default when it named none.
+    """
+    if daily_quota_exhausted(error):
+        return seconds_until_quota_reset(now_utc)
+    asked = retry_delay_s(error)
+    return min(
+        DEFAULT_QUOTA_COOLDOWN_S if asked is None else asked,
+        MAX_QUOTA_COOLDOWN_S,
+    )
+
+
+#: One cooldown table for the whole process, for callers that build a fresh
+#: chain per request (``service/app.py::build_model`` does, once per run).
+#:
+#: A cooldown held on the chain object dies with the request, so the next run
+#: re-asked the exhausted model on its first call of every stage -- measured on
+#: the 2026-09-13 robotic-arm demo, where every worker call opened with a 429
+#: from ``gemini-3.7-flash``. LiteLLM keeps its deployment cooldowns on the
+#: long-lived ``Router`` for the same reason (``litellm/router.py``:
+#: ``self.cooldown_cache = CooldownCache(...)``, read by
+#: ``router_utils/cooldown_handlers.py::_async_get_cooldown_deployments`` on
+#: every routing decision), not on the request.
+#:
+#: Keys are ``"<provider name>:<model id>"`` so two chains that happen to reuse
+#: a rung name for different models cannot park each other; values are
+#: ``time.monotonic`` readings, which is why the table is process-local.
+SHARED_COOLDOWNS: dict[str, float] = {}
+
+
 class AllProvidersFailed(ModelError):
     """Every provider in the chain failed. Carries all of their errors."""
 
@@ -194,11 +275,19 @@ class FallbackModel:
     #: read at the top of every call. Process-local and never persisted: a
     #: daily quota that resets while this object lives is picked up by the
     #: re-probe that follows the cooldown, and a new process starts clean.
+    #: Pass :data:`SHARED_COOLDOWNS` to make a refusal outlive this object --
+    #: the service builds one chain per request, and a cooldown that dies with
+    #: the request is re-learned by the next one.
     _cooldown: dict[str, float] = field(default_factory=dict, repr=False)
 
     def __post_init__(self) -> None:
         if not self.providers:
             raise ValueError("FallbackModel needs at least one provider")
+
+    @staticmethod
+    def _key(provider: Provider) -> str:
+        model = getattr(provider.model, "model", None)
+        return f"{provider.name}:{model}" if isinstance(model, str) and model else provider.name
 
     def _eligible(self) -> tuple[list[Provider], dict[str, float]]:
         """``(providers to try, {skipped name: seconds left})``.
@@ -221,12 +310,16 @@ class FallbackModel:
         misclassification into a dead model object.
         """
         now = self._clock()
-        ready = [p for p in self.providers if self._cooldown.get(p.name, 0.0) <= now]
+        ready = [
+            p for p in self.providers if self._cooldown.get(self._key(p), 0.0) <= now
+        ]
         if not ready:
-            self._cooldown.clear()
+            # Only this chain's entries: the table may be shared with others.
+            for p in self.providers:
+                self._cooldown.pop(self._key(p), None)
             return list(self.providers), {}
         skipped = {
-            p.name: self._cooldown[p.name] - now
+            p.name: self._cooldown[self._key(p)] - now
             for p in self.providers
             if p.name not in {r.name for r in ready}
         }
@@ -302,6 +395,11 @@ class FallbackModel:
             # different set of model ids with its own quota, so inheriting
             # "flash is out" would park a tier nobody had asked yet.
             _clock=self._clock,
+            # ...unless the table is the process-wide one, whose keys carry the
+            # model id, so a sibling rung can only ever read its own entry.
+            _cooldown=(
+                self._cooldown if self._cooldown is SHARED_COOLDOWNS else {}
+            ),
         )
 
     def generate(
@@ -324,9 +422,8 @@ class FallbackModel:
                 provider=name,
                 ok=False,
                 error=(
-                    "skipped: quota refused within the last "
-                    f"{DEFAULT_QUOTA_COOLDOWN_S:g}s; {remaining:.1f}s before "
-                    "it is asked again"
+                    "skipped: quota refused recently; "
+                    f"{remaining:.1f}s before it is asked again"
                 ),
                 elapsed_s=0.0,
             )
@@ -367,10 +464,10 @@ class FallbackModel:
                         # (:func:`retry_delay_s`) rather than a number invented
                         # here. Clamped so a number read off the network cannot
                         # park a provider indefinitely.
-                        asked = retry_delay_s(attempt.error or "")
-                        self._cooldown[provider.name] = self._clock() + min(
-                            DEFAULT_QUOTA_COOLDOWN_S if asked is None else asked,
-                            MAX_QUOTA_COOLDOWN_S,
+                        # A per-day cap is parked until the day's reset
+                        # (:func:`quota_cooldown_s`), whatever retryDelay says.
+                        self._cooldown[self._key(provider)] = (
+                            self._clock() + quota_cooldown_s(attempt.error or "")
                         )
                         break
                     if try_no + 1 < provider.attempts:

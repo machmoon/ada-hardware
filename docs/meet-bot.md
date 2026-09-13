@@ -144,4 +144,4 @@ reply latency with `gemini-3.5-flash-lite` plus TTS (whether a ~1 s pause
 feels natural or lands on the next speaker), the doubt phrases against real
 caption text, `conversations.replies` on a real DM (`im:history` scope), and
 the overlay accepting a `source: "meet"` idea. The progress lines come from
-the Slack bridge and still say "Ada" and "Kaleo app" in places.
+the Slack bridge and still say "Hardy" and "Kaleo app" in places.

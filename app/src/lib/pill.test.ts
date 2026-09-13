@@ -19,26 +19,26 @@ const off = {
 
 describe("earWord", () => {
   it("says the ear is off, and why when it stopped itself", () => {
-    expect(earWord(off)).toBe("Ada off");
-    expect(earWord(null)).toBe("Ada off");
+    expect(earWord(off)).toBe("Hardy off");
+    expect(earWord(null)).toBe("Hardy off");
     expect(earWord({ ...off, error: "the engine refused the audio" })).toBe(
-      "Ada off — the engine refused the audio"
+      "Hardy off — the engine refused the audio"
     );
   });
 
   it("spells out the bill while the paid backend is listening", () => {
     expect(
       earWord({ ...off, enabled: true, listening: true, backend: "windows", sent: 3 })
-    ).toBe("Listening for “Ada” · 3/15 paid windows");
+    ).toBe("Listening for “Hardy” · 3/15 paid windows");
   });
 
   it("separates the free recognizers from the paid one", () => {
     expect(
       earWord({ ...off, enabled: true, listening: true, backend: "speech" })
-    ).toBe("Listening for “Ada” · OS");
+    ).toBe("Listening for “Hardy” · OS");
     expect(
       earWord({ ...off, enabled: true, listening: true, backend: "local" })
-    ).toBe("Listening for “Ada” · on-device");
+    ).toBe("Listening for “Hardy” · on-device");
   });
 
   it("says the mic is opening rather than claiming it is already hearing", () => {
@@ -48,9 +48,9 @@ describe("earWord", () => {
   it("echoes what it heard", () => {
     expect(
       earWord({ ...off, justHeard: true, lastHeard: "make me a 3.3 V LDO" })
-    ).toBe("heard “Ada, make me a 3.3 V LDO”");
+    ).toBe("heard “Hardy, make me a 3.3 V LDO”");
     expect(earWord({ ...off, justHeard: true })).toBe(
-      "heard “Ada” — tell me what you need"
+      "heard “Hardy” — tell me what you need"
     );
   });
 });

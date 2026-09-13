@@ -30,6 +30,7 @@ from google.adk.sessions import InMemorySessionService
 from ...board import BoardResult
 from ...netlist import CircuitSpec
 from ...placement.adapter import GeneratedPlacement
+from ...prior_art import PriorArtResult
 from ...routing import RouteResult
 from ...sourcing import SourcingResult
 from ...spice.simulators import Simulator
@@ -102,7 +103,10 @@ class _RunContext:
     sourcing_probe: Callable[[str], str] | None = None
     simulate: bool = False
     simulator: Simulator | str | None = None
+    prior_art: bool = False
+    prior_art_transport: Any = None
     facts: list[PartFacts] = field(default_factory=list)
+    prior_art_result: PriorArtResult | None = None
     plan_result: PlanResult | None = None
     #: Datasheets asked for and not read; see PipelineResult.unread_datasheets.
     unread_datasheets: list[str] = field(default_factory=list)
@@ -286,6 +290,8 @@ def generate_pcb_adk(
     simulate: bool = False,
     simulator: Simulator | str | None = None,
     effort: str | None = None,
+    prior_art: bool = False,
+    prior_art_transport: Any = None,
 ) -> PipelineResult:
     """Run the stages as an ADK workflow. See :func:`silkscreen.agents.generate_pcb`.
 
@@ -341,6 +347,8 @@ def generate_pcb_adk(
         sourcing_probe=sourcing_probe,
         simulate=simulate,
         simulator=simulator,
+        prior_art=prior_art,
+        prior_art_transport=prior_art_transport,
     )
     token = secrets.token_hex(8)
     _RUNS[token] = run
@@ -380,4 +388,5 @@ def generate_pcb_adk(
         unread_datasheets=run.unread_datasheets,
         plan=run.plan_result,
         effort=receipt,
+        prior_art=run.prior_art_result,
     )

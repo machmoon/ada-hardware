@@ -57,6 +57,7 @@ from silkscreen.agents.grounding import (  # noqa: E402
     store_pages,
 )
 from silkscreen.agents.model import GeminiModel  # noqa: E402
+from silkscreen.agents.propose import ProposalError  # noqa: E402
 from silkscreen.agents.resilience import (  # noqa: E402
     AllProvidersFailed,
     FallbackModel,
@@ -164,7 +165,7 @@ TRANSCRIBE_AUDIO_TYPES = frozenset(
 #: app/src/lib/wake-word.ts. A client that measured a quieter window than this
 #: recorded no speech, and transcribing it is a paid call whose likeliest
 #: answer is the wake name the prompt primes -- four seconds of near-silence
-#: was measured coming back as "Ada". The field is optional: a caller that
+#: was measured coming back as "Hardy". The field is optional: a caller that
 #: cannot measure loudness sends none and keeps the previous behaviour.
 TRANSCRIBE_PEAK_THRESHOLD = 8.0
 TRANSCRIBE_PEAK_MAX = 128.0
@@ -799,6 +800,52 @@ def caused_by_model_failure(exc: BaseException) -> bool:
     return False
 
 
+#: Bounds on what a failed proposal puts on the wire. The errors are
+#: engine-generated validation messages (``propose.round`` already streams the
+#: first of them), but they quote model-chosen names, so both the count and
+#: each line are clipped.
+MAX_PROPOSAL_ERRORS = 12
+MAX_PROPOSAL_ERROR_CHARS = 300
+
+
+def proposal_failure(exc: ProposalError) -> dict[str, Any]:
+    """A proposal that never validated, as something a person can act on.
+
+    Measured on the 2026-09-13 robotic-arm demo: this arrived as a 500
+    "internal error", so the user was told the service was broken when the
+    fix was to rephrase the request around parts the builder can draw. 422
+    Unprocessable Content: the request was well formed, and what it asked for
+    could not be turned into a valid circuit. Not 400, which this module
+    reserves for field validation (``RequestError``); not 502, since the model
+    answered.
+    """
+
+    def clip(text: str) -> str:
+        text = str(text)
+        if len(text) <= MAX_PROPOSAL_ERROR_CHARS:
+            return text
+        return text[: MAX_PROPOSAL_ERROR_CHARS - 1] + "\u2026"
+
+    errors = list(getattr(exc, "errors", []) or [])
+    unsupported = list(getattr(exc, "unsupported", []) or [])
+    attempts = len(getattr(exc, "attempts", []) or [])
+    headline = (
+        f"No valid circuit after {attempts} attempt(s): the design still named "
+        f"{len(unsupported)} part(s) the board builder cannot draw."
+        if unsupported
+        else f"No valid circuit after {attempts} attempt(s)."
+    )
+    return {
+        "error": headline + " Edit the request and try again.",
+        "reason": "proposal_invalid",
+        "attempts": attempts,
+        "errors": [clip(e) for e in errors[:MAX_PROPOSAL_ERRORS]],
+        "errors_total": len(errors),
+        "unsupported": [clip(e) for e in unsupported[:MAX_PROPOSAL_ERRORS]],
+        "supported_packages": str(getattr(exc, "supported_packages", "") or ""),
+    }
+
+
 def _error_response(exc: BaseException) -> tuple[int, dict[str, Any]]:
     """One failed run, as the status and body a caller should be told about.
 
@@ -840,6 +887,8 @@ def _error_response(exc: BaseException) -> tuple[int, dict[str, Any]]:
         return 502, {"error": str(exc)}
     if caused_by_model_failure(exc):
         return 502, {"error": str(exc)}
+    if isinstance(exc, ProposalError):
+        return 422, proposal_failure(exc)
     # The traceback goes to the log, not to the caller. This is a public
     # endpoint, and a stack trace hands an anonymous client our file layout
     # and internal call structure. The id is what makes the two halves
@@ -917,23 +966,44 @@ def build_embedder() -> BatchingEmbedder:
 
 
 def build_model():
-    """Primary Gemini model with a cheaper tier and open-weights Gemma behind it.
+    """Primary Gemini model, a full Flash tier, the cheap tier, then Gemma.
 
-    Three tiers, not one: a rate limit or a transient 5xx on the primary should
-    degrade the answer, not lose the request. Gemma is a different model family
-    behind the same API, so an outage or quota exhaustion shared by both Gemini
-    tiers still leaves one rung standing. One attempt only on that last rung:
-    by then the caller has already waited through four Gemini attempts.
+    Four rungs, not one: a rate limit or a transient 5xx on the primary should
+    degrade the answer, not lose the request. The primary is
+    :func:`~silkscreen.agents.model.primary_model` (``SILKSCREEN_MODEL``, else
+    ``DEFAULT_MODEL``); the full-Flash rung sits between it and flash-lite
+    because an exhausted primary used to fall straight to the weakest proposer.
+    Rungs that name the same model id are folded. Gemma is a different model
+    family behind the same API, so an outage or quota exhaustion shared by the
+    Gemini tiers still leaves one rung standing.
+
+    The chain is built per request, so its quota cooldowns live in the
+    process-wide :data:`~silkscreen.agents.resilience.SHARED_COOLDOWNS`: a
+    model whose daily cap is gone is asked once, then skipped (and reported as
+    skipped) until the day's reset, instead of on the first call of every run.
     """
-    from silkscreen.agents.model import CHEAP_MODEL, DEFAULT_MODEL, GEMMA_MODEL
-
-    return FallbackModel(
-        providers=[
-            Provider("gemini-primary", GeminiModel(DEFAULT_MODEL), attempts=2),
-            Provider("gemini-cheap", GeminiModel(CHEAP_MODEL), attempts=2),
-            Provider("gemma-open", GeminiModel(GEMMA_MODEL), attempts=1),
-        ]
+    from silkscreen.agents.model import (
+        CHEAP_MODEL,
+        FALLBACK_MODEL,
+        GEMMA_MODEL,
+        primary_model,
     )
+    from silkscreen.agents.resilience import SHARED_COOLDOWNS
+
+    rungs = [
+        ("gemini-primary", primary_model(), 2),
+        ("gemini-flash", FALLBACK_MODEL, 2),
+        ("gemini-cheap", CHEAP_MODEL, 2),
+        ("gemma-open", GEMMA_MODEL, 1),
+    ]
+    providers: list[Provider] = []
+    seen: set[str] = set()
+    for name, model_id, attempts in rungs:
+        if model_id in seen:
+            continue
+        seen.add(model_id)
+        providers.append(Provider(name, GeminiModel(model_id), attempts=attempts))
+    return FallbackModel(providers=providers, _cooldown=SHARED_COOLDOWNS)
 
 
 #: The pace /desk keeps when the caller names none. A desk snap is a full
@@ -1348,6 +1418,9 @@ def generate(
     simulate_requested = payload.get("simulate", False)
     if not isinstance(simulate_requested, bool):
         raise RequestError("'simulate' must be a boolean")
+    prior_art_requested = payload.get("prior_art", False)
+    if not isinstance(prior_art_requested, bool):
+        raise RequestError("'prior_art' must be a boolean")
     # The thinking level, from the frozen vocabulary. Validated here, before
     # anything spends time or quota, and never defaulted on a bad name: a run
     # that answers a 'thorough' request at 'fast' while reporting 'thorough'
@@ -1470,6 +1543,8 @@ def generate(
         opt_in_kwargs["sourcing"] = True
     if simulate_requested:
         opt_in_kwargs["simulate"] = True
+    if prior_art_requested:
+        opt_in_kwargs["prior_art"] = True
 
     result = generate_pcb(
         model,
@@ -1627,6 +1702,16 @@ def generate(
         if response["enclosure"] is None:
             response["warnings"].append(
                 "enclosure generation failed; the board is delivered without a case"
+            )
+
+    if prior_art_requested:
+        # Additive, and only when opted in. A rate limit or outage is a
+        # status inside the block, so None means the stage never ran.
+        prior_art = getattr(result, "prior_art", None)
+        response["prior_art"] = prior_art.as_dict() if prior_art is not None else None
+        if prior_art is None:
+            response["warnings"].append(
+                "prior-art research did not run; the board was designed from scratch"
             )
 
     if sourcing_requested:
@@ -2203,7 +2288,7 @@ class Handler(BaseHTTPRequestHandler):
             self._desk_resolve()
             return
         if self.path in ("/deliver/auth", "/deliver/auth/start"):
-            # /start returns the consent URL for Ada to open; /auth finishes
+            # /start returns the consent URL for Hardy to open; /auth finishes
             # (client_opens) or runs the all-in-one server-side browser flow.
             payload = self._read_payload()
             if payload is None:
@@ -2752,7 +2837,7 @@ class Handler(BaseHTTPRequestHandler):
         The engine is resolved and its *first* frame pulled before any header
         is sent, so a failure is an HTTP status rather than a short body. Once
         bytes are on the wire there is no way left to say "that was a
-        failure", and a truncated readback that a listener hears as Ada
+        failure", and a truncated readback that a listener hears as Hardy
         trailing off mid-net-name is precisely the quiet-zero this repo
         refuses everywhere else.
         """

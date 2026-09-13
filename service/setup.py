@@ -12,7 +12,7 @@ Routes (all behind the bearer gate, all ``Cache-Control: no-store``)::
 
     GET  /setup                          the whole report
     GET  /setup/google|microsoft|stripe  one provider, non-blocking
-    GET  /setup/voice                    which voice Ada has, and the one
+    GET  /setup/voice                    which voice Hardy has, and the one
                                          command that provisions it if none
     POST /setup/google/connect           202 {auth_url, job}; the client opens it
     POST /setup/google/disconnect        delete the token here (not at Google)
@@ -376,7 +376,7 @@ def engine_status() -> dict[str, Any]:
 
 
 def voice_status() -> dict[str, Any]:
-    """Which voice Ada has, in the wizard's four-state vocabulary.
+    """Which voice Hardy has, in the wizard's four-state vocabulary.
 
     This exists because of a provisioning cliff with teeth. Kokoro needs
     ~340 MB of weights that nothing downloads automatically -- a deliberate
@@ -384,7 +384,7 @@ def voice_status() -> dict[str, Any]:
     silently pulls a third of a gigabyte is a surprise on a metered connection
     and a hang on a hot path. The cost of that refusal used to be paid
     invisibly: with no weights the client fell through to the webview's own
-    ``speechSynthesis``, and the macOS Compact voice became what Ada sounded
+    ``speechSynthesis``, and the macOS Compact voice became what Hardy sounded
     like, with nothing anywhere saying it was a fallback.
 
     The client no longer falls through -- an unprovisioned engine now means

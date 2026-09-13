@@ -38,7 +38,7 @@ export function sessionDocument(state, now = new Date()) {
       entries: Array.isArray(source.entries) ? source.entries : [],
       needsClarification: source.needsClarification === true,
       actualModel: String(source.actualModel ?? ''),
-      orchestratorModel: String(source.orchestratorModel ?? 'gemini-3.7-flash'),
+      orchestratorModel: String(source.orchestratorModel ?? 'auto'),
       thinkingLevel: String(source.thinkingLevel ?? 'auto'),
       actualThinkingLevel: String(source.actualThinkingLevel ?? ''),
       quotaRpm: String(source.quotaRpm ?? 'auto'),

@@ -998,7 +998,7 @@ def _refute(
     )
     try:
         data = parse_json(
-            model.generate(prompt, temperature=0.0, max_output_tokens=8192)
+            model.generate(prompt, temperature=0.0, max_output_tokens=32768)
         )
     except ModelError as exc:
         # The refuter failing is not the critic failing, and it must not turn
@@ -1095,7 +1095,10 @@ def run_review(
         f"The circuit under review:\n{_spec_text(spec)}\n\n"
         f"Datasheet facts available to you:\n{_facts_text(facts)}\n"
     )
-    raw = model.generate(prompt, temperature=0.0, max_output_tokens=8192)
+    # 32768: Gemini 3's reasoning tokens share this budget, and a 40-part
+    # robot-arm controller spent all but 951 characters of 8192 thinking
+    # (measured 2026-09-13), which failed the whole run at the review stage.
+    raw = model.generate(prompt, temperature=0.0, max_output_tokens=32768)
     try:
         data = parse_json(raw)
     except ModelError as exc:

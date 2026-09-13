@@ -589,6 +589,60 @@ export function bomHost(history: readonly StepResponse[]): StepName | null {
   return null;
 }
 
+// ---------------------------------------------------------------- prior art
+
+/** How many projects the panel lists: the three the designer was briefed on. */
+export const PRIOR_ART_LIMIT = 3;
+
+export interface PriorArtDetails {
+  status: string;
+  /** The status in words, so an empty list never reads as "nothing exists". */
+  headline: string;
+  projects: { name: string; url: string | null; license: string; stars: number; facts: number }[];
+  total: number;
+  warnings: string[];
+}
+
+const PRIOR_ART_HEADLINE: Record<string, string> = {
+  found: "Open-source projects that already build this",
+  none_found: "Searched GitHub; nothing relevant came back",
+  rate_limited: "GitHub rate-limited the search (set GITHUB_TOKEN)",
+  unavailable: "GitHub could not be searched",
+};
+
+/** Only an https github.com link is offered to the browser: it came off the network. */
+function githubUrl(value: unknown): string | null {
+  try {
+    const url = new URL(String(value ?? ""));
+    return url.protocol === "https:" && url.hostname === "github.com" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+export function priorArtDetails(response: StepResponse | undefined): PriorArtDetails | null {
+  if (!response || response.step !== "propose") return null;
+  const block = response.prior_art;
+  if (!block || typeof block !== "object") return null;
+  const all = Array.isArray(block.projects) ? block.projects : [];
+  return {
+    status: String(block.status ?? ""),
+    headline: PRIOR_ART_HEADLINE[String(block.status)] ?? `Research: ${String(block.status ?? "unknown")}`,
+    projects: all
+      .slice(0, PRIOR_ART_LIMIT)
+      .filter((p) => p?.repo?.full_name)
+      .map((p) => ({
+        name: p.repo.full_name,
+        url: githubUrl(p.repo.url),
+        license: p.repo.license || "no licence stated",
+        stars: Number.isFinite(p.repo.stars) ? p.repo.stars : 0,
+        facts: Array.isArray(p.facts) ? p.facts.length : 0,
+      })),
+    total: all.length,
+    warnings: Array.isArray(block.warnings) ? block.warnings.slice(0, 3).map(String) : [],
+  };
+}
+
 // ---------------------------------------------------------------- other details
 
 /** The placement detail: what was placed, and anything the solver said. */

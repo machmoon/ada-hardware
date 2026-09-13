@@ -33,12 +33,15 @@ export const MAX_ENCLOSURE_STYLE_CHARS = 500
 
 /** kind is what the UI switches on; status is kept for the error panel's footer. */
 export class ApiError extends Error {
-  constructor(kind, message, { status = 0, errorId = '', runId = '' } = {}) {
+  constructor(kind, message, { status = 0, errorId = '', runId = '', details = undefined } = {}) {
     super(message)
     this.name = 'ApiError'
     this.kind = kind
     this.status = status
     this.errorId = errorId
+    /** Structured facts a person can act on, when the service sent some —
+        today only kind 'proposal' (see proposalDetails). */
+    this.details = details
     /** The service's name for the run this failed on, when there is one.
 
         Carried on the error because the errors that matter here are exactly
@@ -125,6 +128,9 @@ export function normalizeRequest(request) {
     // a datasheet probe per part, so an absent flag is the service's default
     // and `sourcing: false` is never sent.
     ...(request.sourcing === true ? { sourcing: true } : {}),
+    // Prior-art research: up to three model calls and GitHub requests, so it
+    // is opt-in the same way and `prior_art: false` is never sent.
+    ...(request.prior_art === true ? { prior_art: true } : {}),
     ...(request.constraints && typeof request.constraints === 'object' && !Array.isArray(request.constraints)
       ? { constraints: normalizeConstraintManifest(request.constraints) }
       : {}),
@@ -228,9 +234,38 @@ function normalizeResponse(data) {
   }
 }
 
+/** Bounds the card renders, whatever the service sent: the service already
+    clips to 12 lines of 300 characters, and a client must not trust that. */
+export const MAX_PROPOSAL_LINES = 12
+const MAX_PROPOSAL_LINE_CHARS = 300
+
+function clipLine(value) {
+  const line = String(value ?? '')
+  return line.length <= MAX_PROPOSAL_LINE_CHARS ? line : `${line.slice(0, MAX_PROPOSAL_LINE_CHARS - 1)}…`
+}
+
+/** A proposal that never validated (service/app.py proposal_failure, 422
+    reason 'proposal_invalid'), reduced to the fields the Run failed card
+    shows: which parts cannot be drawn, what can, and the final errors. */
+export function proposalDetails(body) {
+  const lines = (value) => asArray(value).slice(0, MAX_PROPOSAL_LINES).map(clipLine)
+  const errors = lines(body?.errors)
+  const total = Number(body?.errors_total)
+  return {
+    attempts: Number(body?.attempts) || 0,
+    errors,
+    errorsTotal: Number.isFinite(total) && total >= errors.length ? total : errors.length,
+    unsupported: lines(body?.unsupported),
+    supportedPackages: String(body?.supported_packages ?? ''),
+  }
+}
+
 function errorFor(status, body) {
   const message = String(body.error || `request failed with status ${status}`)
   const errorId = String(body.error_id || '')
+  if (status === 422 && body.reason === 'proposal_invalid') {
+    return new ApiError('proposal', message, { status, details: proposalDetails(body) })
+  }
   if (status === 400) return new ApiError('validation', message, { status })
   if (status === 404) return new ApiError('not-found', message, { status })
   if (status === 413) return new ApiError('too-large', message, { status })

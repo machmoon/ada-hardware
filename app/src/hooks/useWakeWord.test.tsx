@@ -112,7 +112,7 @@ describe("useWakeWord", () => {
   it("asks for microphone permission and turns off when it is refused", async () => {
     mockEnsureMic.mockRejectedValue(
       new Error(
-        "Microphone access is off for Ada. Enable it in System Settings → Privacy & Security → Microphone, then click the ear again."
+        "Microphone access is off for Hardy. Enable it in System Settings → Privacy & Security → Microphone, then click the ear again."
       )
     );
     const { result } = renderHook(() => useWakeWord({ ...options, onWake: vi.fn(), create }));
@@ -272,7 +272,7 @@ describe("useWakeWord", () => {
     };
     const { result } = renderHook(() => useWakeWord({ ...options, onWake: vi.fn(), create: spy }));
     await waitFor(() => expect(FakeListener.instances).toHaveLength(1));
-    // Nothing has been said yet: "Ada" is required.
+    // Nothing has been said yet: "Hardy" is required.
     expect(seen[0]()).toBe(false);
 
     // The name alone, from a gated window: the rest is still coming.
@@ -286,7 +286,7 @@ describe("useWakeWord", () => {
       await vi.advanceTimersByTimeAsync(CONTINUATION_MS + 10);
     });
     expect(seen[1]()).toBe(false);
-    expect(result.current.detail).toMatch(/Hey Ada/);
+    expect(result.current.detail).toMatch(/Hey Hardy/);
     vi.useRealTimers();
   });
 
@@ -502,7 +502,7 @@ describe("useWakeWord", () => {
     expect(result.current.enabled).toBe(true);
 
     // The same transcript from a window no gate could confirm is exactly what
-    // silence produces against the Ada-primed prompt: spend nothing more.
+    // silence produces against the Hardy-primed prompt: spend nothing more.
     act(() => FakeListener.instances[1].hear("", false));
     await waitFor(() => expect(result.current.enabled).toBe(false));
     expect(FakeListener.instances).toHaveLength(2);

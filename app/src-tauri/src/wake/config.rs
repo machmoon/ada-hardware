@@ -16,7 +16,7 @@ const MOCK_VAR: &str = "KALEO_WAKE_MOCK";
 const TRIGGER_VAR: &str = "KALEO_WAKE_TRIGGER_LEVEL";
 
 /// Event name the overlay already listens for (`app/src/lib/local-wake.ts`).
-pub const WAKE_EVENT: &str = "ada-wake";
+pub const WAKE_EVENT: &str = "hardy-wake";
 
 #[derive(Debug, Clone)]
 pub struct WakeConfig {
@@ -46,7 +46,7 @@ impl WakeConfig {
         let roots = search_roots(extra_roots);
         let onnx_paths = collect_onnx(&roots);
         // 0.7, not 0.5, and the difference is measured. On the shipped
-        // `hey_ada` classifier (2026-09-07, 180 held-out-voice utterances and
+        // `hey_hardy` classifier (2026-09-07, 180 held-out-voice utterances and
         // 1.42 h of held-out speech): 0.5 gives recall 0.917 at 1.40 false
         // accepts/hour and lets "hey Aidan" through; 0.7 gives recall 0.867 at
         // **zero** per hour. A wake word that fires at someone else's name is
@@ -79,7 +79,7 @@ impl WakeConfig {
                 available: true,
                 listening,
                 backend: "mock".into(),
-                reason: "KALEO_WAKE_MOCK is set — ⌥-click the ear to simulate Hey Ada".into(),
+                reason: "KALEO_WAKE_MOCK is set — ⌥-click the ear to simulate Hey Hardy".into(),
                 platform: platform_name().into(),
                 has_access_key: false,
                 keyword_count: 0,
@@ -90,7 +90,7 @@ impl WakeConfig {
                 available: false,
                 listening: false,
                 backend: "none".into(),
-                reason: "native Hey Ada is macOS-first; use the mic button to dictate".into(),
+                reason: "native Hey Hardy is macOS-first; use the mic button to dictate".into(),
                 platform: platform_name().into(),
                 has_access_key: false,
                 keyword_count: self.onnx_paths.len(),
@@ -145,7 +145,7 @@ fn collect_onnx(roots: &[PathBuf]) -> Vec<PathBuf> {
         push_onnx_dir(&dir, &mut out);
     }
     for root in roots {
-        for name in ["hey_ada.onnx", "ada.onnx", "hey_livekit.onnx"] {
+        for name in ["hey_hardy.onnx", "hardy.onnx", "hey_livekit.onnx"] {
             let p = root.join(name);
             if p.is_file() && !out.contains(&p) {
                 out.push(p);
@@ -307,7 +307,7 @@ mod tests {
         };
         assert!(!cfg.livekit_ready());
         let cfg = WakeConfig {
-            onnx_paths: vec![PathBuf::from("/tmp/hey_ada.onnx")],
+            onnx_paths: vec![PathBuf::from("/tmp/hey_hardy.onnx")],
             threshold: 0.5,
             trigger_level: 1,
             mock: false,

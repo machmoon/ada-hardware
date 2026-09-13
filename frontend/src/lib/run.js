@@ -22,7 +22,7 @@ const IDLE = {
   entries: [],
   needsClarification: false,
   actualModel: '',
-  orchestratorModel: 'gemini-3.7-flash',
+  orchestratorModel: 'auto',
   thinkingLevel: 'auto',
   actualThinkingLevel: '',
   quotaRpm: 'auto',
@@ -40,7 +40,7 @@ export function startRun(request, options = {}) {
   const entries = preserve ? [...(previous.entries || [])] : []
   const message = String(options.message ?? intent)
   const orchestratorModel = String(
-    options.model || (preserve ? previous.orchestratorModel : '') || 'gemini-3.7-flash',
+    options.model || (preserve ? previous.orchestratorModel : '') || 'auto',
   )
   const thinkingLevel = String(
     options.thinkingLevel || (preserve ? previous.thinkingLevel : '') || 'auto',
@@ -389,6 +389,8 @@ function plainError(error) {
     message: String(error?.message ?? error ?? ''),
     status: Number(error?.status ?? 0),
     errorId: String(error?.errorId ?? ''),
+    // Undefined unless the service named something to act on (kind 'proposal').
+    details: error?.details && typeof error.details === 'object' ? error.details : undefined,
   }
 }
 

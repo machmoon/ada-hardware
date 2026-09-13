@@ -96,7 +96,7 @@ export const DeliverPanel = ({ baseUrl, token, session, history }: DeliverPanelP
     void (async () => {
       try {
         // Prefer the checkout CLI: it loads .env and opens the browser from
-        // Ada's GUI session. The HTTP flow is for when the CLI is unavailable.
+        // Hardy's GUI session. The HTTP flow is for when the CLI is unavailable.
         if (cliGoogleapps) {
           await runCli("googleapps", ["auth"], 320);
           const next = await deliverConfig(baseUrl, token);

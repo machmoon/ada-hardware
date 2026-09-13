@@ -1,10 +1,10 @@
-// An on-device pre-filter for "Ada": does this burst of sound even have the
+// An on-device pre-filter for "Hardy": does this burst of sound even have the
 // *shape* of the wake word?
 //
 // Why this exists. The recorded-window ear costs one Gemini call per clip,
-// and the transcribe prompt names "Ada" three times to earn its recall — so
+// and the transcribe prompt names "Hardy" three times to earn its recall — so
 // over silence the primed name is the likeliest completion and the model
-// answers "Ada" to an empty room. A loudness gate stops silence, but it does
+// answers "Hardy" to an empty room. A loudness gate stops silence, but it does
 // not stop "the LDO regulator needs a bigger capacitor" from costing a call.
 // That is why the ear was capped at one listen: without a second filter,
 // always-on meant always-paying.
@@ -14,7 +14,7 @@
 // three-syllable sonorant word?" — and it answers it wrong in both directions
 // sometimes. It is only ever a *gate in front of* the paid transcript, never
 // a detection on its own: a hit opens the existing confirmation window, and
-// the model still has the last word on whether "Ada" was said. Composed that
+// the model still has the last word on whether "Hardy" was said. Composed that
 // way, a false accept costs one call and a false reject costs one missed
 // wake; neither can start a board run by itself.
 //
@@ -42,8 +42,8 @@
 //   rms — loudness on the same 0..128 deviation scale as `peakDeviation`.
 //   zcr — zero crossings per sample. Fricatives (/s/ /sh/ /f/ /th/, the /k/
 //         burst in "okay") are noise-like and cross zero constantly; the
-//         vowels and the /d/ in "Ada" do not. Measured on the corpus, this is
-//         the single most useful feature, because "Ada" is unusual in having
+//         vowels and the /d/ in "Hardy" do not. Measured on the corpus, this is
+//         the single most useful feature, because "Hardy" is unusual in having
 //         no obstruent at all.
 
 /** One analyser frame, reduced to the two numbers the classifier uses. */
@@ -100,7 +100,7 @@ export const SPOTTER_SPEECH_RMS = 8;
 /** Frames of quiet that end an utterance (~300 ms). */
 export const SPOTTER_TRAIL_FRAMES = 15;
 
-/** Frames of speech that start one (~40 ms). Short: "Ada" is short. */
+/** Frames of speech that start one (~40 ms). Short: "Hardy" is short. */
 export const SPOTTER_ONSET_FRAMES = 2;
 
 /** Never hold a segment open longer than this, however long someone talks. */
@@ -108,7 +108,7 @@ export const SPOTTER_MAX_SEGMENT_MS = 6_000;
 
 /**
  * How much of an utterance the shape test looks at. The wake word comes
- * first — "Ada, make me a 3.3 V LDO" is one long breath whose first ~0.7 s is
+ * first — "Hardy, make me a 3.3 V LDO" is one long breath whose first ~0.7 s is
  * the only part that can carry the name — so the classifier reads a leading
  * window and ignores the command behind it.
  */
@@ -248,7 +248,7 @@ export interface WakeShape {
   maxVoicedZcr: number;
   /** Share of loud frames that look like a fricative. */
   fricativeFraction: number;
-  /** True when the window could plausibly be "Ada" or "hey Ada". */
+  /** True when the window could plausibly be "Hardy" or "hey Hardy". */
   wakeShaped: boolean;
   /** Why not, in one clause; empty when `wakeShaped`. */
   reason: string;
@@ -259,7 +259,7 @@ export interface ShapeOptions {
   speechRms?: number;
   leadMs?: number;
   fricativeZcr?: number;
-  /** Inclusive syllable bounds: "Ada" is 2, "hey Ada" is 3. */
+  /** Inclusive syllable bounds: "Hardy" is 2, "hey Hardy" is 3. */
   minSyllables?: number;
   maxSyllables?: number;
   minDurationMs?: number;
@@ -293,7 +293,7 @@ function smooth(values: readonly number[]): number[] {
  * Count energy peaks separated by a real valley.
  *
  * A syllable nucleus is a loud vowel; the consonant between two of them dips.
- * "Ada" is /eɪ.də/ — two humps with a dip at the /d/ — and that dip, not the
+ * "Hardy" is /eɪ.də/ — two humps with a dip at the /d/ — and that dip, not the
  * spectrum, is what this counts. `valleyRatio` is how far the envelope has to
  * fall between two peaks before they count as two rather than one wobble.
  */
@@ -333,7 +333,7 @@ export function countSyllables(
 }
 
 /**
- * Score the leading window of an utterance against the shape of "Ada".
+ * Score the leading window of an utterance against the shape of "Hardy".
  *
  * Honest about what it is: three coarse acoustic tests, tuned on synthesised
  * speech, that a determined sentence can pass by accident. It exists to make
@@ -359,7 +359,7 @@ export function wakeShape(
   const loud = window.filter((f) => f.rms >= speechRms);
   // "Voiced" here means loud relative to this utterance, not loud in the room:
   // the onset frame is half room tone and its zero crossings are the room's,
-  // which is why a bare threshold on every loud frame rejects real "Ada"s.
+  // which is why a bare threshold on every loud frame rejects real "Hardy"s.
   const voiced = window.filter(
     (f) => f.rms >= Math.max(speechRms, peak * (options.voicedRatio ?? SPOTTER_VOICED_RATIO))
   );
@@ -376,10 +376,10 @@ export function wakeShape(
   let reason = "";
   if (peak < speechRms) reason = "no speech in the window";
   else if (durationMs < minDurationMs) reason = "too short to be a word";
-  else if (syllables < minSyllables) reason = "one syllable, Ada has two";
-  else if (syllables > maxSyllables) reason = "too many syllables to start with Ada";
-  else if (maxVoiced > maxVoicedZcr) reason = "a hard consonant Ada does not have";
-  else if (fricativeFraction > maxFricativeFraction) reason = "too much hiss for Ada";
+  else if (syllables < minSyllables) reason = "one syllable, Hardy has two";
+  else if (syllables > maxSyllables) reason = "too many syllables to start with Hardy";
+  else if (maxVoiced > maxVoicedZcr) reason = "a hard consonant Hardy does not have";
+  else if (fricativeFraction > maxFricativeFraction) reason = "too much hiss for Hardy";
 
   return {
     syllables,

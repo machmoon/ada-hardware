@@ -9,7 +9,7 @@
 // synthesiser that was not speaking yet — `cancel()` did nothing, the fetch
 // was never checked — and the utterance began afterwards, with the click
 // that was supposed to prevent it already spent. That is the founder's
-// "can't mute Ada": the stop signal was dropped, not ignored.
+// "can't mute Hardy": the stop signal was dropped, not ignored.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

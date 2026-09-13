@@ -11,15 +11,15 @@ About the name: it is deliberately a human-feeling name rather than a product
 name. The app is supposed to feel like a colleague at the bench, not a tool,
 and a tool name would have worked against that from the first menu entry.
 
-**Kaleo** and then **Ada** were this app's earlier names. Kaleo survives only as
+**Kaleo** and then **Hardy** were this app's earlier names. Kaleo survives only as
 internal identifiers that are expensive to change and invisible to users — the
 Tauri bundle id `com.silkscreen.kaleo` (which owns the on-disk settings
 directory), the npm package and Rust crate names, `KALEO_*` environment
-variables, `~/.kaleo/`, and the `kaleo.*` storage keys. Ada survives as the
-spoken wake word ("hey Ada", `WAKE_WORD` in `src/lib/wake-word.ts` and the
-trained `resources/wake/hey_ada.onnx` model), as `ADA_REPO_ROOT`/`ADA_PYTHON`,
-and in internal identifiers such as the terminal's `ada` destination. Nothing
-else a user reads should say Kaleo or Ada; if you find one that does, it is a bug.
+variables, `~/.kaleo/`, and the `kaleo.*` storage keys. Hardy survives as the
+spoken wake word ("hey Hardy", `WAKE_WORD` in `src/lib/wake-word.ts` and the
+trained `resources/wake/hey_hardy.onnx` model), as `HARDY_REPO_ROOT`/`HARDY_PYTHON`,
+and in internal identifiers such as the terminal's `hardy` destination. Nothing
+else a user reads should say Kaleo or Hardy; if you find one that does, it is a bug.
 
 ## Lineage and licence
 

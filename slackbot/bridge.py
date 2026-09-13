@@ -1,9 +1,9 @@
-"""Slack -> Ada on the laptop: say an idea in Slack, the desktop starts the design.
+"""Slack -> Hardy on the laptop: say an idea in Slack, the desktop starts the design.
 
 ``python -m slackbot socket`` runs this. It is the Socket Mode sibling of
 :mod:`slackbot.app`, with one difference that decides everything else: it does
 **not** run the pipeline. :mod:`slackbot.app` generates a whole board inside
-the bot process and uploads it; this bridge hands the sentence to the Ada
+the bot process and uploads it; this bridge hands the sentence to the Hardy
 overlay on the same laptop, which starts the ordinary approval-gated step run
 with it -- so the engineer sees it in KiCad and presses every step after the
 first, exactly as if they had typed the sentence into the bar.
@@ -23,7 +23,7 @@ them and the overlay never talks to Slack.
 What one message costs, stated rather than implied: the overlay's first step,
 ``propose``, reads, plans and proposes a circuit -- model calls nobody pressed
 a button on the laptop for. Every later step still waits for a press. That is
-the feature (the user asked for "I send it and Ada starts working"), and it is
+the feature (the user asked for "I send it and Hardy starts working"), and it is
 why ``SILKSCREEN_SLACK_USERS`` exists: a workspace can install the app and
 still keep who may spend on this laptop to a named list.
 """
@@ -369,7 +369,9 @@ class Bridge:
             return None
         if status not in (200, 201) or not body.get("id"):
             detail = str(body.get("error") or f"HTTP {status}")
-            self._say(channel, thread_ts, f"The Hardy engine didn't take that: {detail}")
+            self._say(
+                channel, thread_ts, f"The Hardy engine didn't take that: {detail}"
+            )
             return None
         idea_id = str(body["id"])
         if status == 200:
@@ -454,7 +456,9 @@ class Bridge:
                     )
                 elif new_state == "started":
                     if state == "pending":
-                        self._say(channel, thread_ts, "Hardy picked it up on the laptop.")
+                        self._say(
+                            channel, thread_ts, "Hardy picked it up on the laptop."
+                        )
                     session = str(body.get("session", ""))
                     self._say(
                         channel,

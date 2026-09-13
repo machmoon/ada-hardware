@@ -1,6 +1,6 @@
 """OAuth 2.0 installed-app flow with PKCE, on the stdlib.
 
-``python -m googleapps auth`` (and Ada's ``POST /deliver/auth``) opens
+``python -m googleapps auth`` (and Hardy's ``POST /deliver/auth``) opens
 Google's consent page in the browser, catches the redirect on a 127.0.0.1
 loopback port, exchanges the code, and writes the token JSON to the token
 path with mode 0o600. After that, every Gmail and Calendar call goes through
@@ -589,7 +589,7 @@ def _loopback_authorize(
     socket is then the code that runs in production.
 
     ``on_url`` is called with the consent URL as soon as it exists (before
-    waiting for the redirect), so a caller like Ada can open it itself when
+    waiting for the redirect), so a caller like Hardy can open it itself when
     the service process cannot.
     """
 

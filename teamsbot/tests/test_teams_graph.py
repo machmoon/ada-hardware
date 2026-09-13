@@ -119,7 +119,7 @@ VTT = """WEBVTT
 
 3c4d5e6f-1111-2222-3333-444455556666/1
 00:00:01.000 --> 00:00:04.000
-<v Ada Lovelace>we need a 3.3 volt rail for the sensor</v>
+<v Hardy Lovelace>we need a 3.3 volt rail for the sensor</v>
 
 3c4d5e6f-1111-2222-3333-444455556666/2
 00:00:05.000 --> 00:00:08.000
@@ -477,7 +477,7 @@ def test_transcript_text_reads_like_the_meet_client_does():
 
     text = client.transcript_text(USER, "MEET-1")
     assert text == (
-        "Ada Lovelace: we need a 3.3 volt rail for the sensor\n"
+        "Hardy Lovelace: we need a 3.3 volt rail for the sensor\n"
         "Charles Babbage: and a blinker to prove it boots"
     )
     # The documented content route, with the format Graph documents.

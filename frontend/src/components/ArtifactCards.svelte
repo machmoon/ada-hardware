@@ -1,5 +1,6 @@
 <script>
   import { readEnclosure } from '../lib/enclosure.js'
+  import { readPriorArt } from '../lib/prior-art.js'
   import { readRouting, routingSummary } from '../lib/routing.js'
   import { readSourcing } from '../lib/sourcing.js'
 
@@ -19,6 +20,7 @@
   // "not routed" when the block is absent: a PCB card that only counts parts
   // reads as a finished board over a ratsnest.
   const routing = $derived(readRouting(result))
+  const priorArt = $derived(readPriorArt(result))
 </script>
 
 <div class="artifacts" data-testid="chat-artifacts">
@@ -61,6 +63,28 @@
   </button>
 </div>
 
+{#if priorArt}
+  <section class="prior-art" data-testid="chat-prior-art" data-status={priorArt.status} data-material="panel">
+    <span class="lbl">Prior art</span>
+    <span class="status">{priorArt.text}</span>
+    {#if priorArt.projects.length}
+      <ul>
+        {#each priorArt.projects as project (project.name)}
+          <li data-testid="prior-art-project" data-repo={project.name}>
+            {#if project.url}
+              <a href={project.url} target="_blank" rel="noopener noreferrer">{project.name}</a>
+            {:else}
+              <span>{project.name}</span>
+            {/if}
+            <span class="meta">{project.license} · ★ {project.stars} · {project.facts} cited facts</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#each priorArt.warnings as warning, i (i)}<span class="meta">{warning}</span>{/each}
+  </section>
+{/if}
+
 <style>
   .artifacts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 13px; }
   button { min-width: 0; padding: 10px 11px; text-align: left; background: var(--surface); border: 1px solid var(--rule-soft); }
@@ -71,5 +95,9 @@
   button > span:last-child { margin-top: 8px; color: var(--navy); font-size: 11px; }
   .routing { margin-top: 4px; color: var(--ink-soft); font-size: 11px; }
   .routing[data-state='partial'], .routing[data-state='unrouted'] { color: var(--sev-blocker-fg); }
+  .prior-art { margin-top: 8px; padding: 10px 11px; background: var(--surface); border: 1px solid var(--rule-soft); }
+  .prior-art .status, .prior-art .meta { display: block; color: var(--ink-soft); font-size: 11px; }
+  .prior-art ul { margin: 6px 0 0; padding-left: 16px; }
+  .prior-art a { color: var(--navy); overflow-wrap: anywhere; }
   @media (max-width: 720px) { .artifacts { grid-template-columns: 1fr; } }
 </style>

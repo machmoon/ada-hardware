@@ -64,6 +64,15 @@ HEIGHTS_NM: dict[str, int] = {
     "LED_0603": mm(0.8),
     "LED_0805": mm(1.1),
     "Crystal_SMD": mm(1.3),
+    # Parts the robot-arm controller added (2026-09-13); each is the Z extent
+    # of KiCad's own model, measured with build123d's bounding box.
+    # ESP32-WROOM-32E.step z 0..3.1 (the shield can); CP_Elec_10x10.step
+    # z 0..10.0; L_Bourns_SRR1260.step z 0..6.0; the GCT USB4105 16P z
+    # ..3.31, which the generic USB_C row's 3.2 would sit 0.11 mm into.
+    "ESP32-WROOM": mm(3.1),
+    "CP_Elec_10x10": mm(10.0),
+    "SRR1260": mm(6.0),
+    "USB_C_Receptacle_USB2.0_16P": mm(3.31),
     # Things that poke up. Connectors are the usual cutout candidates, so
     # their heights matter most.
     "PinHeader": mm(8.5),

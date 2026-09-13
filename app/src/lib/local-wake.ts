@@ -1,8 +1,8 @@
 /**
- * Seam for an on-device "Hey Ada" spotter (Porcupine / cpal in Rust).
+ * Seam for an on-device "Hey Hardy" spotter (Porcupine / cpal in Rust).
  *
  * The webview must not own the always-on mic. Flow:
- *   localWakeStatus → startLocalWake → subscribeLocalWake(ada-wake)
+ *   localWakeStatus → startLocalWake → subscribeLocalWake(hardy-wake)
  *   → one command clip → /transcribe → stopLocalWake
  *
  * If status.available is false, the ear falls back to one-shot / PTT —
@@ -13,10 +13,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** Event name Rust's spotter emits. */
-export const LOCAL_WAKE_EVENT = "ada-wake";
+export const LOCAL_WAKE_EVENT = "hardy-wake";
 
 export interface LocalWakeHit {
-  /** Optional phrase the classifier matched ("ada" / "hey ada"). */
+  /** Optional phrase the classifier matched ("hardy" / "hey hardy"). */
   phrase?: string;
   /**
    * If the spotter already captured the command, the page can skip a second
@@ -74,13 +74,13 @@ export async function stopLocalWake(): Promise<void> {
   }
 }
 
-/** Offline / mock: fire one `ada-wake` without speaking (needs KALEO_WAKE_MOCK). */
+/** Offline / mock: fire one `hardy-wake` without speaking (needs KALEO_WAKE_MOCK). */
 export async function debugTriggerLocalWake(): Promise<void> {
   await invoke("wake_debug_trigger");
 }
 
 /**
- * Listen for `ada-wake` only. Does not start the spotter — pair with
+ * Listen for `hardy-wake` only. Does not start the spotter — pair with
  * startLocalWake via createLocalListener.
  */
 export async function subscribeLocalWake(

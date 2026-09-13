@@ -116,6 +116,31 @@ _FIXED: dict[str, Model3D] = {
     "LQFP-64": Model3D("Package_QFP", "LQFP-64_10x10mm_P0.5mm"),
     "LQFP-100": Model3D("Package_QFP", "LQFP-100_14x14mm_P0.5mm"),
     "LQFP-144": Model3D("Package_QFP", "LQFP-144_20x20mm_P0.5mm"),
+    # ``footprints.tssop(28)`` draws Package_SO.pretty/
+    # TSSOP-28_4.4x9.7mm_P0.65mm pad for pad; that footprint is body-anchored
+    # like every SMD IC, so the model needs no offset.
+    "TSSOP-28": Model3D("Package_SO", "TSSOP-28_4.4x9.7mm_P0.65mm"),
+    # ``footprints.esp32_wroom_32e`` draws RF_Module.pretty/ESP32-WROOM-32E's
+    # 38 pins and the nine SMD squares of pad 39; that footprint's F.Fab body
+    # is centred on its origin (x +-9, y +-12.75), as ours is, so no offset.
+    # The omitted thermal vias are holes, not body, and change nothing drawn.
+    "ESP32-WROOM-32E": Model3D("RF_Module", "ESP32-WROOM-32E"),
+    # ``footprints.ti_powerpad_so8`` draws Package_SO.pretty/TI_SO-PowerPAD-8
+    # pad for pad (F.Fab centred on the origin, so no offset).
+    "TI_SO-PowerPAD-8": Model3D("Package_SO", "TI_SO-PowerPAD-8"),
+    # ``footprints.electrolytic_capacitor`` / ``power_inductor`` draw these
+    # two library footprints pad for pad; both are body anchored (the models
+    # measure x +-6.0 / y +-5.15 and +-6.25 square about the origin). The
+    # electrolytic's model puts its + terminal on pad 1, as ours does.
+    "CP_Elec_10x10": Model3D("Capacitor_SMD", "CP_Elec_10x10"),
+    "L_Bourns_SRR1260": Model3D("Inductor_SMD", "L_Bourns_SRR1260"),
+    # ``footprints._usb_c_usb2`` draws the GCT USB4105's sixteen signal pads,
+    # from a library footprint anchored on the body (F.Fab +-4.47 x
+    # +-3.675), exactly as the USB4125 entry above; the undrawn shell tabs
+    # and pegs are solder and location, not body.
+    "USB_C_Receptacle_USB2.0_16P": Model3D(
+        "Connector_USB", "USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal"
+    ),
     # The one connector that clears both bars. ``footprints._usb_c_power``
     # draws the GCT USB4125 6-way pad for pad, and -- unlike every
     # through-hole connector in this section -- the library footprint is

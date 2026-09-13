@@ -273,6 +273,32 @@ export interface StepRequest extends GenerateRequest {
    * untyped, which meant nothing checked its spelling.
    */
   enclosure_rigorous?: boolean;
+  /**
+   * Search GitHub for open-source projects that already build this before
+   * proposing (`service/steps.py::start`); the propose envelope then carries
+   * `prior_art`. Opt-in: up to three model calls plus GitHub requests.
+   */
+  research?: boolean;
+}
+
+/** One project from `engine/silkscreen/prior_art.py` `Project.as_dict`, as far as the panel reads it. */
+export interface PriorArtProject {
+  repo: {
+    full_name: string;
+    url: string;
+    license: string | null;
+    stars: number;
+    description?: string | null;
+  };
+  relevance?: number | null;
+  facts?: unknown[];
+}
+
+/** `PriorArtResult.as_dict`: the status is always in words, never an empty list alone. */
+export interface PriorArtBlock {
+  status: "found" | "none_found" | "rate_limited" | "unavailable" | (string & {});
+  projects: PriorArtProject[];
+  warnings: string[];
 }
 
 /**
@@ -538,6 +564,8 @@ export interface StepResponse {
   events: StreamFrame[];
   duration_s: number;
   // propose
+  /** Present when the start asked for `research`; null if it did not run. */
+  prior_art?: PriorArtBlock | null;
   parts?: number | { ref: string; footprint: string }[];
   nets?: number;
   repair_rounds?: number;

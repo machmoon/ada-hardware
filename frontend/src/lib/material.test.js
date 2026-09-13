@@ -66,8 +66,9 @@ describe('material surface contract', () => {
       expect(source(file), `${file} is missing its material role`).toMatch(pattern)
     }
 
-    // One per artifact card: schematic, board, placement, case, sourcing, review.
-    expect(source('../components/ArtifactCards.svelte').match(/data-material="panel"/g)).toHaveLength(6)
+    // One per artifact card: schematic, board, placement, case, sourcing, review,
+    // plus the prior-art panel shown when research ran.
+    expect(source('../components/ArtifactCards.svelte').match(/data-material="panel"/g)).toHaveLength(7)
   })
 
   it('marks both drawing wells as intentional canvas exemptions', () => {

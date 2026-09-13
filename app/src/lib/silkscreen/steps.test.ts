@@ -22,6 +22,8 @@ import {
   orderDetails,
   reconcileHistory,
   sourcingDetails,
+  priorArtDetails,
+  PRIOR_ART_LIMIT,
   stepRows,
   stepsExhausted,
   summarizeStep,
@@ -1265,5 +1267,44 @@ describe("background outcomes", () => {
     expect(byId.case.status).toBe("available");
     expect(byId.case.backgroundNote).toBe("Case design finished in the background — press to collect");
     expect(byId.sourcing.backgroundNote).toBe("the model never produced valid JSON");
+  });
+});
+
+describe("priorArtDetails", () => {
+  const repo = (name: string, extra: Record<string, unknown> = {}) => ({
+    repo: { full_name: name, url: `https://github.com/${name}`, license: "MIT", stars: 7, ...extra },
+    facts: [{}, {}],
+  });
+
+  it("is null off the propose step or when research did not run", () => {
+    expect(priorArtDetails(undefined)).toBeNull();
+    expect(priorArtDetails(step({ step: "place" }))).toBeNull();
+    expect(priorArtDetails(step({ step: "propose" }))).toBeNull();
+  });
+
+  it("lists the top projects with licence, stars and a github link only", () => {
+    const details = priorArtDetails(
+      step({
+        step: "propose",
+        prior_art: {
+          status: "found",
+          projects: [repo("a/1"), repo("b/2", { license: null, url: "http://evil.test/x" }), repo("c/3"), repo("d/4")],
+          warnings: [],
+        },
+      })
+    );
+    expect(details?.projects).toHaveLength(PRIOR_ART_LIMIT);
+    expect(details?.total).toBe(4);
+    expect(details?.projects[0]).toEqual({ name: "a/1", url: "https://github.com/a/1", license: "MIT", stars: 7, facts: 2 });
+    expect(details?.projects[1].url).toBeNull();
+    expect(details?.projects[1].license).toBe("no licence stated");
+  });
+
+  it("names an empty search by its status", () => {
+    const details = priorArtDetails(
+      step({ step: "propose", prior_art: { status: "unavailable", projects: [], warnings: ["timed out"] } })
+    );
+    expect(details?.headline).toContain("could not be searched");
+    expect(details?.warnings).toEqual(["timed out"]);
   });
 });

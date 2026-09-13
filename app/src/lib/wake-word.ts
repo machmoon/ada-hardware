@@ -1,4 +1,4 @@
-// "Ada": the wake word, and the two ways the overlay can hear it.
+// "Hardy": the wake word, and the two ways the overlay can hear it.
 //
 // Listening for a word is a hot microphone, and a hot microphone is the one
 // thing this app must never hide. So everything here is built so the page
@@ -20,7 +20,7 @@
 //   fixed windows were retired twice over — first because always-on
 //   four-second slices burned quota on room tone, then because a window
 //   that starts on a loudness trigger and runs a fixed four seconds cuts
-//   "Hey Ada, make me a…" in half. One window is now one utterance,
+//   "Hey Hardy, make me a…" in half. One window is now one utterance,
 //   opened on the first loud frame and closed by trailing silence. The
 //   mic button (PTT) remains the path that always works.
 //
@@ -30,19 +30,19 @@
 import { pickRecordingMime, transcribe as transcribeAudio } from "@/lib/silkscreen/voice";
 import type { LocalWakeHit } from "@/lib/local-wake";
 
-/** What the engineer says to get Ada's attention. */
-export const WAKE_WORD = "Ada";
+/** What the engineer says to get Hardy's attention. */
+export const WAKE_WORD = "Hardy";
 
 /**
- * Spellings a recognizer produces for the spoken word. "Ada" is short and
+ * Spellings a recognizer produces for the spoken word. "Hardy" is short and
  * unusual, and both recognizers reach for a likelier word: the first name
- * "Aida", the initialism "ADA", or a phonetic guess. Matching a handful of
+ * "Aida", the initialism "HARDY", or a phonetic guess. Matching a handful of
  * them is the difference between a wake word that works and one that
- * works in the demo video only. Whole words only — "adapter" is not "Ada".
+ * works in the demo video only. Whole words only — "adapter" is not "Hardy".
  * Glued forms ("heyada") show up when the model drops the space after "hey".
  */
 export const WAKE_ALIASES: readonly string[] = Object.freeze([
-  "ada",
+  "hardy",
   "aida",
   "ayda",
   "adah",
@@ -87,11 +87,11 @@ export const WINDOW_HOP_MS = 4_000;
  * counts as speech. Filters clicks, coughs and chair squeaks.
  *
  * Recording starts on the *first* loud frame, not the third: waiting three
- * frames throws away the "H" of "Hey Ada", and the head of an utterance is
+ * frames throws away the "H" of "Hey Hardy", and the head of an utterance is
  * exactly where the wake word lives. The extra frames are still required —
  * but as a condition for *sending* the clip, not for opening the recorder.
  * Recording is free; the model call is not, so the gate belongs in front of
- * the send, which is where the measured silence-hallucinates-"Ada" failure
+ * the send, which is where the measured silence-hallucinates-"Hardy" failure
  * would otherwise get in.
  */
 export const SPEECH_ON_FRAMES = 3;
@@ -99,7 +99,7 @@ export const SPEECH_ON_FRAMES = 3;
 /**
  * Consecutive quiet frames (~100 ms each) that end an utterance.
  *
- * 700 ms: long enough to survive the pause between "Hey Ada" and the thing
+ * 700 ms: long enough to survive the pause between "Hey Hardy" and the thing
  * being asked for, short enough that the clip does not trail off into room
  * tone the model will happily turn into words.
  */
@@ -139,8 +139,8 @@ export function clampWakeBudget(budget: number): number {
 }
 
 /**
- * After a bare “Ada” (no command yet), keep accepting the next utterance
- * without requiring the name again — “hey Ada” … “make me an LDO”.
+ * After a bare “Hardy” (no command yet), keep accepting the next utterance
+ * without requiring the name again — “hey Hardy” … “make me an LDO”.
  */
 export const CONTINUATION_MS = 12_000;
 
@@ -159,7 +159,7 @@ export type WakeListenerState =
   | "error";
 
 export interface WakeDetection {
-  /** What was said after the wake word, if anything; empty means just "Ada". */
+  /** What was said after the wake word, if anything; empty means just "Hardy". */
   utterance: string;
   backend: WakeBackendName;
   /**
@@ -222,7 +222,7 @@ function normalise(text: string): string[] {
     .map((w) => w.replace(/^'+|'+$/g, ""));
 }
 
-/** Levenshtein distance; used for short phonetic near-misses of "ada". */
+/** Levenshtein distance; used for short phonetic near-misses of "hardy". */
 export function editDistance(a: string, b: string): number {
   if (a === b) return 0;
   if (!a.length) return b.length;
@@ -244,8 +244,8 @@ export function editDistance(a: string, b: string): number {
 function tokenIsWake(token: string): boolean {
   if (!token) return false;
   if (WAKE_ALIASES.includes(token)) return true;
-  // One edit from "ada", length-bounded so "adam"/"adapter" stay out.
-  if (token.length >= 3 && token.length <= 4 && editDistance(token, "ada") <= 1) {
+  // One edit from "hardy", length-bounded so "adam"/"adapter" stay out.
+  if (token.length >= 3 && token.length <= 4 && editDistance(token, "hardy") <= 1) {
     return true;
   }
   return false;
@@ -255,10 +255,10 @@ function tokenIsWake(token: string): boolean {
  * Does `text` contain the wake word, and what follows it?
  *
  * Returns `null` when it does not. The utterance is everything after the
- * first match — "hey Ada, I need a 3.3 volt regulator" gives "I need a 3.3
+ * first match — "hey Hardy, I need a 3.3 volt regulator" gives "I need a 3.3
  * volt regulator" — so a single breath can carry both the word and the need.
  * Matching is by whole token against `WAKE_ALIASES` (plus short edit-distance
- * near-misses and “hey &lt;near-ada&gt;”); punctuation and case are ignored,
+ * near-misses and “hey &lt;near-hardy&gt;”); punctuation and case are ignored,
  * and "adapter" or "Canada" never match.
  */
 export function matchWakeWord(text: string): { utterance: string } | null {
@@ -270,7 +270,7 @@ export function matchWakeWord(text: string): { utterance: string } | null {
   for (let i = 0; i < words.length; i += 1) {
     const tokens = normalise(words[i]);
     let hit = tokens.some((token) => tokenIsWake(token));
-    // "hey Otto" / "hi Ada" — preface then a soft name on the next word.
+    // "hey Otto" / "hi Hardy" — preface then a soft name on the next word.
     if (
       !hit &&
       tokens.some((t) => WAKE_PREFIXES.includes(t)) &&
@@ -415,7 +415,7 @@ export interface SpeechListenerDeps {
 /**
  * The free backend: continuous recognition, final results only.
  *
- * Final results only, because an interim "ada" with nothing after it would
+ * Final results only, because an interim "hardy" with nothing after it would
  * fire before the engineer finished the sentence that carries the need. The
  * recognizer ends itself after silence, so `onend` restarts it for as long
  * as the listener is armed — and `stop()` flips the flag first, so a restart
@@ -542,7 +542,7 @@ export interface WindowListenerDeps {
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
   /**
-   * After a bare “Ada”, true while the page still wants the next utterance
+   * After a bare “Hardy”, true while the page still wants the next utterance
    * without the wake word again.
    */
   continuing?: () => boolean;
@@ -724,7 +724,7 @@ export function createWindowListener(
         // transcribe that.
         if (deps.continuing?.() && isContinuationSpeech(result.text)) {
           // The clip can still catch the name, because the spotter fires on
-          // "Hey Ada" and the engineer keeps talking: "Hey Ada, make me an
+          // "Hey Hardy" and the engineer keeps talking: "Hey Hardy, make me an
           // LDO" arrives whole. Hand on the request, not the greeting.
           const named = matchWakeWord(result.text);
           finish("stopped", "heard the rest of what you said");
@@ -1011,13 +1011,13 @@ export interface LocalListenerDeps {
   start: () => Promise<void>;
   /** Drop the Rust mic. Safe to call twice. */
   stop: () => Promise<void>;
-  /** Subscribe to `ada-wake`. Null means Tauri events are missing. */
+  /** Subscribe to `hardy-wake`. Null means Tauri events are missing. */
   subscribe: (onHit: (hit: LocalWakeHit) => void) => Promise<(() => void) | null>;
 }
 
 /**
  * On-device listener: Rust owns the always-on mic. This object only starts
- * and stops that loop and forwards `ada-wake`. No getUserMedia.
+ * and stops that loop and forwards `hardy-wake`. No getUserMedia.
  */
 export function createLocalListener(
   deps: LocalListenerDeps,
@@ -1047,10 +1047,10 @@ export function createLocalListener(
       })) ?? null;
       if (!unlisten) {
         await deps.stop();
-        throw new Error("could not listen for ada-wake");
+        throw new Error("could not listen for hardy-wake");
       }
       armed = true;
-      events.onState("listening", "listening on-device for Hey Ada");
+      events.onState("listening", "listening on-device for Hey Hardy");
     },
     stop() {
       if (!armed && !unlisten) return;
@@ -1095,7 +1095,7 @@ export function createWakeWordListener(
     // The paid backend is a command clip now, never an idle spotter. Asking
     // Gemini "was my name just said?" once per window is what the on-device
     // classifier replaced: it billed for every four seconds of an empty room
-    // and answered by string-matching seventeen spellings of "Ada" — "otto"
+    // and answered by string-matching seventeen spellings of "Hardy" — "otto"
     // and "auto" among them — against a transcript of the silence.
     //
     // `continuing` is the seam that already knows the difference: it is true

@@ -157,9 +157,9 @@ const LEFT_ALONE: Pair[] = [
   ["The review found nothing to flag.", "The review found nothing to flag."],
   ["The board is 10.6 by 9.7 millimeters.", "The board is 10.6 by 9.7 millimeters."],
   ["Every stage has run. Nothing was ordered.", "Every stage has run. Nothing was ordered."],
-  // The wake word is deliberately not touched: "Ada" is already said right,
+  // The wake word is deliberately not touched: "Hardy" is already said right,
   // and the fragility the team measured is in recognition, not synthesis.
-  ["Ada, place it.", "Ada, place it."],
+  ["Hardy, place it.", "Hardy, place it."],
   ["", ""],
 ];
 

@@ -1,5 +1,5 @@
 /**
- * The spoken Ada path, as data: local wake → command clip → /transcribe →
+ * The spoken Hardy path, as data: local wake → command clip → /transcribe →
  * this router → action or caption.
  *
  * The one honesty rule everything here bends around: a deictic sentence
@@ -98,7 +98,7 @@ export interface DeskResolveResult {
   target: { testid: string; attrs?: Record<string, string>; tab?: string } | null;
 }
 
-export interface FulfillAdaDeps {
+export interface FulfillHardyDeps {
   resolveDesk?: (
     utterance: string,
     snap: DeskSnapshot
@@ -111,9 +111,9 @@ export interface FulfillAdaDeps {
  * Resolve failures and abstentions stay captions. Nothing here can become
  * `start` — that is the /generate poison this module exists to stop.
  */
-export async function fulfillAdaDecision(
+export async function fulfillHardyDecision(
   decision: AdaDecision,
-  deps: FulfillAdaDeps = {}
+  deps: FulfillHardyDeps = {}
 ): Promise<AdaDecision> {
   if (decision.kind !== "desk") return decision;
   if (!deps.resolveDesk) {

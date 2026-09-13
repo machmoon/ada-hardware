@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .agents import ModelError, generate_pcb
 from .agents.effort import DEFAULT_EFFORT, UNSET, Effort, slider
-from .agents.model import DEFAULT_MODEL, GeminiModel
+from .agents.model import DEFAULT_MODEL, MODEL_ENV_VAR, GeminiModel
 from .agents.review import Severity
 
 _SEVERITY_MARK = {
@@ -209,6 +209,26 @@ def _case_main(argv: list[str]) -> int:
     return 1 if assembly_failed else 0
 
 
+def _print_prior_art(found) -> None:
+    """The prior art, each fact with its file -- or why there is none."""
+    print()
+    if found is None:
+        print("Prior art: research did not run", file=sys.stderr)
+        return
+    print(f"Prior art ({found.status}): {len(found.projects)} project(s)")
+    for index, project in enumerate(found.projects, start=1):
+        repo = project.repo
+        print(
+            f"  {index}. {repo.full_name} -- {repo.license_spdx or 'no licence'}, "
+            f"{repo.stars} stars, relevance {project.relevance}  {repo.html_url}"
+        )
+        for fact in project.facts:
+            label = f" {fact.label}:" if fact.label else ""
+            print(f"     {fact.field}:{label} {fact.value}  [{fact.url}]")
+    for warning in found.warnings:
+        print(f"  note: {warning}", file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     # A tiny subcommand dispatch, kept out of argparse so the historical
@@ -226,7 +246,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-d", "--datasheet", action="append", default=[],
                         metavar="PART=URL",
                         help="a datasheet to read first; repeatable")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--model", default=None,
+                        help=f"primary model id (default: ${MODEL_ENV_VAR}, "
+                             f"else {DEFAULT_MODEL})")
     parser.add_argument("--effort", choices=[e.value for e in Effort],
                         default=DEFAULT_EFFORT.value,
                         help="how hard to think (default: %(default)s). "
@@ -280,6 +302,13 @@ def main(argv: list[str] | None = None) -> int:
                              "proposed manufacturer and part number per part, "
                              "each datasheet URL probed for a real PDF; "
                              "writes bom.csv beside the output")
+    parser.add_argument("--prior-art", dest="prior_art", action="store_true",
+                        help="before designing, search GitHub for open-source "
+                             "projects that already build this, read their "
+                             "README and BOM, and design with their proven "
+                             "parts; every fact printed with the file it came "
+                             "from. GITHUB_TOKEN optional (unauthenticated is "
+                             "rate-limited)")
     parser.add_argument("--simulate", action="store_true",
                         help="also verify the circuit in SPICE in the "
                              "background: the model writes a testbench and "
@@ -325,6 +354,8 @@ def main(argv: list[str] | None = None) -> int:
     # And for the SPICE verdict: only a --simulate run spends the call.
     if args.simulate:
         opt_in_kwargs["simulate"] = True
+    if args.prior_art:
+        opt_in_kwargs["prior_art"] = True
 
     # Progress. Without this the CLI is silent for the whole run -- and the run
     # is dominated by the placement solver, which spends its entire
@@ -468,6 +499,9 @@ def main(argv: list[str] | None = None) -> int:
             if kernel is not None:
                 print("Kernel report:")
                 print(kernel.text())
+
+    if args.prior_art:
+        _print_prior_art(getattr(result, "prior_art", None))
 
     # The BOM's counts, with the vocabulary kept honest: a part number here
     # is a proposal nobody has checked against a distributor, and only a

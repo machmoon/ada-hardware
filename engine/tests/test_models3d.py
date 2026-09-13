@@ -19,12 +19,15 @@ from silkscreen.board import BoardResult, PlacedPart, emit_kicad_pcb
 from silkscreen.footprints import (
     chip_passive,
     dual_row_header,
+    esp32_wroom_32e,
     for_passive,
     lqfp,
     soic,
     sot23,
     sot223,
     switch,
+    ti_powerpad_so8,
+    tssop,
 )
 from silkscreen.models3d import MODELS_VAR, Model3D, model_for, why_unmatched
 from silkscreen.units import mm
@@ -74,6 +77,12 @@ def _every_model() -> list[Model3D]:
         "LQFP-144",
         "USB_C_Receptacle_Power",
         "SW_SPST_TL3305A",
+        "TSSOP-28",
+        "ESP32-WROOM-32E",
+        "TI_SO-PowerPAD-8",
+        "USB_C_Receptacle_USB2.0_16P",
+        "CP_Elec_10x10",
+        "L_Bourns_SRR1260",
     ):
         model = model_for(name, "U1")
         assert model is not None, name
@@ -229,6 +238,10 @@ _ORIENTATION_CASES = [
     # is the check that catches a mirrored land pattern on the one connector-
     # family part that has a model to be mirrored against.
     (switch("SW_SPST_TL3305A"), "1", "SW1"),
+    # The two chips drawn by part number (robot-arm controller, 2026-09-13).
+    (tssop(28), "1", "U1"),
+    (esp32_wroom_32e(), "1", "U1"),
+    (ti_powerpad_so8(), "1", "U1"),
 ]
 
 
@@ -293,6 +306,7 @@ _CONNECTOR_PACKAGES = [
     ("PinHeader_1x08_P2.54mm", "PinHeader"),
     ("PinHeader_1x10_P2.54mm", "PinHeader"),
     ("USB_C_Receptacle_Power", "USB_C"),
+    ("USB_C_Receptacle_USB2.0_16P", "USB_C"),
     # A button is a connector class in the sense that matters here: something
     # has to reach it through the wall. PLUG_ENVELOPES sizes the "SW_"
     # opening from the courtyard rather than from a plug cross-section, which
@@ -483,6 +497,12 @@ def _mapped_patterns():
         (lqfp(48), "U1"),
         (lqfp(144, body_mm=20.0), "U1"),
         (connector("USB_C_Receptacle_Power"), "J1"),
+        (tssop(28), "U1"),
+        (esp32_wroom_32e(), "U1"),
+        (ti_powerpad_so8(), "U1"),
+        (connector("USB_C_Receptacle_USB2.0_16P"), "J1"),
+        (for_passive("capacitor", "1000uF"), "C1"),
+        (for_passive("inductor", "15uH"), "L1"),
     ]
     return [(fp, ref) for fp, ref in cases if model_for(fp.name, ref) is not None]
 

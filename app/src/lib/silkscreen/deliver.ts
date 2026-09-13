@@ -72,7 +72,7 @@ export function deliverable(history: readonly StepResponse[]): boolean {
 /** True when the engine has an OAuth client but no usable Google token yet. */
 export function needsGoogleSignIn(
   config: DeliverConfig | null,
-  /** Ada can run `python -m googleapps auth` even when the service lacks env. */
+  /** Hardy can run `python -m googleapps auth` even when the service lacks env. */
   cliGoogleapps = false
 ): boolean {
   if (!config?.available) return false;
@@ -80,7 +80,7 @@ export function needsGoogleSignIn(
   if (config.oauth_client === true) return true;
   if (cliGoogleapps) return true;
   // Older engines omit the flag; fall back to the hint text.
-  return config.hints.some((h) => /googleapps auth|sign in with Google|(Hardy|Ada)'s Send panel/i.test(h));
+  return config.hints.some((h) => /googleapps auth|sign in with Google|(Hardy|Hardy)'s Send panel/i.test(h));
 }
 
 /**

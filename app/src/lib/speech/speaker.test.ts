@@ -196,7 +196,7 @@ describe("createSpeaker", () => {
   });
 
   it("is bounded, and drops the oldest pending line rather than the newest", async () => {
-    // A burst of stage moments must not leave Ada monologuing through news
+    // A burst of stage moments must not leave Hardy monologuing through news
     // that stopped being true. The newest line is the one still worth saying.
     const backend = fakeBackend();
     const speakerUnderTest = createSpeaker({

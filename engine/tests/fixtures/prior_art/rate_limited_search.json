@@ -1,0 +1,14 @@
+{
+ "status": 403,
+ "headers": {
+  "x-ratelimit-limit": "10",
+  "x-ratelimit-remaining": "0",
+  "x-ratelimit-used": "10",
+  "x-ratelimit-resource": "search",
+  "x-ratelimit-reset": "1789338642"
+ },
+ "body": {
+  "message": "API rate limit exceeded for 203.0.113.7. (But here's the good news: Authenticated requests get a higher rate limit. Check out the documentation for more details.)",
+  "documentation_url": "https://docs.github.com/rest/overview/resources-in-the-rest-api#rate-limiting"
+ }
+}

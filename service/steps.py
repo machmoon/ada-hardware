@@ -7,6 +7,8 @@ not. This module exposes the same stage bodies (``agents/stages.py``) one at a
 time, holding the run between steps in process memory:
 
     POST /steps                 read datasheets, propose a circuit -> schematic
+                                (``{"research": true}`` first searches GitHub for
+                                open-source projects that build this; ``prior_art``)
     POST /steps/<id>/place      solve placement                    -> placed board
     POST /steps/<id>/route      lay copper                         -> routed board
     POST /steps/<id>/review     the critic argues against it
@@ -78,9 +80,11 @@ from silkscreen.agents.sourcing import probe_pdf
 from silkscreen.agents.stages import (
     EnclosureJob,
     SourcingJob,
+    design_brief,
     enclosure_stage,
     place_stage,
     plan_stage,
+    prior_art_stage,
     propose_stage,
     read_stage,
     review_stage,
@@ -122,6 +126,11 @@ MAX_IDEMPOTENCY_KEY_CHARS = 255
 #: (the ``Handler.model_factory`` convention) so the test suite can pin it
 #: offline: the real probe opens a network connection per proposed URL.
 PROBE = probe_pdf
+
+#: The GitHub transport ``{"research": true}`` uses. ``None`` is the real
+#: urllib transport; a module-level seam like :data:`PROBE` so the suite pins
+#: it offline.
+PRIOR_ART_TRANSPORT = None
 
 #: Also the order `next` lists them in, and the desktop draws the first as the
 #: primary button: once copper exists the case is the natural next step, and
@@ -826,6 +835,12 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
     kicad_live = payload.get("kicad_live", False)
     if not isinstance(kicad_live, bool):
         raise ValueError("'kicad_live' must be a boolean")
+    # Opt-in, the `/generate` `prior_art` rule: up to three model calls and a
+    # handful of GitHub requests nobody asked for otherwise. Both spellings
+    # are accepted because the overlay's control says "research".
+    research = payload.get("research", payload.get("prior_art", False))
+    if not isinstance(research, bool):
+        raise ValueError("'research' must be a boolean")
     # The thinking level, validated before anything spends time or quota and
     # never defaulted on a bad name -- ``/generate``'s rule, for the same
     # reason: a session that answers a 'thorough' request at 'fast' while
@@ -937,6 +952,17 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
     # input at all. A plan that cannot be made is a warning, never a dead
     # step: `plan_stage` answers with `plan=None` and propose designs from the
     # bare intent exactly as it did before.
+    # Before plan and propose, as in generate_pcb: what it found reaches the
+    # designer only through `design_brief`, as cited facts. GitHub being down
+    # or rate-limited is a status on the result, never a failed step.
+    prior_art_result = prior_art_stage(
+        tapped,
+        intent=intent,
+        prior_art=research,
+        emit=emit,
+        enter=enter,
+        transport=PRIOR_ART_TRANSPORT,
+    )
     plan_result = plan_stage(
         tapped,
         intent=intent,
@@ -950,11 +976,10 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
         tapped,
         intent=intent,
         facts=session.facts,
-        brief=(
-            plan_result.plan.brief_text()
-            if plan_result is not None and plan_result.plan is not None
-            else None
-        ),
+        # The same text generate_pcb hands propose: the plan's brief, then the
+        # cited prior art, so the two drivers cannot design against different
+        # context.
+        brief=design_brief(plan_result, prior_art_result),
         max_repairs=max_repairs,
         emit=emit,
         enter=enter,
@@ -976,6 +1001,11 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
             {"part": f.part_number, "pins": len(f.pins)} for f in session.facts
         ],
     }
+    if research:
+        # Present only when asked for, so a plain start's body is unchanged.
+        body["prior_art"] = (
+            None if prior_art_result is None else prior_art_result.as_dict()
+        )
     if cache_warnings:
         body["warnings"] = cache_warnings
     return _envelope(

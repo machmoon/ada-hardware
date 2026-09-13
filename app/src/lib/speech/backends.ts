@@ -320,7 +320,7 @@ export async function fetchElevenLabsAudio(
 //
 // The old path was `fetch` the whole mp3, then `new Audio(blobUrl)`. So
 // time-to-first-word was the time to download the LAST byte: a fifteen-second
-// digest is a fifteen-second file, and Ada sat silent through all of it. The
+// digest is a fifteen-second file, and Hardy sat silent through all of it. The
 // fix is progressive playback, and the design constraint is that Phase 1
 // replaces the transport (ElevenLabs' `stream-input` WebSocket, Flash v2.5,
 // multi-context, for barge-in) without replacing the player.

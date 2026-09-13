@@ -112,7 +112,7 @@ describe("Welcome", () => {
     await waitFor(() => expect(screen.getByTestId("setup-title").textContent).toBe("You're all set"));
     expect(screen.queryByTestId("setup-footer")).toBeNull();
     expect(screen.getByTestId("setup-skipped-line").textContent).toBe(
-      "Skipped: Google, Billing, Microsoft, Notifications, Hey Ada. Find them in Settings.",
+      "Skipped: Google, Billing, Microsoft, Notifications, Hey Hardy. Find them in Settings.",
     );
   });
 

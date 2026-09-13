@@ -30,11 +30,49 @@ __all__ = [
 
 
 class ProposalError(RuntimeError):
-    """The model could not produce a valid circuit within the repair budget."""
+    """The model could not produce a valid circuit within the repair budget.
 
-    def __init__(self, message: str, attempts: list[ProposalAttempt]):
+    It is the requester's problem to act on, not an internal fault, so it
+    carries what a person needs to edit the request: :attr:`errors` (the final
+    round's validation errors), :attr:`unsupported` (the subset that are parts
+    the board builder has no land pattern for) and :attr:`supported_packages`
+    (what it can draw, the same :func:`~silkscreen.board.supported_packages_text`
+    the prompt showed the model). ``service/app.py::_error_response`` turns
+    these into a named 422 rather than a 500 "internal error".
+    """
+
+    def __init__(
+        self,
+        message: str,
+        attempts: list[ProposalAttempt],
+        *,
+        unsupported: list[str] | None = None,
+    ):
         self.attempts = attempts
+        last = attempts[-1] if attempts else None
+        self.errors: list[str] = list(last.errors) if last else []
+        self.unsupported: list[str] = list(unsupported or [])
+        self.supported_packages: str = supported_packages_text()
         super().__init__(message)
+
+
+#: The most repair rounds an escalation may reach, counting the level's own.
+#: Balanced's budget: a ``fast`` run whose proposal is still failing *on parts
+#: the builder cannot draw* gets up to two more rounds rather than dying with
+#: one, because that is the failure a further round demonstrably fixes (the
+#: repair prompt names every supported package) and the one a complex request
+#: -- six servos, a PWM driver, a module and a buck -- hits first. Measured on
+#: the 2026-09-13 robotic-arm demo: one repair round, ``ProposalError`` on an
+#: invented ``arduino_nano`` connector.
+ESCALATED_MAX_REPAIRS = 3
+
+#: The three refusals ``netlist.py`` words as "this part is not one we have"
+#: (``CircuitSpec`` validation: unsupported package, unknown kind, unsupported
+#: passive type). Pinned by ``engine/tests/test_propose_escalation.py`` so a
+#: rewording there cannot silently switch escalation off.
+_UNSUPPORTED_PART = re.compile(
+    r"has unsupported package|has unknown kind|has unsupported type"
+)
 
 
 @dataclass
@@ -320,23 +358,38 @@ def propose_circuit(
         f"Datasheet facts you must design against:\n{_facts_block(facts)}\n"
     )
 
-    for round_no in range(max_repairs + 1):
+    budget = max_repairs
+    unsupported: list[str] = []
+    previous_errors: list[str] | None = None
+    round_no = -1
+    while round_no < budget:
+        round_no += 1
         # A transport failure is deliberately NOT wrapped in ProposalError.
         # "the model was unreachable" and "the model could not produce a valid
         # circuit" are different conditions with different remedies -- retry
         # versus give up -- and a caller (an HTTP service deciding between 502
         # and 500) has to be able to tell them apart. ModelError propagates.
-        raw = model.generate(prompt, temperature=0.0, max_output_tokens=16384)
+        # 65536, Gemini 3.5 Flash's output ceiling. Reasoning tokens share
+        # this budget: a robot-arm controller (ESP32 module, PCA9685, buck,
+        # USB-C, six servo headers) spent ~15k of 16384 thinking and was cut
+        # off 1629 characters into the JSON (measured 2026-09-13).
+        raw = model.generate(prompt, temperature=0.0, max_output_tokens=65536)
 
         attempt = ProposalAttempt(round=round_no, raw=raw)
         attempts.append(attempt)
 
         errors: list[str] = []
+        # Per round: an unsupported part named two rounds ago and since fixed
+        # must not keep the escalation going or reach the final error.
+        unsupported = []
         spec: CircuitSpec | None = None
         try:
             spec = parse_circuit_spec(raw)
         except ValidationError as exc:
             errors = [str(e) for e in exc.errors]
+            # netlist.py refuses a package or kind outside its tables before
+            # the builder ever sees the spec; those are unsupported parts too.
+            unsupported = [e for e in errors if _UNSUPPORTED_PART.search(e)]
         else:
             # The footprint rule and the part-number rule, run now rather than
             # downstream: a device the builder has no land pattern for, or one
@@ -344,7 +397,8 @@ def propose_circuit(
             # fix, and after the proposal is accepted nobody can. Both lists
             # are collected together so one repair round addresses both -- the
             # netlist.py convention, applied past the IR's own edge.
-            errors = package_errors(spec) + part_number_errors(spec)
+            unsupported = package_errors(spec)
+            errors = unsupported + part_number_errors(spec)
 
         if errors:
             attempt.errors = errors
@@ -359,7 +413,25 @@ def propose_circuit(
                         "first_error": errors[0][:160],
                     }
                 )
-            if round_no == max_repairs:
+            if round_no == budget and _should_escalate(
+                budget, unsupported, errors, previous_errors
+            ):
+                budget += 1
+                if on_event is not None:
+                    on_event(
+                        {
+                            "event": "propose.escalated",
+                            "round": round_no + 1,
+                            "max_repairs": budget,
+                            "unsupported": len(unsupported),
+                            "reason": (
+                                "the proposal still names parts the board "
+                                "builder cannot draw; one more repair round"
+                            ),
+                        }
+                    )
+            previous_errors = errors
+            if round_no == budget:
                 break
             # Feed every problem back at once so one round fixes all of them.
             problems = "\n".join(f"  - {e}" for e in errors)
@@ -380,8 +452,38 @@ def propose_circuit(
 
     last = attempts[-1] if attempts else None
     detail = "\n".join(f"  - {e}" for e in (last.errors if last else []))
-    raise ProposalError(
-        f"No valid circuit after {max_repairs + 1} attempts. "
-        f"Final errors:\n{detail}",
-        attempts,
+    escalated = (
+        f" ({budget - max_repairs} more than the {max_repairs} repair "
+        f"round(s) budgeted, because unsupported parts remained)"
+        if budget > max_repairs
+        else ""
     )
+    supported = (
+        f"\nThe board builder can draw: {supported_packages_text()}"
+        if unsupported
+        else ""
+    )
+    raise ProposalError(
+        f"No valid circuit after {len(attempts)} attempts{escalated}. "
+        f"Final errors:\n{detail}{supported}",
+        attempts,
+        unsupported=unsupported,
+    )
+
+
+def _should_escalate(
+    budget: int,
+    unsupported: list[str],
+    errors: list[str],
+    previous: list[str] | None,
+) -> bool:
+    """One more round only for unsupported parts, only while it is moving.
+
+    Never past :data:`ESCALATED_MAX_REPAIRS`; never on a round whose errors are
+    identical to the last one's (a model repeating itself will repeat itself
+    again); and never for plain netlist errors, which is what keeps a
+    never-validating proposal at exactly the level's budget.
+    """
+    if budget >= ESCALATED_MAX_REPAIRS or not unsupported:
+        return False
+    return previous is None or sorted(previous) != sorted(errors)

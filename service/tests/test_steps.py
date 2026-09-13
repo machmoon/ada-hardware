@@ -1624,3 +1624,61 @@ def test_an_over_long_key_is_a_400_before_any_work(counted):
     )
     assert status == 400 and "Idempotency-Key" in body["error"]
     assert log == []
+
+
+# ------------------------------------------------ prior-art research on start
+
+
+def _researching_model():
+    from silkscreen.agents.prior_art import QUERY_MARKER
+
+    return ScriptedModel(
+        by_marker={
+            QUERY_MARKER: json.dumps({"queries": ["robot arm"], "known_repos": []}),
+            **scripted().by_marker,
+        }
+    )
+
+
+def test_research_on_start_reports_prior_art_and_github_down_is_not_a_failed_step(
+    server, monkeypatch
+):
+    from silkscreen.agents.prior_art import GitHubError
+
+    requests = []
+
+    def github_down(request):
+        requests.append(request)
+        raise GitHubError("network_error", "timed out")
+
+    monkeypatch.setattr(steps, "PRIOR_ART_TRANSPORT", github_down)
+    previous = Handler.model_factory
+    Handler.model_factory = staticmethod(_researching_model)
+    try:
+        body = _start(server, research=True)
+    finally:
+        Handler.model_factory = previous
+    assert requests, "the research used the injected transport"
+    assert body["stage"] == "proposed"
+    assert body["prior_art"]["status"] == "unavailable"
+    assert body["prior_art"]["projects"] == []
+    assert body["prior_art"]["warnings"]
+    stages = [e.get("stage") for e in body["events"] if e.get("event") == "stage.start"]
+    assert stages.index("prior_art") < stages.index("propose")
+
+
+def test_start_without_research_has_no_prior_art_block_and_no_github_call(
+    server, monkeypatch
+):
+    def never(request):  # pragma: no cover - the assertion is that it is not called
+        raise AssertionError("research ran without being asked for")
+
+    monkeypatch.setattr(steps, "PRIOR_ART_TRANSPORT", never)
+    body = _start(server)
+    assert "prior_art" not in body
+
+
+def test_research_must_be_a_boolean(server):
+    status, body = post(server, "/steps", {"intent": "an arm", "research": "yes"})
+    assert status == 400
+    assert "research" in body["error"]

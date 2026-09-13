@@ -37,7 +37,7 @@ export interface UseWakeWordOptions {
   /** Test seams: the listener factory and the webview globals it inspects. */
   create?: typeof createWakeWordListener;
   globals?: WakeGlobals;
-  /** Subscribe to `ada-wake` only (tests inject). */
+  /** Subscribe to `hardy-wake` only (tests inject). */
   subscribeLocal?: typeof subscribeLocalWake;
   /** Probe Rust `wake_status`. Tests inject; default is a Tauri invoke. */
   probeLocal?: () => Promise<LocalWakeStatus>;
@@ -113,7 +113,7 @@ export interface WakeWord {
   start: () => void;
   stop: () => void;
   /**
-   * Mock/dev only: fire `ada-wake` without speaking (`KALEO_WAKE_MOCK=1`).
+   * Mock/dev only: fire `hardy-wake` without speaking (`KALEO_WAKE_MOCK=1`).
    * No-op when the Rust command is missing.
    */
   debugTrigger: () => void;
@@ -211,7 +211,7 @@ export function useWakeWord({
       continuationTimerRef.current = null;
       continuationUntilRef.current = 0;
       if (mountedRef.current) {
-        setDetail("you didn’t say anything, so I’m back to waiting for “Hey Ada”");
+        setDetail("you didn’t say anything, so I’m back to waiting for “Hey Hardy”");
       }
     }, CONTINUATION_MS);
   }, []);
@@ -310,7 +310,7 @@ export function useWakeWord({
                   if (mountedRef.current) setJustHeard(false);
                 }, HEARD_FLASH_MS);
                 // Rust does not record the command. An empty hit means
-                // "Hey Ada" only — open one Gemini clip for the rest, then
+                // "Hey Hardy" only — open one Gemini clip for the rest, then
                 // re-arm the on-device spotter. Do not route an empty string.
                 if (!spoken) {
                   commandClipRef.current = true;
@@ -359,7 +359,7 @@ export function useWakeWord({
           // listener continues the count rather than handing back calls.
           spent: spentRef.current,
           // Only inside a follow-up window does speech without the name
-          // count as the command. Outside one, "Ada" is required — an ear
+          // count as the command. Outside one, "Hardy" is required — an ear
           // that acts on any sentence in the room is not a wake word.
           continuing: () => Date.now() < continuationUntilRef.current,
         },
@@ -425,8 +425,8 @@ export function useWakeWord({
               heardTimerRef.current = null;
               if (mountedRef.current) setJustHeard(false);
             }, HEARD_FLASH_MS);
-            // Bare name → keep listening for the rest without “Ada” again.
-            // Unless the clip was never gated: a bare “Ada” from an unmeasured
+            // Bare name → keep listening for the rest without “Hardy” again.
+            // Unless the clip was never gated: a bare “Hardy” from an unmeasured
             // window is the one case where a real detection and the model
             // hallucinating the primed name over silence look identical, and a
             // continuation window spends further paid clips on the guess.
@@ -438,12 +438,12 @@ export function useWakeWord({
               openContinuation();
             } else {
               // A wake that carried its command needs no follow-up window —
-              // "Hey Ada, make me an LDO" arrives in one clip and
+              // "Hey Hardy, make me an LDO" arrives in one clip and
               // `matchWakeWord` already handed back the tail.
               endContinuation("");
             }
             // Raw transcript only. Desk snaps travel beside the utterance
-            // on the page (ada-path); a forged “[desk:]” prefix must not.
+            // on the page (hardy-path); a forged “[desk:]” prefix must not.
             onWakeRef.current(detection.utterance);
             // Staying armed is what makes this a wake word rather than a
             // one-shot listen — bounded by the budget, which the control

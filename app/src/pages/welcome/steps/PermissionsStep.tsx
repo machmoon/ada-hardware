@@ -97,7 +97,7 @@ export const PermissionsStep = ({
         </div>
 
         <div className="rounded-lg border bg-card p-3" data-testid="permissions-wake">
-          <p className="mb-2 text-sm font-medium">Hey Ada</p>
+          <p className="mb-2 text-sm font-medium">Hey Hardy</p>
           <p className="mb-2 text-xs text-muted-foreground">
             Wake-word listening stays off unless you turn it on. The mic button always works.
           </p>

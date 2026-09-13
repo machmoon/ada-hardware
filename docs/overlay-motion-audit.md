@@ -58,7 +58,7 @@ treat them as ±4 px and confirm against the running app before hard-coding.
 | 4 | **Full bar, listening** | as #2 but in the open bar | as #2 | `ListeningPanel` swapped in for the `Input`, deliberately the same `h-9` (`PromptBar.tsx:99-133,253-274`) | **58**, unchanged — this swap is already height-neutral by design and is the model the rebuild should follow |
 | 5 | **Desk caption** | `action.kind === "caption"` from the wake path (`index.tsx:349-357`) | never dismissed on its own; `deskCaption` has no clear path | `<p data-testid="desk-caption">` (`index.tsx:579-587`) | +8 + **14 px/line**; content-dependent, 1–3 lines typical → **72–100 total** |
 | 6 | **Engine unreachable** | `engineDown` = settled probe, not ok, not busy (`index.tsx:486`) | a successful re-probe | destructive banner with a `sm` Retry button (`index.tsx:589-614`) | +8 + **44** (32 button + `py-1.5`) → **110**. Text can wrap past the button at long `baseUrl`s |
-| 7 | **Ada caption / command note** | `setCommandNote` from `interpret`, the visibility guard, the arm decay (`index.tsx:203,240-248,444-446`) | Dismiss (`index.tsx:627`) or a `stepsActive` flip (it is hidden, not cleared, at `index.tsx:616`) | muted banner + Dismiss (`index.tsx:616-633`) | +8 + **45–62** — the visibility-guard sentence is long enough to wrap to 2–3 lines at 11 px |
+| 7 | **Hardy caption / command note** | `setCommandNote` from `interpret`, the visibility guard, the arm decay (`index.tsx:203,240-248,444-446`) | Dismiss (`index.tsx:627`) or a `stepsActive` flip (it is hidden, not cleared, at `index.tsx:616`) | muted banner + Dismiss (`index.tsx:616-633`) | +8 + **45–62** — the visibility-guard sentence is long enough to wrap to 2–3 lines at 11 px |
 | 8 | **Run in progress** (one-shot) | `busy && !stepsActive` (`index.tsx:663`) | run settles | `RunProgress` + activity disclosure (`index.tsx:663-689`, `RunProgress.tsx:44-127`) | +8 + **≈198** with the feed closed. Derived: border+`pt-2` 9, header 32, gap 8, 7 stage rows (`src/lib/silkscreen/stages.ts`, 7 descriptors) at 16 + 6×2 = 124, gap 8, disclosure 17. **→ ≈260 total** |
 | 9 | **Run in progress, "no events yet"** | no stage has ticked (`RunProgress.tsx:45,117-124`) | first stage frame | adds a 2-line paragraph | **+≈33 → ≈293** |
 | 10 | **Activity feed open** | the disclosure button (`index.tsx:672-684`) | same button | `ActivityFeed` capped `max-h-40` (`index.tsx:686`) | **+8 +160 → ≈461**, and it stops growing there — the only pre-existing clamp in the busy path |
@@ -216,7 +216,7 @@ An implementer's list, in rough order of how much it costs the "premium" feel.
 
 6. **Content pops in with no enter transition, block by block.** Each optional
    block is a bare `? … : null` with no animation:
-   `desk-caption` `index.tsx:579`, engine-down `index.tsx:589`, ada-caption
+   `desk-caption` `index.tsx:579`, engine-down `index.tsx:589`, hardy-caption
    `index.tsx:616`, `StepPanel` `index.tsx:635`, `DeliverPanel` `index.tsx:653`,
    busy block `index.tsx:663`, `ActivityFeed` `index.tsx:685`, result
    `index.tsx:691`, failure `index.tsx:715`, cancelled `index.tsx:726`. During a
@@ -322,7 +322,7 @@ content-driven states.
 | 4 Full bar listening | **fixed** | 58 | Already height-neutral by construction (`PromptBar.tsx:110`) |
 | 5 Desk caption | **clamped** | 58 + 8 + `clamp(14, lines×14, 42)` | 3-line cap; add `line-clamp-3`. Also give it a dismiss (§3.11) |
 | 6 Engine down | **fixed** | 110 | Fixed-height banner; give the text `truncate` so a long `baseUrl` cannot wrap |
-| 7 Ada caption | **clamped** | 58 + 8 + `clamp(32, lines×17, 68)` | `line-clamp-4`; the visibility-guard sentence is the longest copy in the file |
+| 7 Hardy caption | **clamped** | 58 + 8 + `clamp(32, lines×17, 68)` | `line-clamp-4`; the visibility-guard sentence is the longest copy in the file |
 | 8 Run in progress | **fixed** | 260 | 7 stage rows is a constant (`stages.ts`, 7 descriptors) and every row is one line |
 | 9 …no events yet | **fixed** | 293 | Same, plus a fixed 2-line note; give the `<p>` a fixed height so a 1↔2 line reflow is not a resize |
 | 10 …feed open | **fixed** | 420 | `max-h-40` already caps it; make it `h-40` so opening the feed is one known step, not a grow-with-content |

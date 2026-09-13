@@ -24,7 +24,7 @@ const mount = () =>
 const TOOLS: CliToolInfo[] = [
   { id: "googleapps", available: true, detail: "python -m googleapps (auth, check, run)" },
   { id: "silkscreen", available: true, detail: "python -m silkscreen — board CLI" },
-  { id: "python", available: false, detail: "venv missing; set ADA_PYTHON" },
+  { id: "python", available: false, detail: "venv missing; set HARDY_PYTHON" },
   { id: "kicad-cli", available: false, detail: "not found" },
 ];
 
@@ -74,7 +74,7 @@ describe("the command-line tools settings pane", () => {
     invoke.mockResolvedValue(TOOLS);
     mount();
     await waitFor(() => expect(screen.getByTestId("cli-tool-fix-python")).toBeTruthy());
-    expect(screen.getByTestId("cli-tool-fix-python").textContent).toContain("ADA_PYTHON");
+    expect(screen.getByTestId("cli-tool-fix-python").textContent).toContain("HARDY_PYTHON");
     expect(screen.getByTestId("cli-tool-fix-kicad-cli").textContent).toContain("KICAD_CLI");
   });
 
@@ -84,7 +84,7 @@ describe("the command-line tools settings pane", () => {
     ] satisfies CliToolInfo[]);
     mount();
     await waitFor(() => expect(screen.getByTestId("cli-tool-fix-googleapps")).toBeTruthy());
-    expect(screen.getByTestId("cli-tool-fix-googleapps").textContent).toContain("ADA_REPO_ROOT");
+    expect(screen.getByTestId("cli-tool-fix-googleapps").textContent).toContain("HARDY_REPO_ROOT");
   });
 
   it("offers no fix line for a tool that is already there", async () => {
@@ -105,7 +105,7 @@ describe("the command-line tools settings pane", () => {
 
   it("keeps the terminal skin's posture separate rather than blurring the two", async () => {
     // The terminal is the user's own shell with their own privileges; saying
-    // "Ada only runs an allowlist" without that caveat would misdescribe it.
+    // "Hardy only runs an allowlist" without that caveat would misdescribe it.
     invoke.mockResolvedValue(TOOLS);
     mount();
     const posture = screen.getByTestId("cli-tools-posture");

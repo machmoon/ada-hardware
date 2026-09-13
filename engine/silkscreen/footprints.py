@@ -62,9 +62,16 @@ __all__ = [
     "sot223",
     "soic",
     "lqfp",
+    "tssop",
+    "esp32_wroom_32e",
+    "ti_powerpad_so8",
     "dual_row_header",
     "HEADER_PITCH_MM",
     "for_passive",
+    "electrolytic_capacitor",
+    "power_inductor",
+    "ELECTROLYTIC_MIN_F",
+    "POWER_INDUCTOR_MIN_H",
     "CHIP_SIZES",
     "UnsupportedPackage",
     "CONNECTOR_PACKAGES",
@@ -533,6 +540,185 @@ def dual_row_header(
     return fp
 
 
+#: TSSOP-28, 4.4 x 9.7 mm body, 0.65 mm pitch -- the package the PCA9685PW
+#: comes in -- from ``Package_SO.pretty/TSSOP-28_4.4x9.7mm_P0.65mm.kicad_mod``.
+#: Library pads (already body anchored): columns at x = +-2.8625, pin 1 at
+#: y = -4.225 stepping 0.65 mm, 1.475 x 0.4 mm. Its F.CrtYd is a stepped
+#: outline whose extent is x +-3.85, y +-5.1, which :func:`fit_courtyard`'s
+#: 0.25 mm excess reproduces exactly (pads to 3.6, body to 4.85).
+#: Adafruit's open PCA9685 servo driver (github.com/adafruit/Adafruit-16-
+#: Channel-PWM-Servo-Driver-PCB, ``Adafruit PCA9685 rev C.brd``, package
+#: ``TSSOP28``) uses the same 0.65 mm pitch on the same chip.
+_TSSOP_BODY_MM = {28: (4.4, 9.7)}
+_TSSOP_PITCH_MM = 0.65
+_TSSOP_PAD_MM = (1.475, 0.4)
+_TSSOP_COL_MM = 2.8625
+
+
+def tssop(pin_count: int, nets: dict[str, str] | None = None) -> Footprint:
+    """TSSOP dual-row package, pin 1 top-left, counting anticlockwise on
+    screen exactly as :func:`soic` does. Only the body sizes in
+    :data:`_TSSOP_BODY_MM` are drawn, because a TSSOP's body width is not
+    implied by its pin count (KiCad ships 4.4, 6.1 and 8 mm TSSOP-28s)."""
+    if pin_count not in _TSSOP_BODY_MM:
+        raise UnsupportedPackage(
+            f"No TSSOP-{pin_count} land pattern; drawn: "
+            f"{sorted(_TSSOP_BODY_MM)}"
+        )
+    body_w, body_h = _TSSOP_BODY_MM[pin_count]
+    per_side = pin_count // 2
+    pitch = mm(_TSSOP_PITCH_MM)
+    span = (per_side - 1) * pitch
+    col = mm(_TSSOP_COL_MM)
+    pw, ph = mm(_TSSOP_PAD_MM[0]), mm(_TSSOP_PAD_MM[1])
+    pads: list[Pad] = []
+    for i in range(per_side):
+        n = str(i + 1)
+        pads.append(Pad(n, -col, -span // 2 + i * pitch, pw, ph, _net(nets, n)))
+    for i in range(per_side):
+        n = str(per_side + i + 1)
+        pads.append(Pad(n, col, span // 2 - i * pitch, pw, ph, _net(nets, n)))
+    fp = Footprint(
+        name=f"TSSOP-{pin_count}",
+        pads=pads,
+        body_w_nm=mm(body_w) // 2,
+        body_h_nm=mm(body_h) // 2,
+        description=f"TSSOP-{pin_count}, {body_w}x{body_h}mm body, 0.65mm pitch",
+    )
+    fit_courtyard(fp)
+    return fp
+
+
+#: ESP32-WROOM-32E, from ``RF_Module.pretty/ESP32-WROOM-32E.kicad_mod``, which
+#: is already anchored on the 18 x 25.5 mm module body (F.Fab x +-9,
+#: y +-12.75), so these are the library's own numbers. Castellated pads
+#: 1..14 down the left (x -8.75, y -5.26 stepping 1.27), 15..24 along the
+#: bottom (y 12.5, x -5.715 stepping 1.27, turned 90 so 0.9 wide by 1.5
+#: tall), 25..38 up the right (x 8.75). Pad 39 is the ground slug: nine
+#: 0.9 mm squares on a 1.4 mm grid centred on (-1.5, 2.46).
+_ESP32_PITCH_MM = 1.27
+_ESP32_SIDE_X_MM = 8.75
+_ESP32_TOP_PIN_Y_MM = -5.26
+_ESP32_BOTTOM_Y_MM = 12.5
+_ESP32_BOTTOM_X0_MM = -5.715
+_ESP32_PAD_MM = (1.5, 0.9)
+_ESP32_EP_XS_MM = (-2.9, -1.5, -0.1)
+_ESP32_EP_YS_MM = (1.06, 2.46, 3.86)
+_ESP32_EP_PAD_MM = 0.9
+_ESP32_BODY_MM = (9.0, 12.75)
+_ESP32_COURTYARD_EXCESS_MM = 0.29
+
+
+def esp32_wroom_32e(nets: dict[str, str] | None = None) -> Footprint:
+    """Espressif ESP32-WROOM-32E module, 38 castellated pins plus pad 39 (GND).
+
+    Three things about the library part are deliberately **not** drawn, and
+    each is stated rather than hidden:
+
+    * the twelve 0.6 mm / 0.2 mm-drill thermal vias the library puts between
+      the pad-39 squares. They are a board-stackup choice rather than part of
+      the land pattern, and a 0.2 mm drill is under most fabs' (and KiCad's
+      default) minimum hole, so emitting them would trade a DRC error for a
+      cooler module. The nine SMD squares that solder the slug are drawn.
+    * the antenna keep-out. KiCad's F.CrtYd polygon reaches 28 mm above the
+      body and 24.25 mm to either side for the PCB antenna. A
+      :class:`Footprint` courtyard is a symmetric box about the anchor, so
+      reserving it would reserve 48 x 56 mm and triple the board. The
+      courtyard here is the module's own (y +-13.54, the library polygon's
+      module part made symmetric; x +-9.79 against its 9.75); the antenna end
+      (pin 1 is the end away from it: y < 0 is the antenna) wants the board
+      edge or no copper beneath it, and nothing here enforces that.
+    * the module's shield can and antenna are not copper, so there is nothing
+      else to draw.
+    """
+    pw, ph = mm(_ESP32_PAD_MM[0]), mm(_ESP32_PAD_MM[1])
+    pitch = mm(_ESP32_PITCH_MM)
+    side = mm(_ESP32_SIDE_X_MM)
+    top = mm(_ESP32_TOP_PIN_Y_MM)
+    pads: list[Pad] = []
+    for i in range(14):
+        n = str(i + 1)
+        pads.append(Pad(n, -side, top + i * pitch, pw, ph, _net(nets, n)))
+    for i in range(10):
+        n = str(15 + i)
+        x = mm(_ESP32_BOTTOM_X0_MM) + i * pitch
+        pads.append(Pad(n, x, mm(_ESP32_BOTTOM_Y_MM), ph, pw, _net(nets, n)))
+    for i in range(14):
+        n = str(25 + i)
+        pads.append(Pad(n, side, top + (13 - i) * pitch, pw, ph, _net(nets, n)))
+    ep = mm(_ESP32_EP_PAD_MM)
+    for x in _ESP32_EP_XS_MM:
+        for y in _ESP32_EP_YS_MM:
+            pads.append(Pad("39", mm(x), mm(y), ep, ep, _net(nets, "39")))
+    fp = Footprint(
+        name="ESP32-WROOM-32E",
+        pads=pads,
+        body_w_nm=mm(_ESP32_BODY_MM[0]),
+        body_h_nm=mm(_ESP32_BODY_MM[1]),
+        description=(
+            "Espressif ESP32-WROOM-32E module, 38 pins + GND pad 39; "
+            "antenna keep-out and slug thermal vias not drawn"
+        ),
+    )
+    # 0.29 mm, not the 0.25 default: KiCad's courtyard polygon reaches y
+    # 13.54 below pads that end at 13.25, and a courtyard tighter than the
+    # library's is the direction this module must not err in.
+    fit_courtyard(fp, _ESP32_COURTYARD_EXCESS_MM)
+    return fp
+
+
+#: TI SO PowerPAD-8 (package code DDA), from ``Package_SO.pretty/
+#: TI_SO-PowerPAD-8.kicad_mod`` -- the footprint KiCad's own
+#: ``Regulator_Switching:TPS5430DDA`` symbol names, whose pin 9 is GNDPAD.
+#: Already body anchored: leads at x +-2.78, pin 1 at y -1.905 stepping 1.27,
+#: 1.91 x 0.61 mm; the exposed pad is four 1.205 x 1.55 mm rectangles at
+#: (+-0.6025, +-0.775), all numbered 9. F.Fab x +-1.95, y +-2.45; F.CrtYd
+#: x +-4, y +-2.7, which a 0.265 mm excess reproduces (the default 0.25
+#: would draw it 0.015 mm tighter than KiCad's).
+_POWERPAD8_LEAD_X_MM = 2.78
+_POWERPAD8_PITCH_MM = 1.27
+_POWERPAD8_LEAD_MM = (1.91, 0.61)
+_POWERPAD8_EP_MM = (0.6025, 0.775, 1.205, 1.55)
+_POWERPAD8_BODY_MM = (1.95, 2.45)
+_POWERPAD8_COURTYARD_EXCESS_MM = 0.265
+
+
+def ti_powerpad_so8(nets: dict[str, str] | None = None) -> Footprint:
+    """8-lead TI PowerPAD SO (DDA), pin 9 the exposed thermal pad.
+
+    Drawn instead of a plain SOIC-8 for the switchers that dissipate through
+    that pad: the TPS5430/TPS5450 datasheets require it soldered to ground,
+    and a SOIC-8 land pattern leaves it floating over bare laminate -- a
+    board that passes DRC and cooks the regulator at load. The four
+    rectangles are the library's paste split of one pad, so they share a
+    number and a net, like the SOT-223 tab.
+    """
+    lw, lh = mm(_POWERPAD8_LEAD_MM[0]), mm(_POWERPAD8_LEAD_MM[1])
+    col = mm(_POWERPAD8_LEAD_X_MM)
+    pitch = mm(_POWERPAD8_PITCH_MM)
+    span = 3 * pitch
+    pads: list[Pad] = []
+    for i in range(4):
+        n = str(i + 1)
+        pads.append(Pad(n, -col, -span // 2 + i * pitch, lw, lh, _net(nets, n)))
+    for i in range(4):
+        n = str(5 + i)
+        pads.append(Pad(n, col, span // 2 - i * pitch, lw, lh, _net(nets, n)))
+    ex, ey, ew, eh = (mm(v) for v in _POWERPAD8_EP_MM)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            pads.append(Pad("9", sx * ex, sy * ey, ew, eh, _net(nets, "9")))
+    fp = Footprint(
+        name="TI_SO-PowerPAD-8",
+        pads=pads,
+        body_w_nm=mm(_POWERPAD8_BODY_MM[0]),
+        body_h_nm=mm(_POWERPAD8_BODY_MM[1]),
+        description="TI SO PowerPAD-8 (DDA), 3.9x4.9mm body, exposed pad = pin 9",
+    )
+    fit_courtyard(fp, _POWERPAD8_COURTYARD_EXCESS_MM)
+    return fp
+
+
 #: Default chip size per passive type. Electrolytics and power inductors want
 #: something bigger than an 0603, so they are not all the same.
 _PASSIVE_DEFAULT_SIZE = {
@@ -559,13 +745,95 @@ def for_passive(passive_type: str, value: str = "", *, net1: str = "",
     if passive_type == "capacitor":
         farads = _parse_capacitance(value)
         if farads is not None:
+            # 1e-9 relative slack: float('100') * 1e-6 is 9.999...e-05.
+            if farads >= ELECTROLYTIC_MIN_F * (1 - 1e-9):
+                return electrolytic_capacitor(net1=net1, net2=net2)
             if farads >= 10e-6:
                 size = "1206"
             elif farads >= 1e-6:
                 size = "0805"
+    if passive_type == "inductor":
+        henries = _parse_value(value, "h")
+        if henries is not None and henries >= POWER_INDUCTOR_MIN_H * (1 - 1e-9):
+            return power_inductor(net1=net1, net2=net2)
     fp = chip_passive(size, net1=net1, net2=net2)
     fp.name = f"{passive_type[:1].upper()}_{size}"
     fp.polarised = passive_type == "diode"
+    return fp
+
+
+#: At and above this a capacitor is drawn as an SMD aluminium electrolytic.
+#: No MLCC reaches 100 uF in a 1206 -- the largest chip sizes top out near
+#: 100 uF at 1210 and low voltage -- so the chip rule was drawing bulk
+#: capacitance (a servo rail's 1000 uF) as a part that does not exist.
+ELECTROLYTIC_MIN_F = 100e-6
+
+#: At and above this an inductor is drawn as a 12.5 mm shielded power
+#: inductor. The IR carries no current rating, so this is a value rule, the
+#: capacitor rule's shape: in this pipeline's circuits a microhenry-range
+#: inductor is a switcher's (RF inductors are nanohenries, and a ferrite bead
+#: is rated in ohms), and a 15 uH, 5 A buck inductor drawn in 0805 is a part
+#: that cannot carry the current. A filter choke of a few uH at 100 mA is
+#: over-sized by this rule, which is the safe direction.
+POWER_INDUCTOR_MIN_H = 1e-6
+
+
+#: SMD aluminium electrolytic, from ``Capacitor_SMD.pretty/CP_Elec_10x10.
+#: kicad_mod`` (Nichicon 10 x 10 mm). Body anchored: pads 1 (+) and 2 (-)
+#: at x -4 / +4, 4 x 2.5 mm. F.Fab x/y +-5.15; F.CrtYd extent x +-6.25,
+#: y +-5.4, which the default excess reproduces. KiCad's model spans z 0..10.
+_CP_PAD_X_MM = 4.0
+_CP_PAD_MM = (4.0, 2.5)
+_CP_BODY_MM = 5.15
+
+
+def electrolytic_capacitor(*, net1: str = "", net2: str = "") -> Footprint:
+    """10 x 10 mm SMD aluminium electrolytic. Pin 1 is +, pin 2 is -.
+
+    Polarised, and :func:`cathode_mark` puts the bar beside pad 2, the
+    negative terminal -- where the can's own stripe is. A circuit that puts
+    leg 1 on ground is refused by ``board.package_errors`` rather than drawn
+    reversed. One size for every value from 100 uF up: a 10 x 10 can holds
+    1000 uF at 16 V, and a smaller value in a larger can is a real, orderable
+    part, whereas the reverse is not.
+    """
+    x = mm(_CP_PAD_X_MM)
+    pw, ph = mm(_CP_PAD_MM[0]), mm(_CP_PAD_MM[1])
+    fp = Footprint(
+        name="CP_Elec_10x10",
+        pads=[Pad("1", -x, 0, pw, ph, net1), Pad("2", x, 0, pw, ph, net2)],
+        body_w_nm=mm(_CP_BODY_MM),
+        body_h_nm=mm(_CP_BODY_MM),
+        description="SMD aluminium electrolytic, 10x10mm; 1=+, 2=-",
+        polarised=True,
+    )
+    fit_courtyard(fp)
+    return fp
+
+
+#: Shielded power inductor, from ``Inductor_SMD.pretty/L_Bourns_SRR1260.
+#: kicad_mod``. Body anchored: pads at x +-4.85, 2.9 x 5.4 mm. F.Fab +-6.25
+#: square; F.CrtYd +-6.5 square, which the default excess reproduces.
+_SRR1260_PAD_X_MM = 4.85
+_SRR1260_PAD_MM = (2.9, 5.4)
+_SRR1260_BODY_MM = 6.25
+
+
+def power_inductor(*, net1: str = "", net2: str = "") -> Footprint:
+    """Bourns SRR1260 12.5 x 12.5 x 6 mm shielded SMD power inductor.
+
+    Unpolarised: an inductor has no preferred direction, so no mark.
+    """
+    x = mm(_SRR1260_PAD_X_MM)
+    pw, ph = mm(_SRR1260_PAD_MM[0]), mm(_SRR1260_PAD_MM[1])
+    fp = Footprint(
+        name="L_Bourns_SRR1260",
+        pads=[Pad("1", -x, 0, pw, ph, net1), Pad("2", x, 0, pw, ph, net2)],
+        body_w_nm=mm(_SRR1260_BODY_MM),
+        body_h_nm=mm(_SRR1260_BODY_MM),
+        description="Shielded SMD power inductor 12.5x12.5x6mm (Bourns SRR1260)",
+    )
+    fit_courtyard(fp)
     return fp
 
 
@@ -574,9 +842,18 @@ _CAP_UNITS = {"p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "m": 1e-3}
 
 def _parse_capacitance(value: str) -> float | None:
     """'100nF' -> 1e-7. Returns None when the value is not parseable."""
-    if not value:
+    return _parse_value(value, "f")
+
+
+def _parse_value(value: str, unit_letter: str) -> float | None:
+    """'15uH' -> 1.5e-5 for ``unit_letter`` "h". None when unparseable.
+
+    Only the first whitespace-separated token is read, so a model's
+    "15uH 5A" or "1000uF 16V" still yields its value.
+    """
+    if not value or not value.strip():
         return None
-    text = value.strip().lower().replace("f", "")
+    text = value.strip().split()[0].lower().replace(unit_letter, "")
     match = re.match(r"^([0-9]*\.?[0-9]+)\s*([pnuµm]?)$", text)
     if not match:
         return None
@@ -805,6 +1082,76 @@ def _usb_c_power(nets: dict[str, str] | None) -> Footprint:
     return fp
 
 
+#: USB 2.0 USB-C receptacle, from ``Connector_USB.pretty/
+#: USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal.kicad_mod`` -- the
+#: 16-pin sibling of the GCT USB4125 above, the one that actually carries
+#: D+/D-. Already body anchored (F.Fab x +-4.47, y +-3.675), so these are the
+#: library's own numbers: every signal pad on one row at y = -3.68, 1.15 mm
+#: tall, listed left to right. Two library positions each hold two pads with
+#: different names -- A1 and B12 at x -3.2, B1 and A12 at x 3.2 (GND), and
+#: likewise A4/B9 and B4/A9 (VBUS) -- because the part's row-A and row-B
+#: contacts for those pins land on one pad. They are drawn the same way,
+#: stacked, and ``board`` refuses a circuit that puts a stacked pair on two
+#: nets. A6/B6 are the two D+ contacts and A7/B7 the two D-, which a USB 2.0
+#: device ties together so the plug works either way up.
+_USB_C16_PADS_MM = (
+    ("A1", -3.2, 0.6),
+    ("B12", -3.2, 0.6),
+    ("A4", -2.4, 0.6),
+    ("B9", -2.4, 0.6),
+    ("B8", -1.75, 0.3),
+    ("A5", -1.25, 0.3),
+    ("B7", -0.75, 0.3),
+    ("A6", -0.25, 0.3),
+    ("A7", 0.25, 0.3),
+    ("B6", 0.75, 0.3),
+    ("A8", 1.25, 0.3),
+    ("B5", 1.75, 0.3),
+    ("B4", 2.4, 0.6),
+    ("A9", 2.4, 0.6),
+    ("B1", 3.2, 0.6),
+    ("A12", 3.2, 0.6),
+)
+_USB_C16_PAD_Y_MM = -3.68
+_USB_C16_PAD_H_MM = 1.15
+_USB_C16_BODY_MM = (4.47, 3.675)
+_USB_C16_COURTYARD_MM = (5.32, 4.76)
+
+
+def _usb_c_usb2(nets: dict[str, str] | None) -> Footprint:
+    """16-pin USB 2.0 USB-C receptacle (GCT USB4105-xx-A).
+
+    As with :func:`_usb_c_power`, what is **not** drawn is stated: the four
+    through-hole shield tabs (oval slots, which :class:`Pad` cannot carry) and
+    the two 0.65 mm non-plated locating pegs. The sixteen signal pads solder;
+    a real build adds the shell tabs and pegs before fabrication, and the
+    shell is therefore not grounded on this board.
+    """
+    pads = [
+        Pad(number, mm(x), mm(_USB_C16_PAD_Y_MM), mm(w), mm(_USB_C16_PAD_H_MM),
+            _net(nets, number))
+        for number, x, w in _USB_C16_PADS_MM
+    ]
+    fp = Footprint(
+        name="USB_C_Receptacle_USB2.0_16P",
+        pads=pads,
+        body_w_nm=mm(_USB_C16_BODY_MM[0]),
+        body_h_nm=mm(_USB_C16_BODY_MM[1]),
+        description=(
+            "USB-C receptacle, USB 2.0 16-pin (GCT USB4105); A6/B6=D+, "
+            "A7/B7=D-, A5/B5=CC1/CC2, A4/A9/B4/B9=VBUS, A1/A12/B1/B12=GND, "
+            "A8/B8=SBU; shield tabs and pegs not drawn"
+        ),
+    )
+    fit_courtyard(fp, CONNECTOR_COURTYARD_EXCESS_MM)
+    # The library courtyard (x +-5.32, y -4.76..4.18) encloses the shell tabs
+    # this pattern does not draw. The shell is still there on the real part,
+    # so the placer must keep that room: never tighter than KiCad's.
+    fp.courtyard_w_nm = max(fp.courtyard_w_nm, mm(_USB_C16_COURTYARD_MM[0]))
+    fp.courtyard_h_nm = max(fp.courtyard_h_nm, mm(_USB_C16_COURTYARD_MM[1]))
+    return fp
+
+
 #: CR2032 coin cell holder, from ``Battery.pretty/
 #: BatteryHolder_Keystone_3002_1x2032.kicad_mod``. Library pads (already body
 #: anchored): "1" twice, at (-12.8, 0) and (12.8, 0), 5.1 mm square SMD; "2"
@@ -981,6 +1328,7 @@ CONNECTOR_PACKAGES: dict[str, int] = {
     "PinHeader_1x08_P2.54mm": 8,
     "PinHeader_1x10_P2.54mm": 10,
     "USB_C_Receptacle_Power": 6,
+    "USB_C_Receptacle_USB2.0_16P": 16,
 }
 
 #: Battery-holder package name -> pin count. Pin 1 is + and pin 2 is - on both.
@@ -1017,6 +1365,7 @@ _CONNECTOR_BUILDERS = {
     "PinHeader_1x08_P2.54mm": lambda nets: _pin_header_1xn(8, nets),
     "PinHeader_1x10_P2.54mm": lambda nets: _pin_header_1xn(10, nets),
     "USB_C_Receptacle_Power": _usb_c_power,
+    "USB_C_Receptacle_USB2.0_16P": _usb_c_usb2,
 }
 
 _BATTERY_BUILDERS = {

@@ -10,7 +10,7 @@ legal states.
 The two properties that matter most have a test each: no secret value ever
 appears in the serialised response, and the ``google`` entry agrees with
 ``GET /deliver/config`` -- the two routes read the same source, so a user can
-never be told two different stories about whether Ada can send mail.
+never be told two different stories about whether Hardy can send mail.
 """
 
 import json

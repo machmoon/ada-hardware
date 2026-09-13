@@ -190,7 +190,7 @@ export interface PromptBarProps {
    */
   onTranscript?: (text: string) => void;
   /**
-   * The "Hey Ada" listener, owned by the page (see useWakeWord). It is handed
+   * The "Hey Hardy" listener, owned by the page (see useWakeWord). It is handed
    * to the one microphone in the row, which is its mute control; nothing here
    * submits, and the ear only ever arms listening.
    */
@@ -299,7 +299,7 @@ export const PromptBar = ({
       )}
 
       {/* One microphone, and it is the row's only voice control. Tapping it
-          mutes and unmutes "Hey Ada"; tapping it while I am talking stops me;
+          mutes and unmutes "Hey Hardy"; tapping it while I am talking stops me;
           holding it is push-to-talk. `speaking` is passed rather than
           subscribed so the panel's sentence and the button's job cannot
           disagree about whether a reply is playing. */}

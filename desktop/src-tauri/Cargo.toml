@@ -1,13 +1,13 @@
 [package]
-name = "ada-desktop"
+name = "hardy-desktop"
 version = "0.1.0"
-description = "Native desktop shell for the Ada hardware engineering agent"
-authors = ["Ada contributors"]
+description = "Native desktop shell for the Hardy hardware engineering agent"
+authors = ["Hardy contributors"]
 license = "MIT"
 edition = "2021"
 
 [lib]
-name = "ada_desktop_lib"
+name = "hardy_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

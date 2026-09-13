@@ -1,6 +1,6 @@
-// Capture permissions for Ada.
+// Capture permissions for Hardy.
 //
-// Spoken “hey Ada” needs the microphone. We may ask the OS permission dialog
+// Spoken “hey Hardy” needs the microphone. We may ask the OS permission dialog
 // once; we never yank the user into System Settings on every arm — if they
 // already denied, the ear shows where to flip it and they open Settings
 // themselves.

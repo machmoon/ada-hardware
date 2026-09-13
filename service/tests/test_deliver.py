@@ -238,7 +238,7 @@ def test_deliver_auth_all_in_one_still_works(server, tmp_path, monkeypatch):
     assert token_path.is_file()
 
 
-def test_config_oauth_without_token_points_at_ada(server, tmp_path, monkeypatch):
+def test_config_oauth_without_token_points_at_hardy(server, tmp_path, monkeypatch):
     monkeypatch.setenv("GOOGLEAPPS_CLIENT_ID", "client-id.apps.googleusercontent.com")
     monkeypatch.setenv("GOOGLEAPPS_CLIENT_SECRET", "client-secret-value")
     monkeypatch.setenv("GOOGLEAPPS_TOKEN_PATH", str(tmp_path / "no-token.json"))

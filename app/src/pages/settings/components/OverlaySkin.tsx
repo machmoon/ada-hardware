@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Header, Label, Switch } from "@/components";
 import { SkinPreviewPicker } from "@/components/setup";
-import { type SkinId, getSkin, getTerminalAda, setTerminalAda } from "@/lib/overlay-skin";
+import { type SkinId, getSkin, getTerminalHardy, setTerminalHardy } from "@/lib/overlay-skin";
 
 /**
  * Pick the overlay's shape.
@@ -18,11 +18,11 @@ import { type SkinId, getSkin, getTerminalAda, setTerminalAda } from "@/lib/over
  */
 export const OverlaySkin = ({ className }: { className?: string }) => {
   const [skin, setSkinState] = useState<SkinId>(() => getSkin());
-  const [adaInTerminal, setAdaInTerminal] = useState(() => getTerminalAda());
+  const [hardyInTerminal, setHardyInTerminal] = useState(() => getTerminalHardy());
 
-  const toggleAda = (enabled: boolean) => {
-    setTerminalAda(enabled);
-    setAdaInTerminal(enabled);
+  const toggleHardy = (enabled: boolean) => {
+    setTerminalHardy(enabled);
+    setHardyInTerminal(enabled);
   };
 
   return (
@@ -46,10 +46,10 @@ export const OverlaySkin = ({ className }: { className?: string }) => {
             </p>
           </div>
           <Switch
-            checked={adaInTerminal}
-            onCheckedChange={toggleAda}
-            data-testid="terminal-ada-switch"
-            aria-label={adaInTerminal ? "Turn off Hardy routing" : "Turn on Hardy routing"}
+            checked={hardyInTerminal}
+            onCheckedChange={toggleHardy}
+            data-testid="terminal-hardy-switch"
+            aria-label={hardyInTerminal ? "Turn off Hardy routing" : "Turn on Hardy routing"}
           />
         </div>
       ) : null}

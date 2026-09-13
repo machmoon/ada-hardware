@@ -138,7 +138,7 @@ describe("EngineStep", () => {
     const h = mount({ probeTools: missingKicad });
     await waitFor(() => expect(screen.getByTestId("kicad-card").getAttribute("data-state")).toBe("missing"));
     expect(screen.getByTestId("kicad-fix").textContent).toBe(KICAD_MISSING_FIX);
-    // Not a blocker: Ada still designs boards, so Continue stays open.
+    // Not a blocker: Hardy still designs boards, so Continue stays open.
     expect(h.onCanContinue).toHaveBeenLastCalledWith(true);
     expect(h.setCard).toHaveBeenCalledWith("kicad", false);
     await act(async () => {

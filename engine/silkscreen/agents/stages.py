@@ -37,6 +37,7 @@ from ..netlist import CircuitSpec
 from ..placement.adapter import GeneratedPlacement, repair_generated_board
 from ..placement.agent import TextModel
 from ..placement.pcb_repair import evaluate
+from ..prior_art import PriorArtResult
 from ..routing import RouteResult
 from ..schematic import build_schematic, write_project, write_schematic
 from ..sourcing import SourcingResult, bom_rows
@@ -47,6 +48,7 @@ from .datasheet import PartFacts, read_datasheet
 from .enclosure import propose_enclosure
 from .model import Model
 from .plan import PlanResult, propose_plan
+from .prior_art import GitHubError, Transport, research
 from .propose import ProposalAttempt, propose_circuit
 from .review import (
     ReviewError,
@@ -59,6 +61,8 @@ from .simulate import SimulationResult, simulate_circuit
 from .sourcing import propose_sourcing
 
 __all__ = [
+    "prior_art_stage",
+    "design_brief",
     "plan_stage",
     "read_stage",
     "propose_stage",
@@ -85,6 +89,10 @@ __all__ = [
     "NO_ARTIFACTS",
     "EnclosureResult",
     "proposal_fields",
+    "MechanismResult",
+    "mechanism_stage",
+    "start_mechanism_stage",
+    "MechanismJob",
 ]
 
 Emit = Callable[[dict[str, Any]], None]
@@ -290,6 +298,70 @@ def read_stage(
             }
         )
     return facts
+
+
+def prior_art_stage(
+    agent_model: Model,
+    *,
+    intent: str,
+    prior_art: bool,
+    emit: Emit,
+    enter: Enter,
+    transport: Transport | None = None,
+) -> PriorArtResult | None:
+    """Find the open-source projects that already build this, or None when off.
+
+    Opt-in, the `plan_stage` rule: up to three model calls and a handful of
+    GitHub requests nobody pressed for, so `prior_art=False` emits nothing.
+    It runs before plan and propose, and what it found reaches the designer
+    only through :func:`design_brief`, as cited facts.
+
+    It never fails the run on GitHub's account: a rate limit or an outage is
+    a status and a warning on the result (`research` never raises for
+    those), and anything else GitHub-shaped that escapes is turned into
+    status `unavailable` here. A `ModelError` propagates, the plan stage's
+    convention.
+    """
+    if not prior_art:
+        return None
+    enter("prior_art")
+    emit({"event": "stage.start", "stage": "prior_art"})
+    try:
+        result = research(intent, model=agent_model, transport=transport, on_event=emit)
+    except (GitHubError, ValueError) as exc:
+        detail = f"prior-art research failed: {exc}"
+        emit(
+            {"event": "prior_art.failed", "stage": "prior_art", "detail": detail[:200]}
+        )
+        result = PriorArtResult(intent=intent, status="unavailable", warnings=[detail])
+    emit(
+        {
+            "event": "stage.done",
+            "stage": "prior_art",
+            "status": result.status,
+            "projects": len(result.projects),
+            "dropped": len(result.dropped),
+            "warnings": len(result.warnings),
+        }
+    )
+    return result
+
+
+def design_brief(
+    plan_result: PlanResult | None, prior_art_result: PriorArtResult | None
+) -> str | None:
+    """What propose designs against: the plan's brief, then the prior art.
+
+    Both drivers call this so they cannot hand propose different text.
+    """
+    parts = [
+        plan_result.plan.brief_text()
+        if plan_result is not None and plan_result.plan is not None
+        else None,
+        prior_art_result.brief_text() if prior_art_result is not None else None,
+    ]
+    joined = "\n\n".join(p for p in parts if p)
+    return joined or None
 
 
 def plan_stage(
@@ -1348,6 +1420,118 @@ def start_review_stage(
 
     thread = threading.Thread(
         target=job._run, args=(work,), name="silkscreen-review", daemon=daemon
+    )
+    job._thread = thread
+    thread.start()
+    return job
+
+
+class MechanismResult(NamedTuple):
+    """What the mechanism stage produced (a jointed printed assembly).
+
+    ``kernel`` is the :class:`~silkscreen.mechanism.kernel.MechanismReport`
+    -- the only receipt; ``exports`` the STEP/STL paths when a directory was
+    given, else ``None``; ``step_text`` the STEP assembly either way.
+    """
+
+    spec: Any
+    step_text: str
+    repair_rounds: int
+    kernel: Any = None
+    exports: Any = None
+    brief: str = ""
+
+
+def mechanism_stage(
+    agent_model: Model,
+    intent: str,
+    *,
+    mechanism: bool,
+    prior_art: Any = None,
+    export_dir: str | Path | None = None,
+    stem: str = "mechanism",
+    emit: Emit,
+    enter: Enter,
+) -> MechanismResult | None:
+    """Propose, build, verify and export a mechanism for ``intent``. Opt-in.
+
+    The :func:`enclosure_stage` shape: a no-op when not asked for; a
+    :class:`~silkscreen.mechanism.errors.MechanismError` (including the
+    proposal budget running out), a missing kernel, ``ValueError`` and
+    ``OSError`` become a ``mechanism.failed`` event and ``None``; a
+    ``ModelError`` or a callback exception propagates. Needs only the intent,
+    not a board. Imports lazily so a run that never asks pays nothing.
+    """
+    if not mechanism:
+        return None
+    from ..enclosure.errors import KernelUnavailable
+    from ..mechanism.cad import export_mechanism
+    from ..mechanism.errors import MechanismError
+    from .mechanism import propose_mechanism
+
+    enter("mechanism")
+    emit({"event": "stage.start", "stage": "mechanism"})
+    exports = None
+    try:
+        proposal = propose_mechanism(agent_model, intent, prior_art=prior_art, on_event=emit)
+        if export_dir is not None:
+            exports = export_mechanism(proposal.model, export_dir, stem)
+            step_text = exports.step.read_text(encoding="utf-8")
+        else:
+            with tempfile.TemporaryDirectory(prefix="silkscreen-mechanism-") as tmp:
+                step_text = export_mechanism(proposal.model, tmp, stem).step.read_text(
+                    encoding="utf-8"
+                )
+    except (MechanismError, KernelUnavailable, ValueError, OSError) as exc:
+        emit({"event": "mechanism.failed", "error": str(exc)[:160]})
+        return None
+    report = proposal.kernel
+    emit({
+        "event": "stage.done",
+        "stage": "mechanism",
+        "joints": len(proposal.spec.joints),
+        "repair_rounds": proposal.repair_rounds,
+        "kernel_passed": None if report is None else bool(report.passed),
+        "kernel_failed": [] if report is None else list(report.failed),
+        "exports": [] if exports is None else [p.name for p in (exports.step, *exports.stls)],
+    })
+    return MechanismResult(
+        spec=proposal.spec, step_text=step_text, repair_rounds=proposal.repair_rounds,
+        kernel=report, exports=exports, brief=proposal.brief,
+    )
+
+
+class MechanismJob(EnclosureJob):
+    """The mechanism stage on its own thread; :meth:`result` joins and
+    re-raises exactly what the stage raised (the :class:`EnclosureJob` rule)."""
+
+
+def start_mechanism_stage(
+    agent_model: Model,
+    intent: str,
+    *,
+    mechanism: bool,
+    prior_art: Any = None,
+    export_dir: str | Path | None = None,
+    stem: str = "mechanism",
+    emit: Emit,
+    enter: Enter,
+    daemon: bool = False,
+) -> MechanismJob:
+    """Run :func:`mechanism_stage` on a worker thread; settles to ``None`` at
+    once when ``mechanism`` is off."""
+    job = MechanismJob()
+    if not mechanism:
+        return job
+
+    def work() -> MechanismResult | None:
+        return mechanism_stage(
+            agent_model, intent, mechanism=True, prior_art=prior_art,
+            export_dir=export_dir, stem=stem, emit=emit, enter=enter,
+        )
+
+    thread = threading.Thread(
+        target=job._run, args=(work,), name="silkscreen-mechanism", daemon=daemon
     )
     job._thread = thread
     thread.start()

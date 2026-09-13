@@ -581,7 +581,7 @@ class GraphClient:
 
         One difference is worth stating rather than hiding: Meet's transcript
         entries carry opaque participant ids, while Teams' WebVTT carries the
-        speaker's **display name** inline (``<v Ada Lovelace>``). There is no id
+        speaker's **display name** inline (``<v Hardy Lovelace>``). There is no id
         form in the content, so the display name is what comes out. That is a
         real difference in what this integration sees, not a choice made here.
 

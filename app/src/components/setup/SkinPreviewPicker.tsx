@@ -6,7 +6,7 @@ import { rovingKeyDown } from "./roving";
 
 interface SkinPreviewPickerProps {
   className?: string;
-  /** Called after the choice is stored; the settings pane uses it for the Ada switch. */
+  /** Called after the choice is stored; the settings pane uses it for the Hardy switch. */
   onChange?: (id: SkinId) => void;
 }
 

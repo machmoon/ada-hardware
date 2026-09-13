@@ -26,6 +26,7 @@ from typing import Any
 from ..board import BoardResult, write_board
 from ..netlist import CircuitSpec
 from ..placement.adapter import GeneratedPlacement
+from ..prior_art import PriorArtResult
 from ..routing import RouteResult
 from ..sourcing import SourcingResult, bom_csv, grouped_bom_csv
 from ..spice.simulators import Simulator
@@ -51,9 +52,11 @@ from .stages import (
     SchematicArtifacts,
     SimulationJob,
     SourcingJob,
+    design_brief,
     place_stage,
     placement_repair_stage,
     plan_stage,
+    prior_art_stage,
     propose_stage,
     read_stage,
     route_stage,
@@ -131,6 +134,10 @@ class PipelineResult:
     #: decision, and it is kept on the result so the engineer can see what
     #: the board was actually designed against.
     plan: PlanResult | None = None
+    #: The open-source prior art found before design, or None when it was not
+    #: requested (``prior_art=True``). Never None when it was: a rate limit or
+    #: an outage is a status on it, not an absence.
+    prior_art: PriorArtResult | None = None
     #: Datasheets that were asked for and could not be read, one line each.
     #:
     #: A part whose read fails is dropped from ``facts`` and the run carries
@@ -588,6 +595,7 @@ def _finish(
     unread_datasheets: list[str] | None = None,
     plan: PlanResult | None = None,
     effort: EffortReceipt | None = None,
+    prior_art: PriorArtResult | None = None,
 ) -> PipelineResult:
     """Write the board if asked, then assemble the result. Emits nothing.
 
@@ -650,6 +658,7 @@ def _finish(
         unread_datasheets=list(unread_datasheets or []),
         plan=plan,
         effort=effort,
+        prior_art=prior_art,
     )
 
 
@@ -682,6 +691,8 @@ def _generate_pcb_sdk(
     simulate: bool = False,
     simulator: Simulator | str | None = None,
     effort: str | None = None,
+    prior_art: bool = False,
+    prior_art_transport: Any = None,
 ) -> PipelineResult:
     """Run the stages as a straight line. See :func:`generate_pcb`."""
     emit, agent_model, enter, observe, tier = _wire_events(
@@ -712,6 +723,14 @@ def _generate_pcb_sdk(
         enter=enter,
         unread=unread_datasheets,
     )
+    prior_art_result = prior_art_stage(
+        models.for_stage("prior_art"),
+        intent=intent,
+        prior_art=prior_art,
+        emit=emit,
+        enter=enter,
+        transport=prior_art_transport,
+    )
     plan_result = plan_stage(
         models.for_stage("plan"),
         intent=intent,
@@ -724,11 +743,7 @@ def _generate_pcb_sdk(
         models.for_stage("propose"),
         intent=intent,
         facts=facts,
-        brief=(
-            plan_result.plan.brief_text()
-            if plan_result is not None and plan_result.plan is not None
-            else None
-        ),
+        brief=design_brief(plan_result, prior_art_result),
         max_repairs=max_repairs,
         emit=emit,
         enter=enter,
@@ -869,6 +884,7 @@ def _generate_pcb_sdk(
         unread_datasheets=unread_datasheets,
         plan=plan_result,
         effort=receipt,
+        prior_art=prior_art_result,
     )
 
 
@@ -902,6 +918,8 @@ def generate_pcb(
     simulator: Simulator | str | None = None,
     effort: str | None = None,
     engine: str = "",
+    prior_art: bool = False,
+    prior_art_transport: Any = None,
 ) -> PipelineResult:
     """Generate a placed board from a natural-language intent.
 
@@ -1021,6 +1039,17 @@ def generate_pcb(
             run that answers a ``thorough`` request at ``fast`` while
             reporting ``thorough`` is the one thing this exists to prevent.
             What it did is on ``result.effort``.
+        prior_art: Before planning, search GitHub for open-source projects
+            that already build this (an arm, a keyboard, a drone), read their
+            README and BOM files, and hand propose the cited facts --
+            actuators, controllers, voltages, BOM lines -- so it reuses
+            proven parts. Opt-in; up to three model calls plus GitHub
+            requests (``GITHUB_TOKEN`` optional, unauthenticated is
+            rate-limited and says so). A fact whose quote is not in its file
+            is dropped and reported. Result on ``result.prior_art``; see
+            :func:`silkscreen.agents.prior_art.research`.
+        prior_art_transport: The HTTP seam of that research; ``None`` is
+            the real network, and tests pass a recorded transport.
         engine: Which driver runs the stages -- ``"sdk"`` for the straight line
             in this module, ``"adk"`` for the Google ADK workflow in
             :mod:`silkscreen.agents.adk`. Both call the same stage bodies and
@@ -1066,6 +1095,8 @@ def generate_pcb(
             simulate=simulate,
             simulator=simulator,
             effort=effort,
+            prior_art=prior_art,
+            prior_art_transport=prior_art_transport,
         )
     if chosen == "adk":
         # Imported here, never at module scope: a base install has no google.adk,
@@ -1104,6 +1135,8 @@ def generate_pcb(
             simulate=simulate,
             simulator=simulator,
             effort=effort,
+            prior_art=prior_art,
+            prior_art_transport=prior_art_transport,
         )
     # RuntimeError, not ValueError: the service answers a pipeline ValueError as
     # a 400 with the raw message, and a bad engine name is not a client's fault.

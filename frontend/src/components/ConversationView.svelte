@@ -113,7 +113,7 @@
       {onsubmit}
       initial={$run.request}
       {models}
-      initialModel={$run.orchestratorModel || 'gemini-3.7-flash'}
+      initialModel={$run.orchestratorModel || 'auto'}
       initialThinkingLevel={$run.thinkingLevel || 'auto'}
       initialQuotaRpm={$run.quotaRpm || 'auto'}
       {placementCapabilities}
@@ -185,6 +185,33 @@
               The browser could not reach it at all. Start it with
               <code class="mono" data-material="tint">PORT=8081 python -m service.app</code> and try again.
             </p>
+          {:else if kind === 'proposal'}
+            {@const details = $run.error?.details || {}}
+            <!-- Not an outage and not our bug: the model never produced a
+                 circuit the builder can draw. The fix is the request, so the
+                 card names the parts and what can be drawn instead. -->
+            <div class="lbl">Run failed · the circuit did not validate</div>
+            <p>{$run.error?.message || 'No valid circuit.'}</p>
+            {#if details.unsupported?.length}
+              <p class="note">Parts the board builder cannot draw:</p>
+              <ul class="proposal-errors" data-testid="proposal-unsupported">
+                {#each details.unsupported as line, i (i)}<li class="mono">{line}</li>{/each}
+              </ul>
+            {/if}
+            {#if details.errors?.length}
+              <details data-testid="proposal-errors">
+                <summary>Final validation errors ({details.errorsTotal || details.errors.length})</summary>
+                <ul class="proposal-errors">
+                  {#each details.errors as line, i (i)}<li class="mono">{line}</li>{/each}
+                </ul>
+              </details>
+            {/if}
+            {#if details.supportedPackages}
+              <details data-testid="proposal-supported">
+                <summary>What the board builder can draw</summary>
+                <p class="mono note">{details.supportedPackages}</p>
+              </details>
+            {/if}
           {:else}
             <div class="lbl">Run failed</div>
             <p>{$run.error?.message || 'The run did not complete.'}</p>
@@ -228,6 +255,7 @@
   .conversation { width: min(100%, 900px); margin: 0 auto; }
   .sessionbar { display: flex; align-items: center; gap: 9px; min-height: 30px; padding-bottom: 12px; border-bottom: 1px solid var(--rule-soft); }
   .sessionbar .spacer { flex-grow: 1; }
+  .proposal-errors { margin: 4px 0 8px; padding-left: 18px; font-size: var(--fs-mono-sm); max-height: 14em; overflow: auto; overflow-wrap: anywhere; }
   .sessionbar button, .done-actions button, .actions button, .actions select { padding: 5px 9px; background: transparent; border: 1px solid var(--rule); color: var(--ink-mid); font-size: 11px; }
   .model { font-size: var(--fs-mono-sm); color: var(--ink-faint); }
   .file { display: none; }

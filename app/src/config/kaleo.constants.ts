@@ -25,12 +25,12 @@ export const KALEO_STORAGE_KEYS = {
   ELEVENLABS_KEY: "silkscreen_elevenlabs_key",
   ELEVENLABS_VOICE_ID: "silkscreen_elevenlabs_voice_id",
   /**
-   * Opt in to the webview's own `speechSynthesis` as Ada's voice ("1"/"0",
+   * Opt in to the webview's own `speechSynthesis` as Hardy's voice ("1"/"0",
    * absent means no).
    *
    * Absent-means-NO is the whole point, and it is the opposite of
    * `VOICE_ENABLED` above. The platform voice on macOS is a *Compact* system
-   * voice, and for several weeks it was what Ada actually sounded like — not
+   * voice, and for several weeks it was what Hardy actually sounded like — not
    * because anyone chose it, but because the engine voice was never reached
    * and this was what the code fell through to. A degradation nobody can
    * hear the reason for is indistinguishable from a design decision, so the
@@ -45,13 +45,13 @@ export const KALEO_STORAGE_KEYS = {
    */
   LAST_RUN: "silkscreen_last_run",
   /**
-   * Which overlay skin is on, and whether the terminal skin's Ada routing is
+   * Which overlay skin is on, and whether the terminal skin's Hardy routing is
    * live. Two keys rather than one blob: the skin is a preference people
    * change often, and the routing switch has to be readable from inside the
    * terminal component without dragging the whole settings shape in with it.
    */
   OVERLAY_SKIN: "silkscreen_overlay_skin",
-  TERMINAL_ADA: "silkscreen_terminal_ada",
+  TERMINAL_ADA: "silkscreen_terminal_hardy",
   /**
    * The localStorage mirror of the settings store (`src/lib/settings/`):
    * every `SettingsSchema` key is written as JSON under

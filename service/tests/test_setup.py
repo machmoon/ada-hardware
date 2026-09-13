@@ -862,7 +862,7 @@ def test_voice_is_unconfigured_and_names_the_fix_when_no_weights(monkeypatch):
     download 340 MB of weights on demand, which is right; the cost of that
     refusal used to be paid silently, because the client fell through to the
     webview's `speechSynthesis` and the macOS Compact voice quietly became
-    what Ada sounded like. The client no longer falls through, so an
+    what Hardy sounded like. The client no longer falls through, so an
     unprovisioned engine now means silence -- and silence has to be
     explainable from the report or it just reads as broken.
     """
@@ -876,7 +876,7 @@ def test_voice_is_unconfigured_and_names_the_fix_when_no_weights(monkeypatch):
     # two words send a person to different places.
     assert report["state"] == "unconfigured"
     assert report["selected"] is None
-    # It must say Ada goes QUIET rather than implying she falls back.
+    # It must say Hardy goes QUIET rather than implying she falls back.
     assert "silent" in report["detail"]
     # And it must name the one command, not merely describe the problem.
     assert any("install_voice.sh" in hint for hint in report["hints"])

@@ -38,7 +38,7 @@ use tauri::{
 
 /// Emitted to the main window when "Hardy listening" is clicked. The front end
 /// answers by flipping the ear and calling `tray_set_state`.
-pub const TOGGLE_EVENT: &str = "tray-ada-toggle";
+pub const TOGGLE_EVENT: &str = "tray-hardy-toggle";
 
 /// The tray icon's id (one per app; `Manager::tray_by_id`).
 pub const TRAY_ID: &str = "kaleo";
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn toggle_event_matches_the_frontend_seam() {
         // `useTrayState.ts` listens for this exact name.
-        assert_eq!(TOGGLE_EVENT, "tray-ada-toggle");
+        assert_eq!(TOGGLE_EVENT, "tray-hardy-toggle");
     }
 
     #[test]

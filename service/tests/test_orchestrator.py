@@ -241,3 +241,164 @@ def test_each_adk_model_round_trip_passes_through_the_pre_call_hook():
     )
 
     assert calls == ["called", "called"]
+
+
+# ------------------------------------------------ root failover (2026-09-13)
+# The root was on gemini-3.7-flash, got 503 UNAVAILABLE, and the chat run
+# failed outright while the worker behind it had a three-tier ladder.
+
+from silkscreen.agents.adk.failover import (  # noqa: E402
+    FailoverLlm,
+    orchestrator_ladder,
+)
+from silkscreen.agents.model import (  # noqa: E402
+    CHEAP_MODEL,
+    FALLBACK_MODEL,
+    ModelError,
+)
+
+
+class DownLlm(BaseLlm):
+    error: str
+    calls: int = 0
+
+    async def generate_content_async(self, llm_request, stream=False):
+        self.calls += 1
+        raise RuntimeError(self.error)
+        yield  # pragma: no cover - makes this an async generator
+
+
+UNAVAILABLE = "503 UNAVAILABLE. This model is currently experiencing high demand."
+DAILY = (
+    "429 RESOURCE_EXHAUSTED. 'quotaId': "
+    "'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'retryDelay': '34s'"
+)
+
+
+def _ladder(first, second, **kw):
+    return FailoverLlm(
+        model=first.model, tiers=[first, second], backoff_s=0.0, cooldowns={}, **kw
+    )
+
+
+def test_the_ladder_steps_down_through_flash_and_flash_lite_without_repeats():
+    assert orchestrator_ladder("gemini-3.7-flash") == [
+        "gemini-3.7-flash",
+        FALLBACK_MODEL,
+        CHEAP_MODEL,
+    ]
+    assert orchestrator_ladder(FALLBACK_MODEL) == [FALLBACK_MODEL, CHEAP_MODEL]
+
+
+def test_a_503_on_the_root_fails_over_and_says_so():
+    down = DownLlm(model="gemini-3.7-flash", error=UNAVAILABLE)
+    backup = FakeLlm(model="gemini-3.5-flash", responses=[text_response("Which voltage?")])
+    events: list[dict] = []
+    model = _ladder(down, backup)
+
+    outcome = run_orchestrator(
+        message="make a regulator",
+        model=model,
+        session_id="failover-1",
+        generate=lambda: None,
+        emit=events.append,
+    )
+
+    assert outcome.assistant == "Which voltage?"
+    assert down.calls == 2, "a 503 keeps its one in-tier retry"
+    retries = [e for e in events if e["event"] == "model.retry"]
+    assert [r["provider"] for r in retries] == ["gemini-3.7-flash"] * 2
+    assert all(r["layer"] == "orchestrator" and "503" in r["error"] for r in retries)
+    call = next(e for e in events if e["event"] == "model.call")
+    assert call["model"] == "gemini-3.5-flash", "the event names the tier that answered"
+    assert outcome.model == "gemini-3.5-flash"
+
+
+def test_a_daily_quota_refusal_parks_the_root_tier_for_the_next_turn():
+    table: dict[str, float] = {}
+    down = DownLlm(model="gemini-3.7-flash", error=DAILY)
+    backup = FakeLlm(
+        model="gemini-3.5-flash",
+        responses=[text_response("one?"), text_response("two?")],
+    )
+    for turn in ("a", "b"):
+        events: list[dict] = []
+        model = FailoverLlm(
+            model=down.model, tiers=[down, backup], backoff_s=0.0, cooldowns=table
+        )
+        run_orchestrator(
+            message="make a regulator",
+            model=model,
+            session_id=f"failover-{turn}",
+            generate=lambda: None,
+            emit=events.append,
+        )
+    assert down.calls == 1, "a quota wall is asked once, not once per attempt or turn"
+    skipped = [e for e in events if e["event"] == "model.retry"]
+    assert skipped and "skipped" in skipped[0]["error"]
+
+
+def test_every_root_tier_failing_names_every_tier():
+    import pytest
+
+    a = DownLlm(model="gemini-3.7-flash", error=UNAVAILABLE)
+    b = DownLlm(model="gemini-3.5-flash", error=UNAVAILABLE)
+    with pytest.raises(ModelError) as caught:
+        run_orchestrator(
+            message="make a regulator",
+            model=_ladder(a, b, attempts=[1, 1]),
+            session_id="failover-dead",
+            generate=lambda: None,
+            emit=lambda e: None,
+        )
+    assert "gemini-3.7-flash" in str(caught.value)
+    assert "gemini-3.5-flash" in str(caught.value)
+
+
+def test_a_bare_model_id_gets_the_ladder(monkeypatch):
+    """The service passes a string; the root must not run it without failover."""
+    from silkscreen.agents.adk import failover
+
+    built: list[str] = []
+
+    def spy(model, **kwargs):
+        built.append(model)
+        return FailoverLlm(
+            model=model,
+            tiers=[FakeLlm(model=model, responses=[text_response("ok?")])],
+            cooldowns={},
+        )
+
+    monkeypatch.setattr(failover, "build_failover_llm", spy)
+    outcome = run_orchestrator(
+        message="make a regulator",
+        model="gemini-3.7-flash",
+        session_id="failover-str",
+        generate=lambda: None,
+        emit=lambda e: None,
+    )
+    assert built == ["gemini-3.7-flash"]
+    assert outcome.assistant == "ok?"
+
+
+def test_a_proposal_error_from_the_board_tool_reaches_the_caller_unwrapped():
+    """The service can only name the failure if the root does not rewrap it."""
+    import pytest
+    from silkscreen.agents.propose import ProposalAttempt, ProposalError
+
+    model = FakeLlm(model="fake-orchestrator", responses=[tool_response()])
+
+    def generate():
+        raise ProposalError(
+            "No valid circuit after 2 attempts.",
+            [ProposalAttempt(round=0, raw="{}", errors=["bad"])],
+        )
+
+    with pytest.raises(ProposalError):
+        run_orchestrator(
+            message="a robotic arm",
+            model=model,
+            session_id="proposal-error",
+            generate=generate,
+            emit=lambda e: None,
+        )

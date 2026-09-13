@@ -124,3 +124,69 @@ def test_the_catalog_marks_models_below_the_floor_as_legacy():
 
     assert by_id["gemini-3.7-flash"]["legacy"] is False
     assert by_id["gemini-3.1-pro-preview"]["legacy"] is True
+
+
+# Ids measured off the demo key's own generateContent list, 2026-09-13. Every
+# one on the left was offered in the retry panel and none can run the root.
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "gemini-2.5-flash-preview-tts",
+        "gemini-3.1-flash-tts-preview",
+        "gemini-2.5-flash-image",
+        "gemini-3-pro-image-preview",
+        "gemini-3.1-flash-lite-image",
+        "gemini-3.5-transcribe",
+        "gemini-robotics-er-2-preview",
+        "gemini-2.5-computer-use-preview-10-2025",
+        "gemini-3.1-flash-live-preview",
+    ],
+)
+def test_non_chat_models_are_not_offered(model_id):
+    assert not models.is_chat_model(model_id)
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.7-flash",
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-pro-preview-customtools",
+        "gemini-flash-latest",
+    ],
+)
+def test_text_chat_models_are_offered(model_id):
+    assert models.is_chat_model(model_id)
+
+
+def test_the_live_catalog_drops_non_chat_models(monkeypatch):
+    import sys
+    import types as pytypes
+
+    class Raw:
+        def __init__(self, name):
+            self.name = f"models/{name}"
+            self.display_name = name
+            self.supported_actions = ["generateContent"]
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.models = self
+
+        def list(self):
+            return [Raw("gemini-3.5-flash"), Raw("gemini-2.5-flash-image"),
+                    Raw("gemini-3.1-flash-tts-preview"), Raw("gemini-3.5-transcribe")]
+
+        def close(self):
+            pass
+
+    fake_genai = pytypes.SimpleNamespace(Client=Client)
+    monkeypatch.setitem(sys.modules, "google.genai", fake_genai)
+    import google
+
+    monkeypatch.setattr(google, "genai", fake_genai, raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "k")
+    catalog = models._live_catalog()
+    assert [m["id"] for m in catalog["models"]] == ["gemini-3.5-flash"]

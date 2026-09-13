@@ -5,8 +5,8 @@ grounded in a file in this repository (or the named branch/release); where
 something is pending or modest, it says so. Do not improve on these answers by
 rounding up.
 
-Naming, once: the product and desktop app are **Hardy** (formerly Ada; repo
-`machmoon/Ada`, app v0.3.1; the spoken wake word is still "Ada"). The engine package is still `silkscreen` — that is the engine's
+Naming, once: the product and desktop app are **Hardy** (formerly Hardy; repo
+`machmoon/Hardy`, app v0.3.1; the spoken wake word is still "Hardy"). The engine package is still `silkscreen` — that is the engine's
 name, and it is fine to say both.
 
 ---

@@ -21,10 +21,10 @@ import { useReviewedInKicad } from "@/hooks/useReviewedInKicad";
 import { useWakeWord } from "@/hooks/useWakeWord";
 import { useTrayState } from "@/hooks/useTrayState";
 import {
-  fulfillAdaDecision,
+  fulfillHardyDecision,
   routeSpokenUtterance,
   wouldStartBoard,
-} from "@/lib/ada-path";
+} from "@/lib/hardy-path";
 import { collectDeskCandidates, enrichWithDeskContext } from "@/lib/desk-context";
 import { resolveDesk } from "@/lib/silkscreen/desk";
 import {
@@ -192,7 +192,7 @@ export const SHAPE_ROOM_TIMEOUT_MS = 250;
 export interface OverlayStateInput {
   /** The full bar rather than the pill; see `isOverlayExpanded`. */
   open: boolean;
-  /** The microphone is open (or Ada is talking); see `barContent`. */
+  /** The microphone is open (or Hardy is talking); see `barContent`. */
   listening: boolean;
   /** A run is in flight in either state machine. */
   busy: boolean;
@@ -276,7 +276,7 @@ export function overlayStateFor(input: OverlayStateInput): OverlaySizing {
   const blocks: OverlayState[] = [];
   if (input.deskCaption) blocks.push("desk-caption");
   if (input.engineDown) blocks.push("engine-down");
-  if (input.commandNote && !input.stepsActive) blocks.push("ada-caption");
+  if (input.commandNote && !input.stepsActive) blocks.push("hardy-caption");
   if (input.stepsActive) blocks.push("steps");
   if (input.deliverOpen) blocks.push("deliver");
   // One running state now: the raw feed lives in the dashboard console, so
@@ -303,7 +303,7 @@ const DOMINANCE: readonly OverlayState[] = [
   "result",
   "failure",
   "cancelled",
-  "ada-caption",
+  "hardy-caption",
   "engine-down",
   "desk-caption",
 ];
@@ -617,9 +617,9 @@ const Kaleo = () => {
   const [expanded, setExpanded] = useState(true);
   // Which skin is on, live: Settings is a different webview, so this arrives
   // as a `storage` event rather than through a context.
-  const { skin, adaInTerminal, setSkin } = useOverlaySkin();
+  const { skin, hardyInTerminal, setSkin } = useOverlaySkin();
   /**
-   * The terminal skin's Ada half.
+   * The terminal skin's Hardy half.
    *
    * `/chat/stream` can decide to generate a board, which is a paid run — so
    * this streams every frame into the terminal as it arrives rather than
@@ -630,7 +630,7 @@ const Kaleo = () => {
     `term-${Math.random().toString(36).slice(2, 10)}`,
   );
   const askFromTerminal = useCallback(
-    async (text: string, mode: "ada" | "agent", write: (line: string) => void) => {
+    async (text: string, mode: "hardy" | "agent", write: (line: string) => void) => {
       const outcome = await ask(text, {
         baseUrl: run.baseUrl,
         token: run.token,
@@ -1111,7 +1111,7 @@ const Kaleo = () => {
     });
   }, [run, steps, stepMode, summaryMode, interpret, busy]);
 
-  // Local wake → transcript → ada-path. Deixis goes to /desk/resolve (or a
+  // Local wake → transcript → hardy-path. Deixis goes to /desk/resolve (or a
   // caption) and never to /generate. wake-flow still owns board vs command.
   const wake = useWakeWord({
     baseUrl: run.baseUrl,
@@ -1120,7 +1120,7 @@ const Kaleo = () => {
     // On-device wake is on. `wake_status` still only reports whether an ONNX
     // file loads rather than whether it recognises anything, so the guarantee
     // behind this flag is measurement, not the status call: the shipped
-    // `resources/wake/hey_ada.onnx` scores 0.87 recall on "Hey Ada" spoken by
+    // `resources/wake/hey_hardy.onnx` scores 0.87 recall on "Hey Hardy" spoken by
     // voices it never trained on, and zero false accepts over held-out speech,
     // at the 0.7 threshold the app runs (scratchpad measurement, 2026-09-07).
     // The model it replaces was a collapsed training run that emitted ~0.09
@@ -1140,7 +1140,7 @@ const Kaleo = () => {
           busy,
           stepsStatus: steps.status,
         });
-        const action = await fulfillAdaDecision(routed, {
+        const action = await fulfillHardyDecision(routed, {
           resolveDesk: (text, snap) =>
             resolveDesk(run.baseUrl, {
               utterance: text,
@@ -1241,7 +1241,7 @@ const Kaleo = () => {
   }, []);
 
   // The menu bar icon follows the ear: the glyph fills in while the mic is
-  // open, and its "Ada listening" item is the same switch as the bar's mic
+  // open, and its "Hardy listening" item is the same switch as the bar's mic
   // button. See useTrayState for why the check mark waits for this report.
   useTrayState({
     listening: wake.listening,
@@ -1480,12 +1480,12 @@ const Kaleo = () => {
           // The terminal skin replaces the bar rather than sitting inside it:
           // it is a real shell on a pty (`src-tauri/src/pty.rs`), and a shell
           // squeezed into a one-line strip is neither a terminal nor a bar.
-          // Ada shares its input line — see `@/lib/terminal-sigil`.
+          // Hardy shares its input line — see `@/lib/terminal-sigil`.
           <div ref={contentRef} className="w-full relative kv-shape-in" key="terminal">
             <Card className="flex h-[320px] w-full flex-col overflow-hidden p-0">
               <SkinStrip name="Terminal" onLeave={() => setSkin("plain")} />
               <div className="min-h-0 flex-1">
-                <TerminalSkin adaEnabled={adaInTerminal} onAsk={askFromTerminal} />
+                <TerminalSkin hardyEnabled={hardyInTerminal} onAsk={askFromTerminal} />
               </div>
             </Card>
           </div>
@@ -1816,7 +1816,7 @@ const Kaleo = () => {
           {commandNote && !stepsActive ? (
             <div
               className="kv-settle flex items-center justify-between gap-2 rounded-md bg-muted/60 px-2 py-1.5"
-              data-testid="ada-caption"
+              data-testid="hardy-caption"
               role="status"
             >
               {/* Four lines, matching this state's constant. The longest copy in
@@ -1831,7 +1831,7 @@ const Kaleo = () => {
                   setCommandNote(null);
                   safeLocalStorage.removeItem(TOUR_CAPTION_KEY);
                 }}
-                data-testid="ada-caption-dismiss"
+                data-testid="hardy-caption-dismiss"
               >
                 Dismiss
               </Button>

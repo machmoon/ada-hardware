@@ -1,8 +1,8 @@
 /**
- * One orchestrator turn: ask Ada a question, get her answer back.
+ * One orchestrator turn: ask Hardy a question, get her answer back.
  *
  * `POST /chat/stream` already existed on the engine and had no client. It is
- * the right endpoint for the terminal skin's Ada half — but it has a property
+ * the right endpoint for the terminal skin's Hardy half — but it has a property
  * that makes a naive client dangerous, and this module exists to handle it:
  *
  * **The orchestrator can start a board run.** `service/app.py` hands it a
@@ -26,7 +26,7 @@ import { REQUEST_TIMEOUT_MS, SilkscreenError, authHeaders, parseFrame } from "./
 import type { RunResult, StreamFrame } from "./types";
 
 export interface ChatOutcome {
-  /** Ada's reply, as text. */
+  /** Hardy's reply, as text. */
   assistant: string;
   /** She is asking for more before she can act. */
   needsClarification: boolean;
@@ -50,7 +50,7 @@ export interface AskOptions {
  *
  * Throws `SilkscreenError` rather than returning a falsy answer: a terminal
  * that printed an empty line when the engine was unreachable would read as
- * "Ada had nothing to say", which is the one thing that must not happen.
+ * "Hardy had nothing to say", which is the one thing that must not happen.
  */
 export async function ask(question: string, options: AskOptions): Promise<ChatOutcome> {
   const text = question.trim();

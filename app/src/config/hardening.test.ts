@@ -104,7 +104,7 @@ describe("screen capture", () => {
 
 // The menu bar icon (src-tauri/src/tray.rs) is built and driven from Rust; the
 // webview's only part in it is one `invoke("tray_set_state")` and one
-// `listen("tray-ada-toggle")`. So the capability files need the event and
+// `listen("tray-hardy-toggle")`. So the capability files need the event and
 // nothing more: no `core:tray:*` or `core:menu:*` grant, because no JS calls
 // the tray or menu API and a grant nothing uses is a grant something could
 // misuse. The Cargo features are pinned too, since without `tray-icon` the
@@ -127,7 +127,7 @@ describe("menu bar tray", () => {
     json.permissions.map((p) => (typeof p === "string" ? p : p.identifier));
 
   it.each(capabilities)("$name lets the overlay hear the tray's toggle", ({ json }) => {
-    expect(listenEvents(json)).toContain("tray-ada-toggle");
+    expect(listenEvents(json)).toContain("tray-hardy-toggle");
   });
 
   it.each(capabilities)("$name grants no JS tray or menu API", ({ json }) => {

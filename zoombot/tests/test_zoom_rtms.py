@@ -305,7 +305,7 @@ def test_a_complete_stream_yields_chunks_with_zooms_own_labels():
     media = FakeConnection(
         [
             DATA_OK,
-            transcript("we need a three point three volt rail", user_name="Ada"),
+            transcript("we need a three point three volt rail", user_name="Hardy"),
             {"msg_type": MSG_TYPE["KEEP_ALIVE_REQ"], "timestamp": 42},
             transcript("with a usb c input", at=2000),
             STREAM_END,
@@ -318,7 +318,9 @@ def test_a_complete_stream_yields_chunks_with_zooms_own_labels():
     )
     chunks = list(stream)
     assert chunks == [
-        TranscriptChunk("uuid-1", "Ada", "we need a three point three volt rail", 1000),
+        TranscriptChunk(
+            "uuid-1", "Hardy", "we need a three point three volt rail", 1000
+        ),
         TranscriptChunk("uuid-1", "16778240", "with a usb c input", 2000),
     ]
     # The handshakes went out signed, and the keep-alive was answered.

@@ -15,13 +15,22 @@
     onsubmit,
     initial = null,
     models = [],
-    initialModel = 'gemini-3.7-flash',
+    initialModel = 'auto',
     initialThinkingLevel = 'auto',
     initialQuotaRpm = 'auto',
     placementCapabilities = {},
   } = $props()
 
+  // Auto first and default: the service resolves it (SILKSCREEN_ORCHESTRATOR_MODEL,
+  // else SILKSCREEN_MODEL) and fails the root over to 3.5 Flash then Flash-Lite.
+  // A hard-coded 3.7 Flash default is what the 2026-09-13 demo ran into after
+  // that model's daily quota was spent: the form kept asking for it by name.
   const ORCHESTRATOR_MODELS = [
+    {
+      id: 'auto',
+      name: 'Auto',
+      note: 'Server default · fails over to 3.5 Flash, then Flash-Lite',
+    },
     {
       id: 'gemini-3.7-flash',
       name: 'Gemini 3.7 Flash',
@@ -70,9 +79,11 @@
   // part, and unlike the case it has no demo payoff worth spending that on
   // unasked. A restored request keeps what it said.
   let sourcing = $state(seed.sourcing === true)
+  // Off by default for the same reason: model calls plus GitHub requests.
+  let priorArt = $state(seed.prior_art === true)
   // Seeded once with the rest of the editable form state.
   // svelte-ignore state_referenced_locally
-  let orchestratorModel = $state(initialModel || 'gemini-3.7-flash')
+  let orchestratorModel = $state(initialModel || 'auto')
   // svelte-ignore state_referenced_locally
   let thinkingLevel = $state(initialThinkingLevel || 'auto')
   // svelte-ignore state_referenced_locally
@@ -107,6 +118,7 @@
     enclosure_rigorous: enclosureRigorous,
     enclosure_style: enclosureStyle,
     sourcing,
+    prior_art: priorArt,
     placement_enabled: placementEnabled,
     placement_profile: placementProfile,
     placement_policy: placementPolicy,
@@ -121,7 +133,7 @@
   const advertisedModels = $derived(new Set(models.map((model) => String(model?.id ?? ''))))
   const legacyModels = $derived(new Set(models.filter((model) => model?.legacy).map((model) => String(model.id))))
   const selectedUnavailable = $derived(
-    advertisedModels.size > 0 && !advertisedModels.has(orchestratorModel),
+    orchestratorModel !== 'auto' && advertisedModels.size > 0 && !advertisedModels.has(orchestratorModel),
   )
   const constraintsReady = $derived(constraintManifestReady(constraints))
   const canSubmit = $derived(
@@ -478,9 +490,9 @@
           {#each ORCHESTRATOR_MODELS as option (option.id)}
             <option
               value={option.id}
-              disabled={(advertisedModels.size > 0 && !advertisedModels.has(option.id)) || legacyModels.has(option.id)}
+              disabled={option.id !== 'auto' && ((advertisedModels.size > 0 && !advertisedModels.has(option.id)) || legacyModels.has(option.id))}
             >
-              {option.name}{advertisedModels.size > 0 && !advertisedModels.has(option.id) ? ' · unavailable' : legacyModels.has(option.id) ? ' · below the Gemini 3.5 floor' : ''}
+              {option.name}{option.id !== 'auto' && advertisedModels.size > 0 && !advertisedModels.has(option.id) ? ' · unavailable' : legacyModels.has(option.id) ? ' · below the Gemini 3.5 floor' : ''}
             </option>
           {/each}
         </select>
@@ -646,6 +658,14 @@
     >
       <input type="checkbox" bind:checked={sourcing} data-testid="intent-form-sourcing" />
       <span>Source the parts <span class="hint-inline">(one more model call + datasheet probes)</span></span>
+    </label>
+
+    <label
+      class="control checkbox"
+      title="Before designing, search GitHub for open-source projects that already build this, read their README and BOM, and design with their proven parts. Every fact is cited to the file it came from."
+    >
+      <input type="checkbox" bind:checked={priorArt} data-testid="intent-form-prior-art" />
+      <span>Research prior art <span class="hint-inline">(GitHub search + up to three model calls)</span></span>
     </label>
 
     <div class="spacer"></div>

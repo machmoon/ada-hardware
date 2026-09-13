@@ -11,7 +11,7 @@ export interface CustomizableState {
     isEnabled: boolean;
   };
   /**
-   * The "Ada" wake word. Off by default: on macOS the paid path is one
+   * The "Hardy" wake word. Off by default: on macOS the paid path is one
    * Gemini transcript per click, not always-on spotting. The ear and
    * Settings share this switch; the mic button is the reliable voice path.
    */
@@ -20,7 +20,7 @@ export interface CustomizableState {
   };
 }
 
-// Ada is a control strip floating over KiCad, so it stays on
+// Hardy is a control strip floating over KiCad, so it stays on
 // top by default: a stage that launches KiCad would otherwise bury it.
 export const DEFAULT_CUSTOMIZABLE_STATE: CustomizableState = {
   appIcon: { isVisible: true },

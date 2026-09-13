@@ -1,7 +1,7 @@
-# Menu-bar (tray) glyphs for Kaleo/Ada, drawn with Pillow (system python3;
+# Menu-bar (tray) glyphs for Kaleo/Hardy, drawn with Pillow (system python3;
 # `python3 gen.py` in this directory regenerates all six files).
 #
-# Two states: an outline ring (Ada muted / idle) and a filled orb (the
+# Two states: an outline ring (Hardy muted / idle) and a filled orb (the
 # microphone is open) -- the overlay's "orb", not the app logo, because a
 # 22 px K on a green square reads as nothing at 18 pt in a menu bar.
 #

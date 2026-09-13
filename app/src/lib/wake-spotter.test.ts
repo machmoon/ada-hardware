@@ -126,11 +126,11 @@ describe("wakeShape", () => {
   it("names why it said no", () => {
     // Via the spotter, so the window starts at the word rather than at the
     // room tone in front of it — the same framing the ear gives it at runtime.
-    expect(spot("n_yes_sam").utterances[0].reason).toBe("one syllable, Ada has two");
+    expect(spot("n_yes_sam").utterances[0].reason).toBe("one syllable, Hardy has two");
     expect(spot("n_number_sam").utterances[0].reason).toBe(
-      "too many syllables to start with Ada"
+      "too many syllables to start with Hardy"
     );
-    expect(spot("n_uh_sam").utterances[0].reason).toBe("a hard consonant Ada does not have");
+    expect(spot("n_uh_sam").utterances[0].reason).toBe("a hard consonant Hardy does not have");
   });
 });
 
@@ -150,7 +150,7 @@ describe("the spotter on measured speech", () => {
 
   it("accepts 8 of the 9 clips that contain the wake word", () => {
     const accepted = POSITIVES.filter((name) => spot(name).accepted);
-    // Daniel's bare "Ada" is 140 ms with the two syllables run together; it is
+    // Daniel's bare "Hardy" is 140 ms with the two syllables run together; it is
     // the known miss, recorded rather than hidden.
     expect(POSITIVES.filter((n) => !accepted.includes(n))).toEqual(["p_ada_dan"]);
     expect(accepted).toHaveLength(8);
@@ -159,7 +159,7 @@ describe("the spotter on measured speech", () => {
   it("rejects 10 of the 17 clips that do not", () => {
     const accepted = NEGATIVES.filter((name) => spot(name).accepted);
     // These are the measured false accepts. Each costs exactly one transcript,
-    // which then does not match the wake word, so none of them can wake Ada.
+    // which then does not match the wake word, so none of them can wake Hardy.
     expect(accepted.sort()).toEqual([
       "n_adapter_sam",
       "n_canada_sam",

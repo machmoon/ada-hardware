@@ -259,6 +259,9 @@ _LIBRARY_COUNTERPART = {
     "USB_C_Receptacle_Power":
         "Connector_USB.pretty/"
         "USB_C_Receptacle_GCT_USB4125-xx-x_6P_TopMnt_Horizontal.kicad_mod",
+    "USB_C_Receptacle_USB2.0_16P":
+        "Connector_USB.pretty/"
+        "USB_C_Receptacle_GCT_USB4105-xx-A_16P_TopMnt_Horizontal.kicad_mod",
     "BatteryHolder_CR2032":
         "Battery.pretty/BatteryHolder_Keystone_3002_1x2032.kicad_mod",
     "BatteryHolder_AAA_1x":
@@ -374,6 +377,10 @@ def test_pads_of_different_nets_clear_the_default_netclass(package):
         for b in fp.pads[i + 1:]:
             if a.number == b.number:
                 continue  # one net, one terminal: they may be as close as they like
+            if (a.x_nm, a.y_nm, a.w_nm, a.h_nm) == (b.x_nm, b.y_nm, b.w_nm, b.h_nm):
+                # A stacked pair (USB-C A1/B12): one land with two contact
+                # names. ``board._pad_errors`` refuses one on two nets.
+                continue
             gap = _rect_gap_mm(a, b)
             assert gap >= DEFAULT_CLEARANCE_MM, (
                 f"{package}: pads {a.number} and {b.number} are {gap}mm apart"
@@ -384,7 +391,9 @@ def test_pads_of_different_nets_clear_the_default_netclass(package):
 #: exception on purpose: a real 6-way power-only receptacle's pads are called
 #: A5/B5/A9/B9/A12/B12, and renumbering them 1..6 would invent names the part
 #: does not have.
-_NUMBERED_PACKAGES = [p for p in _ALL_PACKAGES if p != "USB_C_Receptacle_Power"]
+_NUMBERED_PACKAGES = [
+    p for p in _ALL_PACKAGES if not p.startswith("USB_C_Receptacle_")
+]
 
 
 @pytest.mark.parametrize("package", _NUMBERED_PACKAGES)
@@ -625,3 +634,231 @@ def test_the_generated_drills_match_the_kicad_footprint(package):
             f"{package} pad {pad.number}: drill {to_mm(pad.drill_nm)}mm, "
             f"the library says {want}mm"
         )
+
+
+# --------------------------------------------------- chips drawn by part number
+#
+# The robot-arm controller (2026-09-13) needs two parts the pin-count rule
+# drew wrongly or refused: a PCA9685, which is made in TSSOP-28 and never in
+# SOIC-28, and an ESP32-WROOM-32E module. Both are checked here the way the
+# connectors are -- independent pad arithmetic, then the KiCad file itself.
+
+from silkscreen.footprints import (  # noqa: E402
+    esp32_wroom_32e,
+    ti_powerpad_so8,
+    tssop,
+)
+
+_CHIPS = {
+    "TSSOP-28": (
+        lambda: tssop(28),
+        "Package_SO.pretty/TSSOP-28_4.4x9.7mm_P0.65mm.kicad_mod",
+    ),
+    "ESP32-WROOM-32E": (
+        esp32_wroom_32e,
+        "RF_Module.pretty/ESP32-WROOM-32E.kicad_mod",
+    ),
+    "TI_SO-PowerPAD-8": (
+        ti_powerpad_so8,
+        "Package_SO.pretty/TI_SO-PowerPAD-8.kicad_mod",
+    ),
+}
+
+#: The exposed-pad number each chip repeats across several lands.
+_EXPOSED_PAD = {"ESP32-WROOM-32E": "39", "TI_SO-PowerPAD-8": "9"}
+
+
+@pytest.mark.parametrize("name", sorted(_CHIPS))
+def test_named_chip_pins_wind_anticlockwise_from_top_left(name):
+    """Pin 1 top-left (x < 0, y < 0 in the Y-down frame), and the perimeter
+    pins sweep one way round the centre with strictly decreasing bearing --
+    the chirality check above, minus the ESP32's centre ground slug, which
+    has no bearing to speak of."""
+    fp = _CHIPS[name][0]()
+    leads = [p for p in fp.pads if p.number != _EXPOSED_PAD.get(name)]
+    assert [p.number for p in leads] == [str(i + 1) for i in range(len(leads))]
+    first = leads[0]
+    assert first.x_nm < 0 and first.y_nm < 0
+    start = math.atan2(first.y_nm, first.x_nm)
+    bearings = [
+        (math.atan2(p.y_nm, p.x_nm) - start) % math.tau or math.tau for p in leads
+    ]
+    assert all(a > b for a, b in zip(bearings, bearings[1:], strict=False)), name
+
+
+@pytest.mark.parametrize("name", sorted(_CHIPS))
+def test_named_chip_pads_clear_each_other_and_sit_in_the_courtyard(name):
+    fp = _CHIPS[name][0]()
+    for i, a in enumerate(fp.pads):
+        assert abs(a.x_nm) + a.w_nm // 2 <= fp.courtyard_w_nm, a.number
+        assert abs(a.y_nm) + a.h_nm // 2 <= fp.courtyard_h_nm, a.number
+        for b in fp.pads[i + 1:]:
+            if a.number != b.number:
+                gap = _rect_gap_mm(a, b)
+                assert gap >= DEFAULT_CLEARANCE_MM, (name, a.number, b.number)
+    for seg in silk_segments(fp):
+        for pad in fp.pads:
+            gap = _segment_gap_to_pad_nm(seg, pad) - SILK_STROKE_NM / 2
+            assert gap >= SILK_PAD_CLEARANCE_NM - 1, (name, seg, pad.number)
+
+
+def test_named_chip_courtyards_are_not_tighter_than_the_library():
+    """Half-extents read off the library F.CrtYd by hand: TSSOP-28 x +-3.85,
+    y +-5.1; ESP32-WROOM-32E's module part x +-9.75, y down to 13.54 (its
+    antenna keep-out above is deliberately not reserved -- see the
+    generator's docstring)."""
+    tssop28 = tssop(28)
+    assert to_mm(tssop28.courtyard_w_nm) == pytest.approx(3.85, abs=0.001)
+    assert to_mm(tssop28.courtyard_h_nm) == pytest.approx(5.1, abs=0.001)
+    module = esp32_wroom_32e()
+    assert to_mm(module.courtyard_w_nm) >= 9.75
+    assert to_mm(module.courtyard_h_nm) >= 13.54
+    # TI_SO-PowerPAD-8: F.CrtYd x +-4, y +-2.7.
+    powerpad = ti_powerpad_so8()
+    assert to_mm(powerpad.courtyard_w_nm) >= 4.0
+    assert to_mm(powerpad.courtyard_h_nm) >= 2.7
+    # GCT USB4105: F.CrtYd x +-5.32, y -4.76..4.18 (the undrawn shell tabs
+    # are inside it, and the real shell still needs the room).
+    usb = connector("USB_C_Receptacle_USB2.0_16P")
+    assert to_mm(usb.courtyard_w_nm) >= 5.32
+    assert to_mm(usb.courtyard_h_nm) >= 4.76
+
+
+def test_the_powerpad_is_pin_9_on_four_lands_and_carries_its_net():
+    fp = ti_powerpad_so8({"9": "GND", "6": "GND", "7": "VIN"})
+    pad9 = [p for p in fp.pads if p.number == "9"]
+    assert len(pad9) == 4 and all(p.net == "GND" for p in pad9)
+    assert len({p.number for p in fp.pads}) == 9
+
+
+def test_the_usb2_receptacle_has_the_parts_sixteen_contacts_and_stacks_four():
+    """The real part's contact names, with no invented "1".."16"; and the
+    four positions where a row-A and a row-B contact share one land, computed
+    from the raw pad fields."""
+    fp = connector("USB_C_Receptacle_USB2.0_16P")
+    names = {p.number for p in fp.pads}
+    assert names == {f"{row}{n}" for row in "AB" for n in (1, 4, 5, 6, 7, 8, 9, 12)}
+    stacked: dict[tuple[int, int], set[str]] = {}
+    for pad in fp.pads:
+        stacked.setdefault((pad.x_nm, pad.y_nm), set()).add(pad.number)
+    pairs = sorted(sorted(v) for v in stacked.values() if len(v) > 1)
+    assert pairs == [["A1", "B12"], ["A12", "B1"], ["A4", "B9"], ["A9", "B4"]]
+    assert all(not p.is_tht for p in fp.pads)
+
+
+def test_the_esp32_ground_slug_is_one_pin_across_nine_pads():
+    fp = esp32_wroom_32e({"39": "GND", "1": "GND", "2": "+3V3"})
+    slug = [p for p in fp.pads if p.number == "39"]
+    assert len(slug) == 9 and all(p.net == "GND" for p in slug)
+    assert all(not p.is_tht for p in fp.pads), "the thermal vias are not drawn"
+    assert len({p.number for p in fp.pads}) == 39
+
+
+@pytest.mark.skipif(
+    _installed_footprints() is None,
+    reason="KiCad's footprint library is not installed (KICAD_FOOTPRINT_DIR)",
+)
+@pytest.mark.parametrize("name", sorted(_CHIPS))
+def test_named_chip_matches_the_kicad_footprint_pad_for_pad(name):
+    """Absolute positions, not centroid-removed: both library parts are body
+    anchored exactly as ours are, which is also what lets models3d claim
+    their models with no offset. Library pads turned 90 degrees have their
+    size swapped, because ``Pad`` stores the as-placed width and height. The
+    ESP32's twelve 0.2 mm-drill thermal vias are excluded by drill: they are
+    the one thing the generator's docstring says it does not draw."""
+    from kiutils.footprint import Footprint as LibFootprint
+
+    build, relative = _CHIPS[name]
+    lib = LibFootprint.from_file(str(_installed_footprints() / relative))
+    theirs = []
+    for pad in lib.pads:
+        if pad.drill is not None and pad.type == "thru_hole":
+            continue
+        w, h = pad.size.X, pad.size.Y
+        if round(pad.position.angle or 0) % 180 == 90:
+            w, h = h, w
+        x, y = round(pad.position.X, 4), round(pad.position.Y, 4)
+        theirs.append((pad.number, x, y, w, h))
+    ours = [
+        (p.number, round(to_mm(p.x_nm), 4), round(to_mm(p.y_nm), 4),
+         to_mm(p.w_nm), to_mm(p.h_nm))
+        for p in build().pads
+    ]
+    assert len(ours) == len(theirs), f"{name}: {len(ours)} pads, library {len(theirs)}"
+    key = lambda r: (r[0], r[1], r[2])  # noqa: E731
+    for mine, real in zip(sorted(ours, key=key), sorted(theirs, key=key), strict=True):
+        assert mine[0] == real[0], f"{name}: pad numbering differs"
+        for got, want, what in zip(mine[1:], real[1:], "xywh", strict=True):
+            assert abs(got - want) <= 0.001, (
+                f"{name} pad {mine[0]}: {what} is {got}mm, the library says {want}mm"
+            )
+
+
+# ------------------------------------------- bulk capacitors and power inductors
+
+from silkscreen.footprints import electrolytic_capacitor, power_inductor  # noqa: E402
+
+_BIG_PASSIVES = {
+    "CP_Elec_10x10": (
+        electrolytic_capacitor,
+        "Capacitor_SMD.pretty/CP_Elec_10x10.kicad_mod",
+        (6.25, 5.4),
+    ),
+    "L_Bourns_SRR1260": (
+        power_inductor,
+        "Inductor_SMD.pretty/L_Bourns_SRR1260.kicad_mod",
+        (6.5, 6.5),
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "value, kind, expected",
+    [
+        ("1000uF", "capacitor", "CP_Elec_10x10"),
+        ("220uF 16V", "capacitor", "CP_Elec_10x10"),
+        ("100uF", "capacitor", "CP_Elec_10x10"),
+        ("47uF", "capacitor", "C_1206"),
+        ("15uH", "inductor", "L_Bourns_SRR1260"),
+        ("1uH", "inductor", "L_Bourns_SRR1260"),
+        ("470nH", "inductor", "I_0805"),
+    ],
+)
+def test_bulk_values_get_parts_that_exist(value, kind, expected):
+    """No MLCC is 1000 uF in 1206, and no 0805 carries a 5 A buck's ripple."""
+    assert for_passive(kind, value).name == expected
+
+
+def test_the_electrolytic_is_polarised_and_marks_its_negative_pad():
+    fp = electrolytic_capacitor(net1="+5V", net2="GND")
+    assert fp.polarised
+    bar = cathode_mark(fp)
+    assert bar is not None and bar[0] > 0, "the stripe belongs beside pad 2 (-)"
+    assert not power_inductor().polarised
+
+
+@pytest.mark.parametrize("name", sorted(_BIG_PASSIVES))
+def test_big_passive_courtyard_is_not_tighter_than_the_library(name):
+    build, _, (want_w, want_h) = _BIG_PASSIVES[name]
+    fp = build()
+    assert to_mm(fp.courtyard_w_nm) >= want_w - 1e-9
+    assert to_mm(fp.courtyard_h_nm) >= want_h - 1e-9
+
+
+@pytest.mark.skipif(
+    _installed_footprints() is None,
+    reason="KiCad's footprint library is not installed (KICAD_FOOTPRINT_DIR)",
+)
+@pytest.mark.parametrize("name", sorted(_BIG_PASSIVES))
+def test_big_passive_matches_the_kicad_footprint(name):
+    build, relative, _ = _BIG_PASSIVES[name]
+    theirs = sorted(_library_pads(_installed_footprints() / relative))
+    ours = sorted(
+        (p.number, to_mm(p.x_nm), to_mm(p.y_nm), to_mm(p.w_nm), to_mm(p.h_nm))
+        for p in build().pads
+    )
+    assert len(ours) == len(theirs)
+    for mine, real in zip(ours, theirs, strict=True):
+        assert mine[0] == real[0]
+        for got, want in zip(mine[1:], real[1:], strict=True):
+            assert abs(got - want) <= 0.001, (name, mine, real)

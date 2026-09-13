@@ -1,7 +1,7 @@
 /**
- * One input line, two destinations: the shell, or Ada.
+ * One input line, two destinations: the shell, or Hardy.
  *
- * The ask was a terminal skin that "doubles as Ada and terminal" — not a
+ * The ask was a terminal skin that "doubles as Hardy and terminal" — not a
  * terminal with a chat pane bolted beside it. Wave and Tabby both put AI in a
  * separate panel; the one piece of prior art that actually shares the input
  * line is Butterfish (MIT), and its answer is the right one: no classifier,
@@ -12,7 +12,7 @@
  * Butterfish's rules, adopted:
  *
  * - a line starting with a capital letter goes to the model as chat;
- * - `!` prefixes an agent request — Ada may propose commands;
+ * - `!` prefixes an agent request — Hardy may propose commands;
  * - everything else is a shell command, unchanged.
  *
  * Two rules of our own, both because the Butterfish set has holes that bite
@@ -26,13 +26,13 @@
  *   borrows a reflex rather than inventing one.
  * - **Nothing routes while the alternate screen is up.** When `vim`, `htop`
  *   or `less` is running, every keystroke belongs to that program — `:wq` is
- *   not a shell command and `Quit` is not a question for Ada. xterm.js
+ *   not a shell command and `Quit` is not a question for Hardy. xterm.js
  *   reports this directly as `buffer.active.type`, so it is a fact we read
  *   rather than a guess.
  */
 
 /** Where a submitted line goes. */
-export type Destination = "shell" | "ada" | "agent";
+export type Destination = "shell" | "hardy" | "agent";
 
 export interface Routed {
   destination: Destination;
@@ -49,7 +49,7 @@ export interface RouteContext {
    */
   buffer?: "normal" | "alternate";
   /** The user turned sigil routing off; the skin is then a plain terminal. */
-  adaEnabled?: boolean;
+  hardyEnabled?: boolean;
 }
 
 const CAPITAL = /^[A-Z]/;
@@ -69,7 +69,7 @@ export function route(line: string, context: RouteContext = {}): Routed {
   if (context.buffer === "alternate") {
     return shell("a full-screen program is running");
   }
-  if (context.adaEnabled === false) {
+  if (context.hardyEnabled === false) {
     return shell("Hardy routing is off");
   }
   // Whitespace-only, or empty: a bare Enter redraws the prompt.
@@ -87,7 +87,7 @@ export function route(line: string, context: RouteContext = {}): Routed {
   }
 
   if (CAPITAL.test(line)) {
-    return { destination: "ada", text: line, why: "a capital first letter asks Hardy" };
+    return { destination: "hardy", text: line, why: "a capital first letter asks Hardy" };
   }
 
   return shell("runs in your shell");

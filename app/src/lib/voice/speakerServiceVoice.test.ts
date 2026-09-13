@@ -3,7 +3,7 @@
 // Kept in this directory rather than appended to `speech/speaker.test.ts` so
 // the service-voice work stays in one place and out of a file another agent
 // has been editing. What it pins is the honesty rule, not the plumbing: when
-// the engine has no voice, Ada must STAY SILENT and say why — she must not
+// the engine has no voice, Hardy must STAY SILENT and say why — she must not
 // quietly hand the line to the Compact system voice. That is the exact
 // failure this change exists to remove: for weeks the user heard the robot
 // and nothing anywhere explained that it was a fallback at all.
@@ -53,7 +53,7 @@ beforeEach(() => {
 describe("service voice fall-through", () => {
   // This test used to assert the opposite: that an engine with no voice was
   // finished off by `speechSynthesis`. That contract is what made the macOS
-  // Compact voice Ada's everyday voice, so it is now reversed — a missing
+  // Compact voice Hardy's everyday voice, so it is now reversed — a missing
   // engine voice produces SILENCE unless someone chose the platform voice by
   // name. See `settings.isPlatformVoiceAllowed` for why a louder warning was
   // not judged sufficient.
@@ -158,7 +158,7 @@ describe("service voice fall-through", () => {
   // `silkscreen_tour` and `silkscreen_last_run`. `silkscreen_engine_base_url`
   // was absent, because nothing writes it until someone opens the Engine pane
   // and types an address — so `engineBaseUrl()` returned `""`, `defaultMakeBackend`
-  // skipped the service branch entirely, and Ada spoke every word she has ever
+  // skipped the service branch entirely, and Hardy spoke every word she has ever
   // spoken on that machine through `speechSynthesis`, while Kokoro sat loaded
   // and answering `GET /speak` with `"state": "ready"`.
   //

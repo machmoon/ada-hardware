@@ -1,9 +1,9 @@
-"""Ada's voice: text in, audio frames out, decided in the service.
+"""Hardy's voice: text in, audio frames out, decided in the service.
 
 Why this lives here and not in the webview
 ------------------------------------------
 
-Every word Ada speaks today is the browser's ``speechSynthesis``, which on
+Every word Hardy speaks today is the browser's ``speechSynthesis``, which on
 macOS resolves to a *Compact* system voice -- the robot the complaint is
 about. Moving synthesis behind an HTTP route buys three things the webview
 cannot have:
@@ -12,7 +12,7 @@ cannot have:
   speak with voices the OS installed. The service can run a real neural model
   or call a hosted one.
 * **One seam, three front ends.** The SPA, the desktop overlay and anything
-  else that wants Ada's voice ask the same route rather than each re-deriving
+  else that wants Hardy's voice ask the same route rather than each re-deriving
   a backend ladder.
 * **Keys stay out of the renderer.** An ``ELEVENLABS_API_KEY`` read in the
   webview is a key in a webview; read here it never crosses the process
@@ -149,7 +149,7 @@ class TtsFailed(TtsError):
 #: element rather than to Web Audio.
 AUDIO_FORMATS = ("wav", "pcm16")
 
-#: One spoken turn. Ada reads short status sentences, not documents, and an
+#: One spoken turn. Hardy reads short status sentences, not documents, and an
 #: unbounded body on a metered hosted engine is an unbounded bill. A longer
 #: request is refused by name rather than truncated, because a truncated
 #: readback that stops mid-net-name is the exact dishonesty this repo's
@@ -166,7 +166,7 @@ DEFAULT_KOKORO_VOICE = "af_heart"
 ELEVENLABS_MODEL_ID = "eleven_flash_v2_5"
 
 #: "Rachel", ElevenLabs' default public voice. Overridable per request and by
-#: ``ELEVENLABS_VOICE_ID`` so nobody has to edit code to change Ada's voice.
+#: ``ELEVENLABS_VOICE_ID`` so nobody has to edit code to change Hardy's voice.
 DEFAULT_ELEVENLABS_VOICE = "21m00Tcm4TlvDq8ikWAM"
 
 #: Tried in this order when the caller names no engine. ``system`` is absent
@@ -636,7 +636,7 @@ class KokoroEngine:
                 )
             except Exception as exc:
                 # Named, mid-stream, rather than a short read the caller would
-                # hear as Ada trailing off.
+                # hear as Hardy trailing off.
                 raise TtsFailed(
                     f"kokoro failed on {len(chunk)} characters: "
                     f"{type(exc).__name__}: {exc}"

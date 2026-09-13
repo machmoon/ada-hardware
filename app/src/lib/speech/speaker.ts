@@ -87,7 +87,7 @@ export interface SpeakerDeps {
 /**
  * How many lines may wait their turn.
  *
- * Bounded because a burst of stage moments would otherwise leave Ada
+ * Bounded because a burst of stage moments would otherwise leave Hardy
  * monologuing through news that stopped being true a minute ago. When the cap
  * is reached the OLDEST pending line is dropped, not the newest: the newest is
  * the most recent status, and it is the one worth hearing.
@@ -139,7 +139,7 @@ export function resetServiceVoice(): void {
  * localStorage on 2026-09-08: the keys present were `silkscreen_overlay_skin`,
  * `silkscreen_tour` and `silkscreen_last_run`, and `silkscreen_engine_base_url`
  * was simply not there. So `baseUrl` was falsy, the service backend was never
- * constructed, `POST /speak` was never called even once, and every word Ada
+ * constructed, `POST /speak` was never called even once, and every word Hardy
  * has ever said on this machine came out of `speechSynthesis`. Kokoro was
  * running, reachable and correct the whole time, and nothing ever asked it.
  *
@@ -223,7 +223,7 @@ function defaultMakeBackend(settings: VoiceSettings): SpeechBackend {
   // The service has already told us it has no voice. The platform voice is
   // reached here ONLY because someone asked for it by name — see
   // `isPlatformVoiceAllowed`. Otherwise `makeBackend` throws, `utter` catches
-  // it, and Ada is silent with a stated reason.
+  // it, and Hardy is silent with a stated reason.
   if (settings.platformVoice) return createWebSpeechBackend();
   throw new Error(voiceStatus(settings).reason);
 }
@@ -310,7 +310,7 @@ export function createSpeaker(deps?: Partial<SpeakerDeps>): Speaker {
       // they complained about and nothing anywhere explains why.
       if (error instanceof ServiceVoiceUnavailable) {
         serviceVoiceRefused = true;
-        // Note what this no longer says: "so Ada is using the platform voice
+        // Note what this no longer says: "so Hardy is using the platform voice
         // instead". She is not, unless the platform voice was asked for by
         // name. The engine having no voice now produces silence, and the
         // sentence says which one it is.

@@ -30,14 +30,14 @@ describe("useOverlaySkin", () => {
     expect(result.current.skin).toBe("orb");
   });
 
-  it("follows the terminal's Ada switch", () => {
+  it("follows the terminal's Hardy switch", () => {
     const { result } = renderHook(() => useOverlaySkin());
-    expect(result.current.adaInTerminal).toBe(true);
+    expect(result.current.hardyInTerminal).toBe(true);
     act(() => {
       localStorage.setItem(KALEO_STORAGE_KEYS.TERMINAL_ADA, "0");
       storageEvent(KALEO_STORAGE_KEYS.TERMINAL_ADA);
     });
-    expect(result.current.adaInTerminal).toBe(false);
+    expect(result.current.hardyInTerminal).toBe(false);
   });
 
   it("re-reads everything when the whole store is cleared", () => {

@@ -1,4 +1,4 @@
-"""The Slack -> Ada bridge: filing an idea, and following it in the thread.
+"""The Slack -> Hardy bridge: filing an idea, and following it in the thread.
 
 Two seams, both offline. Slack is :class:`RecordingTransport`. The engine is
 either a scripted transport (for the long-running follow loop, where the test

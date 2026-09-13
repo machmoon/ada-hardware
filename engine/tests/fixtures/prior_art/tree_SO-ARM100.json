@@ -1,0 +1,205 @@
+{
+ "tree": [
+  {
+   "path": "3DPRINT.md",
+   "type": "blob",
+   "size": 3792
+  },
+  {
+   "path": "CHANGELOG.md",
+   "type": "blob",
+   "size": 2259
+  },
+  {
+   "path": "Mini/Mini_SO_100_01g.STL",
+   "type": "blob",
+   "size": 2167184
+  },
+  {
+   "path": "Optional/4040_Base_Mount/README.md",
+   "type": "blob",
+   "size": 1044
+  },
+  {
+   "path": "Optional/Compliant_Gripper/README.md",
+   "type": "blob",
+   "size": 2039
+  },
+  {
+   "path": "Optional/Mount_Helper/README.md",
+   "type": "blob",
+   "size": 343
+  },
+  {
+   "path": "Optional/Overhead_Cam_Mount_32x32_UVC_Module/README.md",
+   "type": "blob",
+   "size": 4259
+  },
+  {
+   "path": "Optional/Overhead_Cam_Mount_Webcam/README.md",
+   "type": "blob",
+   "size": 5075
+  },
+  {
+   "path": "Optional/Raised_Base/Raised_Base_Extension.stl",
+   "type": "blob",
+   "size": 68284
+  },
+  {
+   "path": "Optional/SO101_Wrist_Cam_Hex-Nut_Mount_32x32_UVC_Module/README.md",
+   "type": "blob",
+   "size": 3584
+  },
+  {
+   "path": "Optional/Small_Handle/Small_Leader_Handle.STL",
+   "type": "blob",
+   "size": 1138984
+  },
+  {
+   "path": "Optional/Springy_Trigger/Springy_Trigger.STL",
+   "type": "blob",
+   "size": 400184
+  },
+  {
+   "path": "Optional/Wrist_Cam_Mount_32x32_UVC_Module/README.md",
+   "type": "blob",
+   "size": 3385
+  },
+  {
+   "path": "Optional/Wrist_Cam_Mount_RealSense_D405/README.md",
+   "type": "blob",
+   "size": 383
+  },
+  {
+   "path": "Optional/Wrist_Cam_Mount_RealSense_D405/Wrist_Roll_D405_Holder.step",
+   "type": "blob",
+   "size": 817885
+  },
+  {
+   "path": "Optional/Wrist_Cam_Mount_RealSense_D405/Wrist_Roll_D405_Holder.stl",
+   "type": "blob",
+   "size": 723484
+  },
+  {
+   "path": "Optional/Wrist_Cam_Mount_RealSense_D435/README.md",
+   "type": "blob",
+   "size": 1164
+  },
+  {
+   "path": "Optional/Wrist_Cam_Mount_Vinmooog_Webcam/README.md",
+   "type": "blob",
+   "size": 1526
+  },
+  {
+   "path": "Optional/Wrist_Cam_Plug_Mount_32x32_UVC_Module/README.md",
+   "type": "blob",
+   "size": 3114
+  },
+  {
+   "path": "README.md",
+   "type": "blob",
+   "size": 26524
+  },
+  {
+   "path": "SO100.md",
+   "type": "blob",
+   "size": 13570
+  },
+  {
+   "path": "STEP/SO100/Base_08q.step",
+   "type": "blob",
+   "size": 1146248
+  },
+  {
+   "path": "STEP/SO100/Base_attachment.step",
+   "type": "blob",
+   "size": 36850
+  },
+  {
+   "path": "STEP/SO100/Motor1_holder.step",
+   "type": "blob",
+   "size": 240026
+  },
+  {
+   "path": "STEP/SO100/Passive_Horn_01.step",
+   "type": "blob",
+   "size": 8900
+  },
+  {
+   "path": "STEP/SO100/Rotation_Pitch_08i.step",
+   "type": "blob",
+   "size": 543307
+  },
+  {
+   "path": "STEP/SO100/SO_ARM100_08k (1).step",
+   "type": "blob",
+   "size": 544694
+  },
+  {
+   "path": "STEP/SO100/SO_ARM100_08k (2).step",
+   "type": "blob",
+   "size": 527516
+  },
+  {
+   "path": "STEP/SO100/SO_ARM100_08k.step",
+   "type": "blob",
+   "size": 246602
+  },
+  {
+   "path": "STEP/SO100/STS3215_03a.step",
+   "type": "blob",
+   "size": 247082
+  },
+  {
+   "path": "STEP/SO100/Wrist_Roll_Pitch_08i.step",
+   "type": "blob",
+   "size": 1021111
+  },
+  {
+   "path": "STEP/SO101/Base_SO101.step",
+   "type": "blob",
+   "size": 1092553
+  },
+  {
+   "path": "STEP/SO101/Base_motor_holder_SO101.step",
+   "type": "blob",
+   "size": 300211
+  },
+  {
+   "path": "STEP/SO101/Motor_holder_SO101_Base.step",
+   "type": "blob",
+   "size": 352248
+  },
+  {
+   "path": "STEP/SO101/Motor_holder_SO101_Wrist.step",
+   "type": "blob",
+   "size": 346197
+  },
+  {
+   "path": "STEP/SO101/Rotation_Pitch_SO101.step",
+   "type": "blob",
+   "size": 370844
+  },
+  {
+   "path": "STEP/SO101/SO101 Assembly.step",
+   "type": "blob",
+   "size": 20496014
+  },
+  {
+   "path": "STEP/SO101/Seeedstudio_Mounting_Plate_SO101.step",
+   "type": "blob",
+   "size": 45162
+  },
+  {
+   "path": "STEP/SO101/Under_arm_SO101.step",
+   "type": "blob",
+   "size": 626245
+  },
+  {
+   "path": "STEP/SO101/Upper_arm_SO101.step",
+   "type": "blob",
+   "size": 551437
+  }
+ ],
+ "truncated": false
+}

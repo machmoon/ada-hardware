@@ -1,0 +1,155 @@
+{
+ "tree": [
+  {
+   "path": "BOM/BOM.md",
+   "type": "blob",
+   "size": 11729
+  },
+  {
+   "path": "BOM/BOM_PDF_Legacy.pdf",
+   "type": "blob",
+   "size": 73455
+  },
+  {
+   "path": "PAROL6_URDF/PAROL6/meshes/L1.STL",
+   "type": "blob",
+   "size": 2617984
+  },
+  {
+   "path": "PAROL6_URDF/PAROL6/meshes/L2.STL",
+   "type": "blob",
+   "size": 1620784
+  },
+  {
+   "path": "PAROL6_URDF/PAROL6/meshes/L3.STL",
+   "type": "blob",
+   "size": 142984
+  },
+  {
+   "path": "PAROL6_URDF/PAROL6/meshes/L4.STL",
+   "type": "blob",
+   "size": 355484
+  },
+  {
+   "path": "PAROL6_URDF/PAROL6/meshes/L5.STL",
+   "type": "blob",
+   "size": 1173484
+  },
+  {
+   "path": "PAROL6_URDF/PAROL6/meshes/L6.STL",
+   "type": "blob",
+   "size": 288184
+  },
+  {
+   "path": "PAROL6_URDF/PAROL6/meshes/base_link.STL",
+   "type": "blob",
+   "size": 3021884
+  },
+  {
+   "path": "README.md",
+   "type": "blob",
+   "size": 6589
+  },
+  {
+   "path": "STL/BASE/Electronics_case_v1_1.STL",
+   "type": "blob",
+   "size": 6380084
+  },
+  {
+   "path": "STL/BASE/J1_bottom_lid.STL",
+   "type": "blob",
+   "size": 1399684
+  },
+  {
+   "path": "STL/BASE/fan_cover.STL",
+   "type": "blob",
+   "size": 4554184
+  },
+  {
+   "path": "STL/BASE/lid_electronics.STL",
+   "type": "blob",
+   "size": 2359284
+  },
+  {
+   "path": "STL/BASE/main_base_blocker.STL",
+   "type": "blob",
+   "size": 18782684
+  },
+  {
+   "path": "STL/ELBOW/Elbow_lid_1.STL",
+   "type": "blob",
+   "size": 9904784
+  },
+  {
+   "path": "STL/ELBOW/Elbow_lid_2.STL",
+   "type": "blob",
+   "size": 420484
+  },
+  {
+   "path": "STL/ELBOW/Elbow_part.STL",
+   "type": "blob",
+   "size": 7253684
+  },
+  {
+   "path": "STL/ELBOW/J4_bearing_backplate.STL",
+   "type": "blob",
+   "size": 1620084
+  },
+  {
+   "path": "STL/ELBOW/J4_limiter.STL",
+   "type": "blob",
+   "size": 172684
+  },
+  {
+   "path": "STL/ESTOP/ESTOP_BOTTOM.STL",
+   "type": "blob",
+   "size": 2897684
+  },
+  {
+   "path": "STL/ESTOP/ESTOP_TOP.STL",
+   "type": "blob",
+   "size": 1651784
+  },
+  {
+   "path": "STL/FOREARM/HTD3_48_J5_pulley.STL",
+   "type": "blob",
+   "size": 9266184
+  },
+  {
+   "path": "STL/FOREARM/J4_output_pulley.STL",
+   "type": "blob",
+   "size": 10686884
+  },
+  {
+   "path": "STL/FOREARM/J5_belt_lid.STL",
+   "type": "blob",
+   "size": 18100584
+  },
+  {
+   "path": "STL/FOREARM/J5_electronics_lid.STL",
+   "type": "blob",
+   "size": 1034484
+  },
+  {
+   "path": "STL/FOREARM/J5_part.STL",
+   "type": "blob",
+   "size": 6578084
+  },
+  {
+   "path": "STL/GRIPPER_ATTACHMENTS/Gripper_ARMS.STL",
+   "type": "blob",
+   "size": 578084
+  },
+  {
+   "path": "STL/GRIPPER_ATTACHMENTS/Horizontal pneumatic gripper/Pneumatic_gripper_holder_custom.stl",
+   "type": "blob",
+   "size": 1149584
+  },
+  {
+   "path": "STL/GRIPPER_ATTACHMENTS/Horizontal pneumatic gripper/Pneumatic_gripper_holder_horizontal.stl",
+   "type": "blob",
+   "size": 1066784
+  }
+ ],
+ "truncated": false
+}

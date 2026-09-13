@@ -165,6 +165,27 @@ async def _run(
     before_model_call: Callable[[], None] | None,
 ) -> OrchestratorResult:
     model_name = str(model if isinstance(model, str) else getattr(model, "model", ""))
+    if isinstance(model, str):
+        # A bare id gets the tiered ladder (failover.py); an injected BaseLlm
+        # is used as given, which is how the offline tests drive the root.
+        from .failover import build_failover_llm
+
+        model = build_failover_llm(
+            model, on_retry=lambda event: emit(event), before_attempt=before_model_call
+        )
+    else:
+        from .failover import FailoverLlm
+
+        if isinstance(model, FailoverLlm):
+            # An injected ladder still reports on this turn's stream.
+            if model.on_retry is None:
+                model.on_retry = emit
+            if model.before_attempt is None:
+                model.before_attempt = before_model_call
+
+    def served() -> str:
+        """The tier that actually answered, when the model can say."""
+        return str(getattr(model, "served_model", None) or model_name)
     call_seq = 0
     tool_seq = 0
     tool_failed = False
@@ -215,7 +236,7 @@ async def _run(
                 "event": "model.call",
                 "layer": "orchestrator",
                 "call_id": call_id,
-                "model": model_name,
+                "model": served(),
                 "elapsed_s": round(time.monotonic() - started, 3),
                 "ok": True,
                 "chars": len(text),
@@ -227,7 +248,7 @@ async def _run(
                     "event": "model.response",
                     "layer": "orchestrator",
                     "call_id": call_id,
-                    "model": model_name,
+                    "model": served(),
                     "chars": len(text),
                     "text": text,
                     "response": _dump(content),
@@ -406,7 +427,7 @@ async def _run(
         {
             "event": "assistant.message",
             "layer": "orchestrator",
-            "model": model_name,
+            "model": served(),
             "text": assistant,
             "needs_clarification": needs_clarification,
         }
@@ -415,7 +436,7 @@ async def _run(
         assistant=assistant,
         result=full_result,
         needs_clarification=needs_clarification,
-        model=model_name,
+        model=served(),
     )
 
 

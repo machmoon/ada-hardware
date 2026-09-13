@@ -7,9 +7,9 @@
        Recording + System Audio; microphone is only the spoken-wake fallback
        while the CoreAudio tap is stubbed on this macOS build. -->
   <key>NSMicrophoneUsageDescription</key>
-  <string>Hardy uses the microphone for on-device “Hey Ada” when the ear is on, and for one command clip or push-to-talk after that. Nothing is sent to the engine until you speak a request or hold the mic.</string>
+  <string>Hardy uses the microphone for on-device “Hey Hardy” when the ear is on, and for one command clip or push-to-talk after that. Nothing is sent to the engine until you speak a request or hold the mic.</string>
   <key>NSAudioCaptureUsageDescription</key>
-  <string>Hardy listens to system audio so it can hear “hey Ada” and board requests from what is already playing on the desk.</string>
+  <string>Hardy listens to system audio so it can hear “hey Hardy” and board requests from what is already playing on the desk.</string>
   <key>NSScreenCaptureUsageDescription</key>
   <string>Hardy needs Screen Recording to see the display it docks to and to capture board context from the screen.</string>
 </dict>

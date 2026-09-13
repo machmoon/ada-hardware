@@ -66,7 +66,7 @@ tauri-plugin-autostart = "2.5.0"
 # opt-level 0, and at that level one livekit-wakeword score of a 2 s window
 # took 3.08 s (measured 2026-09-13, M-series Mac) against 0.23 s with these
 # crates optimised — the spotter could not keep up with the microphone and
-# never saw "Hey Ada" whole. Only the inference crates are listed, so the
+# never saw "Hey Hardy" whole. Only the inference crates are listed, so the
 # rest of the app keeps fast debug builds.
 [profile.dev.package.livekit-wakeword]
 opt-level = 3

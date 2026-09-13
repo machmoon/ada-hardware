@@ -4,6 +4,8 @@ The previous project's fallbacks had never run. These tests exist so that
 cannot be true again -- each one forces the primary to fail in a different way.
 """
 
+from datetime import UTC
+
 import pytest
 from silkscreen.agents.model import ModelError, ScriptedModel
 from silkscreen.agents.resilience import (
@@ -440,3 +442,67 @@ def test_retry_delay_s_reads_both_spellings_and_refuses_nonsense():
     assert retry_delay_s("'retryDelay': '44s'") == pytest.approx(44.0)
     assert retry_delay_s("no delay here") is None
     assert retry_delay_s("retry in 0s") is None
+
+
+# ------------------------------------------- daily caps and shared tables
+# 2026-09-13: the exhausted gemini-3.7-flash daily cap still answered
+# retryDelay '34s', so honouring it re-asked a dead model every 34 s.
+
+DAILY_429 = ModelError(
+    "gemini-3.7-flash call failed: 429 RESOURCE_EXHAUSTED. Please retry in "
+    "34.99s. 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', "
+    "'retryDelay': '34s'"
+)
+
+
+def test_a_per_day_quota_is_parked_until_the_pacific_midnight_reset():
+    from datetime import datetime
+
+    from silkscreen.agents.resilience import (
+        daily_quota_exhausted,
+        quota_cooldown_s,
+        seconds_until_quota_reset,
+    )
+
+    assert daily_quota_exhausted(str(DAILY_429))
+    assert not daily_quota_exhausted(str(GEMINI_429))
+    # 2026-09-13 20:00 UTC is 13:00 PDT: eleven hours to midnight Pacific.
+    noon = datetime(2026, 9, 13, 20, 0, tzinfo=UTC)
+    assert seconds_until_quota_reset(noon) == pytest.approx(11 * 3600)
+    assert quota_cooldown_s(str(DAILY_429), now_utc=noon) == pytest.approx(11 * 3600)
+    # A per-minute refusal keeps the delay it names.
+    assert quota_cooldown_s(str(GEMINI_429)) == pytest.approx(44.0)
+
+
+def test_a_shared_table_carries_a_refusal_to_the_next_chain():
+    table: dict[str, float] = {}
+    down = Boom(DAILY_429)
+
+    def chain():
+        return FallbackModel(
+            providers=[
+                Provider("primary", down, attempts=2),
+                Provider("backup", ScriptedModel(by_marker={"hi": "ok"})),
+            ],
+            _clock=lambda: 100.0,
+            _cooldown=table,
+        )
+
+    assert chain().generate("hi") == "ok"
+    assert chain().generate("hi") == "ok"
+    assert down.calls == 1
+    assert table["primary"] > 100.0
+
+
+def test_all_cooling_clears_only_this_chains_entries_from_a_shared_table():
+    table = {"someone-else": 1e12}
+    fb = FallbackModel(
+        providers=[Provider("a", Boom(GEMINI_429), attempts=1)],
+        _clock=lambda: 100.0,
+        _cooldown=table,
+    )
+    with pytest.raises(AllProvidersFailed):
+        fb.generate("hi")
+    with pytest.raises(AllProvidersFailed):
+        fb.generate("hi")
+    assert table["someone-else"] == 1e12
