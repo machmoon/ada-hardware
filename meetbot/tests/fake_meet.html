@@ -10,6 +10,9 @@
     delay=<ms>                           host reaction time (default 150)
     prompt=1                             a first-visit device dialog blocks the CTA
     others=<n>                           remote participants on admission (default 1)
+    lag=<ms>                             after "Ask to join" the lobby (with a
+                                         self-preview tile) stays up this long
+                                         before the waiting copy renders
   window.fake exposes host actions to the test: admit(), removeOthers(),
   addOther(name), end(kind) with kind in removed|ended, consent(on).
 -->
@@ -96,6 +99,18 @@
     state.clicked = true;
     if (lobby === "guest") state.name = $("name").value;
     if (admit === "instant") return setTimeout(enterCall, delay);
+    const lag = Number(q.get("lag") || 0);
+    if (lag) {
+      // Live Meet 2026-09-13: the lobby, self-preview tile and all, lingers
+      // after the click; the button label flips to the knock state.
+      const pre = document.createElement("div");
+      pre.setAttribute("data-participant-id", "spaces/x/devices/self-preview");
+      pre.setAttribute("data-self-name", "Hardy");
+      pre.textContent = "Hardy";
+      $("lobby").appendChild(pre);
+      $("cta-label").textContent = "Ask to join";
+      return setTimeout(() => { show("lobby", false); show("waiting", true); }, lag);
+    }
     show("lobby", false); show("waiting", true);
     if (admit === "knock") setTimeout(enterCall, delay);
     if (admit === "deny") setTimeout(() => show("denied", true), delay);  // stale waiting text stays

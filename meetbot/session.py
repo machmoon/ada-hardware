@@ -229,10 +229,18 @@ CONSENT_PROMPT = (
 # Positive in-call signals that are never in the lobby -- Vexa
 # selectors.ts:21-29 plus the attendance agent's chat button (:243).
 IN_CALL = (
+    'button[aria-label="Leave call"]',
     'button[aria-label*="Share screen"]',
     'button[aria-label*="Present now"]',
     'button[aria-label="Chat with everyone"]',
 )
+# The lobby's own join buttons, by label. Found live on 2026-09-13: the lobby
+# self-preview carries a participant tile and a self name, so right after
+# "Ask to join" (before the waiting-room copy renders) tiles alone read as
+# admitted. While one of these is on screen Hardy is not in the call.
+# (JOIN_CTA's last, structural selector also matches in-call buttons, so it
+# cannot be this guard.)
+LOBBY_CTA = JOIN_CTA[:3]
 PARTICIPANT_TILE = "[data-participant-id]"
 SELF_NAME = "[data-self-name]"
 EFFECTS_TILE_MARKERS = ("visual_effects", "backgrounds and effects")
@@ -536,15 +544,16 @@ class MeetSession:
             return False
         if await self._first_visible(CONSENT_PROMPT):
             return False
-        if await self._real_tile_count() > 0:
-            return True
-        try:
-            if await self._page.locator(SELF_NAME).count() > 0:
-                return True
-        except Exception:
-            pass
+        if await self._first_visible(LOBBY_CTA):
+            return False
         await self._wake_toolbar()
-        return await self._first_visible(IN_CALL) is not None
+        if await self._first_visible(IN_CALL) is not None:
+            return True
+        # Tiles only count once the lobby is gone (guards above), and never
+        # when the name box of a guest lobby is still on screen.
+        if await self._first_visible(NAME_INPUT):
+            return False
+        return await self._real_tile_count() > 0
 
     async def _visible_button_labels(self) -> list[str]:
         try:
@@ -688,7 +697,11 @@ class MeetSession:
                 saw_waiting = True
             elif await self._first_visible(CONSENT_PROMPT):
                 saw_consent = True
-            elif await self._is_admitted():
+            elif await self._is_admitted() and (
+                await asyncio.sleep(self.poll_s) or await self._is_admitted()
+            ):
+                # Two readings a poll apart: the lobby re-renders between the
+                # click and the waiting-room copy, and one frame is not a call.
                 await self._read_self_name()
                 how = (
                     "as a guest" if self.joined_as_guest else "as the signed-in account"

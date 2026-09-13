@@ -185,6 +185,16 @@ def test_unanswered_knock_is_waiting_for_host_and_can_still_be_admitted(tmp_path
     assert second.state == ADMITTED
 
 
+def test_lingering_lobby_with_a_self_preview_tile_is_not_admitted(tmp_path):
+    """Found live: the lobby's self-preview tile read as "admitted" in the gap
+    between the click and the waiting-room copy, so Hardy never listened."""
+    async def go(s):
+        return await s.join(_url(admit="never", lag=400))
+
+    receipt = _run(go, tmp_path, admit_timeout_s=1.0)
+    assert receipt.state == WAITING_FOR_HOST, receipt.detail
+
+
 def test_gemini_consent_prompt_holds_admission(tmp_path):
     async def go(s):
         await s.page.goto(_url())  # consent must be up before the click lands
