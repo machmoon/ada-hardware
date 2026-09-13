@@ -19,6 +19,67 @@ not validate, **draws a schematic**, generates the footprints, places the board 
 CP-SAT solver, **routes the copper**, and then argues against its own design and tells
 you what it thinks is wrong.
 
+**▶ [Watch the demo video](https://drive.google.com/drive/folders/1rnSlTHrJ7pleJYoMAmtVkpkHFm6PlOE_?usp=sharing)**
+
+## Hackathon submission
+
+**What it is.** Hardy is a multi-step AI hardware engineer. You describe a board (typed,
+spoken, in a Google Meet, or in Slack); it proposes a circuit with Gemini, validates it,
+places parts with a CP-SAT solver, routes copper, designs a 3D-printable case with a
+CAD kernel, sources parts, reviews its own design, and hands you a real KiCad project.
+Every paid step waits for your approval in a desktop overlay. The problem: going from
+an idea to a buildable board takes an engineer days of datasheets, schematic capture,
+layout and enclosure work.
+
+**External apps it connects to.**
+
+| App | What Hardy does with it | Verified live today |
+|---|---|---|
+| **Google Gemini API** | proposes circuits, cases, reviews, meeting replies | yes |
+| **KiCad** | opens the generated `.kicad_sch`/`.kicad_pcb`; `kicad-cli` ERC, DRC and schematic parity | yes |
+| **Gmail + Google Calendar** | emails the board, books a review meeting with a Meet link (OAuth, PKCE) | sign-in connected |
+| **Google Meet** | a bot joins the call, reads captions, speaks, extracts the request (`meetbot/`) | joins the lobby; listen/speak tested offline |
+| **FreeCAD** | opens the generated case STEP assembly | yes |
+| **Slack** | DM an idea, the laptop starts the build, progress posts to the thread (Socket Mode) | tested offline |
+| **Mouser** | verifies proposed part numbers (with `MOUSER_API_KEY`) | tested offline |
+
+**How to run it.**
+
+```bash
+python -m venv .venv && ./.venv/bin/pip install -e ".[dev,agents,cad,meet,slack]"
+cp .env.example .env            # set GOOGLE_API_KEY
+cd frontend && npm install && npm run build && cd ..
+cd app && npm install && cd ..  # desktop app (needs Rust + Node 22)
+./.venv/bin/silkscreen serve    # engine on :8081 and the Hardy desktop app
+# optional front ends
+./.venv/bin/python -m meetbot.session sign-in              # once, for the Meet bot
+./.venv/bin/python -m meetbot join https://meet.google.com/xxx-xxxx-xxx
+./.venv/bin/python -m slackbot socket                      # needs SLACK_BOT_TOKEN, SLACK_APP_TOKEN
+```
+
+CLI only: `./.venv/bin/silkscreen "a 3.3V LDO board" --model gemini-3.5-flash -o out/board.kicad_pcb`.
+
+**How we know it works (reliability and evaluation).**
+
+- **Model output is never trusted.** Every Gemini answer is JSON that deterministic
+  validators check; all failures go back to the model as one repair prompt, then the
+  run refuses loudly rather than building a wrong board.
+- **Checked by the real tools.** Generated boards are run through KiCad's own ERC, DRC
+  and schematic-parity checks (0 errors on the demo prompts); the router names every net
+  it could not finish instead of reporting success.
+- **Signed margins, not pass/fail flags.** The case CAD kernel measures 13 clauses on the
+  B-rep (plug clearance, wall thickness, overhang, lid fit…) and reports each with a
+  signed margin in millimetres. Today's live run found two failures, which we reproduced
+  exactly, fixed, and pinned with regression tests that fail on the old code.
+- **Independent-math tests.** Geometry and SPICE tests compute expected answers
+  independently of the code under test, so a shared bug cannot pass both.
+- **Offline, deterministic test suite.** Thousands of tests run with no network and no API
+  keys: `ScriptedModel` stands in for Gemini and recorded transports stand in for Google,
+  Slack, Meet and Mouser. CI runs them on Linux, macOS and Windows.
+- **Honest failure vocabulary.** Every integration reports what actually happened
+  (`verified` / `proposed` / `unavailable`, `spoken: true` only when audio really played),
+  and the demo recordings document what broke.
+
 ![Hardy desktop workflow demo](docs/img/ada-desktop-demo.gif)
 
 ![Generated STM32 board layout in KiCad](docs/img/board.png)
