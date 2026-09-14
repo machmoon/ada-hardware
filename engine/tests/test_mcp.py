@@ -16,15 +16,15 @@ from silkscreen.mcp.server import (
 from silkscreen.spice.simulators import NgspiceSimulator
 
 CIRCUIT = {
-    "devices": {"U1": {"pins": {"1": "GND", "2": "VOUT", "3": "VIN"}}},
+    "devices": {"U1": {"pins": {"GND": "1", "VOUT": "2", "VIN": "3"}}},
     "passives": {
         "C1": {"type": "capacitor", "value": "10uF"},
         "C2": {"type": "capacitor", "value": "100nF"},
     },
     "nets": {
-        "VIN": ["U1.3", "C1.1"],
-        "GND": ["U1.1", "C1.2", "C2.2"],
-        "VOUT": ["U1.2", "C2.1"],
+        "VIN": ["U1.VIN", "C1.1"],
+        "GND": ["U1.GND", "C1.2", "C2.2"],
+        "VOUT": ["U1.VOUT", "C2.1"],
     },
 }
 
@@ -439,3 +439,33 @@ def test_simulate_circuit_refuses_a_device_with_no_model():
     assert body["ok"] is False
     assert body["stage"] == "testbench"
     assert "U1" in str(body["errors"])
+
+
+def test_generate_board_writes_a_project_and_reports_findings(tmp_path, monkeypatch):
+    """The one tool that spends model calls, driven offline through the seam."""
+    from test_agents import _scripted_pipeline_model
+
+    monkeypatch.setattr(mcp_server, "build_model", _scripted_pipeline_model)
+    out = tmp_path / "board.kicad_pcb"
+    res = call(
+        "generate_board", {"intent": "a 3.3V motor driver board", "output": str(out)}
+    )
+    assert res["result"]["isError"] is False
+    body = json.loads(res["result"]["content"][0]["text"])
+    assert body["files"]["board"] == str(out) and out.exists()
+    assert (tmp_path / "board.kicad_sch").exists()
+    assert body["review"]["ran"] is True and body["review"]["blockers"] == 1
+    assert body["findings"][0]["severity"] == "blocker"
+    assert isinstance(body["unrouted"], dict)
+
+
+def test_generate_board_refuses_an_empty_intent():
+    res = call("generate_board", {"intent": "  "})
+    assert res["result"]["isError"] is True
+
+
+def test_generate_board_default_output_is_under_the_home_boards_dir():
+    p = mcp_server._default_output("A 3.3V LDO board!")
+    assert p.name == "board.kicad_pcb"
+    assert p.parent.parent == mcp_server.DEFAULT_BOARDS_DIR.expanduser()
+    assert p.parent.name.endswith("-a-3-3v-ldo-board")

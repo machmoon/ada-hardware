@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "hardy": {
+      "type": "stdio",
+      "command": ".venv/bin/silkscreen-mcp",
+      "args": [],
+      "env": { "HARDY_REPO_ROOT": "." }
+    }
+  }
+}

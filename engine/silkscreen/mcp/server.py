@@ -21,8 +21,12 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import re
 import sys
+import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from ..board import build_board, emit_kicad_pcb
@@ -164,6 +168,59 @@ TOOLS: list[dict[str, Any]] = [
         "inputSchema": {
             "type": "object",
             "properties": {},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "generate_board",
+        "description": (
+            "Design a whole KiCad project from a plain-language request: "
+            "read any datasheets given, propose and validate a circuit, "
+            "place it with CP-SAT, draw the schematic, route the copper and "
+            "run the design critic. Writes .kicad_pro, .kicad_sch and "
+            ".kicad_pcb and returns their paths, the nets it could not "
+            "route (left as ratsnest, never hidden) and every review finding "
+            "with its severity. Unlike the other tools this one calls a "
+            "Gemini model, so it needs GOOGLE_API_KEY (or a .env in the "
+            "Hardy checkout) and takes one to two minutes."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "intent": {
+                    "type": "string",
+                    "description": (
+                        "What to build, e.g. 'a 3.3V LDO board from 5V USB'."
+                    ),
+                },
+                "output": {
+                    "type": "string",
+                    "description": (
+                        "Path of the .kicad_pcb to write; the schematic and "
+                        "project land beside it. Default: a new folder under "
+                        "~/Hardy/boards."
+                    ),
+                },
+                "datasheets": {
+                    "type": "object",
+                    "description": "{part_number: pdf_url} to read before designing.",
+                    "additionalProperties": {"type": "string"},
+                },
+                "effort": {
+                    "type": "string",
+                    "enum": ["fast", "balanced", "thorough"],
+                    "description": "Solver budget and repair rounds; default fast.",
+                },
+                "route": {
+                    "type": "boolean",
+                    "description": "Lay copper (default true).",
+                },
+                "review": {
+                    "type": "boolean",
+                    "description": "Run the critic (default true).",
+                },
+            },
+            "required": ["intent"],
             "additionalProperties": False,
         },
     },
@@ -432,6 +489,103 @@ def _tool_spice_capabilities(args: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+#: Where ``generate_board`` writes when the caller names no path. Under the
+#: home directory rather than the cwd because an MCP client (Claude Desktop)
+#: launches the server with no meaningful working directory.
+DEFAULT_BOARDS_DIR = Path("~/Hardy/boards")
+
+
+def _load_env_if_needed() -> None:
+    """Read ``.env`` the way the CLI does, without making it a requirement.
+
+    ``HARDY_REPO_ROOT`` (the desktop app's own variable) names the checkout;
+    the cwd is tried after it. Nothing is overwritten -- the same setdefault
+    rule as :func:`silkscreen.cli._load_dotenv`.
+    """
+    from ..cli import _load_dotenv
+
+    for root in (os.environ.get("HARDY_REPO_ROOT"), os.getcwd()):
+        if root:
+            _load_dotenv(Path(root) / ".env")
+
+
+def build_model() -> Any:
+    """The model ``generate_board`` designs with; a module-level seam so the
+    tests can substitute a :class:`ScriptedModel` and stay offline."""
+    _load_env_if_needed()
+    from ..agents.model import GeminiModel
+
+    return GeminiModel()
+
+
+def _default_output(intent: str) -> Path:
+    slug = re.sub(r"[^a-z0-9]+", "-", intent.lower()).strip("-")[:40] or "board"
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    return DEFAULT_BOARDS_DIR.expanduser() / f"{stamp}-{slug}" / "board.kicad_pcb"
+
+
+def _tool_generate_board(args: dict[str, Any]) -> dict[str, Any]:
+    intent = args.get("intent")
+    if not isinstance(intent, str) or not intent.strip():
+        return _error_result("intent must be a non-empty string")
+    output = (
+        Path(args["output"]).expanduser() if args.get("output")
+        else _default_output(intent)
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    from ..agents import generate_pcb
+
+    kwargs: dict[str, Any] = {}
+    if args.get("effort"):
+        kwargs["effort"] = args["effort"]
+    result = generate_pcb(
+        build_model(),
+        intent.strip(),
+        datasheets=args.get("datasheets") or None,
+        output=output,
+        route=args.get("route", True),
+        review=args.get("review", True),
+        **kwargs,
+    )
+
+    def _path(p: Path | None) -> str | None:
+        return None if p is None else str(p)
+
+    findings = [
+        {
+            "severity": str(f.severity),
+            "title": f.title,
+            "detail": f.detail,
+            "parts": list(f.parts),
+            "suggested_fix": f.suggested_fix,
+        }
+        for f in result.findings
+    ]
+    return _text_result(
+        {
+            "summary": result.summary(),
+            "files": {
+                "board": _path(result.board_path),
+                "schematic": _path(result.schematic_path),
+                "project": _path(result.project_path),
+                "placed_board": _path(result.placed_board_path),
+            },
+            "size_mm": list(result.board.size_mm),
+            "solver_status": result.board.solver_status,
+            "unrouted": (
+                dict(result.route.unrouted) if result.route is not None else None
+            ),
+            "review": {
+                "ran": result.review.ok,
+                "note": None if result.review.ok else result.review.note(),
+                "blockers": len(result.blockers),
+            },
+            "findings": findings,
+        }
+    )
+
+
 DISPATCH: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "validate_circuit": _tool_validate_circuit,
     "build_board": _tool_build_board,
@@ -440,6 +594,7 @@ DISPATCH: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "generate_footprint": _tool_generate_footprint,
     "simulate_circuit": _tool_simulate_circuit,
     "spice_capabilities": _tool_spice_capabilities,
+    "generate_board": _tool_generate_board,
 }
 
 
