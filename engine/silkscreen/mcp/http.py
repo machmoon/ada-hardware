@@ -74,20 +74,39 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D401
         print(f"{self.address_string()} {fmt % args}", file=sys.stderr)
 
-    def _send(self, code: int, payload: Any = None) -> None:
+    def _send(
+        self,
+        code: int,
+        payload: Any = None,
+        *,
+        close: bool = False,
+        extra: dict[str, str] | None = None,
+    ) -> None:
         body = b"" if payload is None else json.dumps(payload).encode()
         self.send_response(code)
         if body:
             self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        for name, value in (extra or {}).items():
+            self.send_header(name, value)
+        if close:
+            # Also sets self.close_connection, so the handler loop stops
+            # after this response instead of parsing the unread body.
+            self.send_header("Connection", "close")
         self.end_headers()
         if body:
             self.wfile.write(body)
 
     def _gate(self) -> bool:
-        """Origin and bearer checks, before any body is read."""
+        """Origin and bearer checks, before any body is read.
+
+        A refusal leaves the body unread, and on a keep-alive connection the
+        next parse would start inside it -- the bridge log showed a 401
+        followed by ``Unsupported method ('{"jsonrpc"...POST')``. So every
+        refusal answers ``Connection: close``.
+        """
         if self.path.split("?", 1)[0] != ENDPOINT:
-            self._send(404, {"error": f"the MCP endpoint is {ENDPOINT}"})
+            self._send(404, {"error": f"the MCP endpoint is {ENDPOINT}"}, close=True)
             return False
         origin = self.headers.get("Origin")
         if (
@@ -95,7 +114,7 @@ class Handler(BaseHTTPRequestHandler):
             and origin not in self.allowed_origins
             and not _loopback_origin(origin)
         ):
-            self._send(403, {"error": "origin not allowed"})
+            self._send(403, {"error": "origin not allowed"}, close=True)
             return False
         if self.token is not None:
             auth = self.headers.get("Authorization") or ""
@@ -103,10 +122,7 @@ class Handler(BaseHTTPRequestHandler):
             if scheme.lower() != "bearer" or not hmac.compare_digest(
                 presented.strip(), self.token
             ):
-                self.send_response(401)
-                self.send_header("WWW-Authenticate", "Bearer")
-                self.send_header("Content-Length", "0")
-                self.end_headers()
+                self._send(401, close=True, extra={"WWW-Authenticate": "Bearer"})
                 return False
         return True
 
@@ -114,13 +130,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
-            self._send(400, {"error": "invalid Content-Length"})
+            self._send(400, {"error": "invalid Content-Length"}, close=True)
             return None
         if length < 0:
-            self._send(400, {"error": "invalid Content-Length"})
+            self._send(400, {"error": "invalid Content-Length"}, close=True)
             return None
         if length > MAX_BODY_BYTES:
-            self._send(413, {"error": "body too large"})
+            self._send(413, {"error": "body too large"}, close=True)
             return None
         return self.rfile.read(length)
 

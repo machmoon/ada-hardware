@@ -125,3 +125,37 @@ def test_bearer_token_gates_every_verb_when_set():
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_a_refused_request_does_not_poison_a_keep_alive_connection():
+    """The body of a 401 must not be read as the next request line."""
+    import http.client
+
+    server = make_server("127.0.0.1", 0, token="s3cret")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    conn = http.client.HTTPConnection("127.0.0.1", server.server_address[1])
+    try:
+        body = json.dumps(rpc("ping"))
+        conn.request(
+            "POST", ENDPOINT, body=body, headers={"Content-Type": "application/json"}
+        )
+        first = conn.getresponse()
+        first.read()
+        assert first.status == 401
+        conn.request(
+            "POST",
+            ENDPOINT,
+            body=body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer s3cret",
+            },
+        )
+        second = conn.getresponse()
+        assert second.status == 200
+        assert json.loads(second.read())["id"] == 1
+    finally:
+        conn.close()
+        server.shutdown()
+        server.server_close()
