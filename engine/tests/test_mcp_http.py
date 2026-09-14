@@ -159,3 +159,26 @@ def test_a_refused_request_does_not_poison_a_keep_alive_connection():
         conn.close()
         server.shutdown()
         server.server_close()
+
+
+def test_the_token_may_ride_in_the_path_and_never_reaches_the_log(capsys):
+    server = make_server("127.0.0.1", 0, token="s3cret")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        status, _, _ = _req(base + ENDPOINT + "/s3cret", body=rpc("ping"))
+        assert status == 200
+        status, _, _ = _req(base + ENDPOINT + "/wrong", body=rpc("ping"))
+        assert status == 401
+    finally:
+        server.shutdown()
+        server.server_close()
+    err = capsys.readouterr().err
+    assert "s3cret" not in err and "<token>" in err
+
+
+def test_a_path_secret_is_not_an_endpoint_without_a_token(served):
+    base, _ = served
+    status, _, _ = _req(base + ENDPOINT + "/anything", body=rpc("ping"))
+    assert status == 404

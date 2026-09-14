@@ -24,8 +24,11 @@ server needs and nothing invented:
 It binds the loopback address by default. Reaching it from claude.ai takes a
 public HTTPS tunnel in front, and the endpoint carries no auth of its own
 unless ``MCP_HTTP_TOKEN`` is set, in which case every request must carry
-``Authorization: Bearer <token>``. ``generate_board`` spends the Gemini key,
-so a tunnel to an unauthenticated instance should not be left up unattended.
+``Authorization: Bearer <token>`` or use the path ``/mcp/<token>`` (the form
+claude.ai's connector dialog can take, since it accepts a URL and nothing
+else; the URL is then the credential and is masked in the log).
+``generate_board`` spends the Gemini key, so a tunnel to an unauthenticated
+instance should not be left up unattended.
 
 Run it with::
 
@@ -72,7 +75,29 @@ class Handler(BaseHTTPRequestHandler):
     # -- helpers -----------------------------------------------------------
 
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D401
-        print(f"{self.address_string()} {fmt % args}", file=sys.stderr)
+        line = fmt % args
+        if self.token:
+            # A capability URL is the credential; it never reaches a log,
+            # the googleapps rule for the Chat webhook URL.
+            line = line.replace(self.token, "<token>")
+        print(f"{self.address_string()} {line}", file=sys.stderr)
+
+    def _presented_token(self) -> str | None:
+        """The bearer header, or the last path segment of ``/mcp/<token>``.
+
+        The path form exists because claude.ai's custom-connector form takes
+        a URL and nothing else -- no header, and no OAuth server here to
+        answer a 401 -- so the URL has to carry the secret, the way Zapier's
+        and Composio's MCP endpoints do.
+        """
+        auth = self.headers.get("Authorization") or ""
+        scheme, _, presented = auth.partition(" ")
+        if scheme.lower() == "bearer" and presented.strip():
+            return presented.strip()
+        path = self.path.split("?", 1)[0]
+        if path.startswith(ENDPOINT + "/"):
+            return path[len(ENDPOINT) + 1 :] or None
+        return None
 
     def _send(
         self,
@@ -105,7 +130,11 @@ class Handler(BaseHTTPRequestHandler):
         followed by ``Unsupported method ('{"jsonrpc"...POST')``. So every
         refusal answers ``Connection: close``.
         """
-        if self.path.split("?", 1)[0] != ENDPOINT:
+        path = self.path.split("?", 1)[0]
+        on_endpoint = path == ENDPOINT or (
+            self.token is not None and path.startswith(ENDPOINT + "/")
+        )
+        if not on_endpoint:
             self._send(404, {"error": f"the MCP endpoint is {ENDPOINT}"}, close=True)
             return False
         origin = self.headers.get("Origin")
@@ -117,11 +146,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(403, {"error": "origin not allowed"}, close=True)
             return False
         if self.token is not None:
-            auth = self.headers.get("Authorization") or ""
-            scheme, _, presented = auth.partition(" ")
-            if scheme.lower() != "bearer" or not hmac.compare_digest(
-                presented.strip(), self.token
-            ):
+            presented = self._presented_token()
+            if presented is None or not hmac.compare_digest(presented, self.token):
                 self._send(401, close=True, extra={"WWW-Authenticate": "Bearer"})
                 return False
         return True
