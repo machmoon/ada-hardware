@@ -129,7 +129,7 @@ describe("the orb may never claim to be listening while the microphone is shut",
   });
 
   it("says the ear is on and the microphone is not open, in one sentence", () => {
-    expect(orbCaption(false, true, false)).toBe("Ear on — the microphone isn’t open yet.");
+    expect(orbCaption(false, true, false)).toBe("Ear on: the microphone isn’t open yet.");
     expect(orbCaption(true, true, false)).toBe("I’m listening.");
     expect(orbCaption(false, false, false)).toBe("Click to type.");
     expect(orbCaption(false, false, true)).toBe("Working on it.");
@@ -206,7 +206,7 @@ describe("the control that spends money", () => {
     expect(submittable({ ...gate, canStart: false })).toBe(false);
   });
 
-  it("is absent rather than greyed — no disabled run control is ever rendered", () => {
+  it("is absent rather than greyed. No disabled run control is ever rendered", () => {
     // "Absent, not greyed" is the rule; a disabled button is an invitation
     // with the reason hidden inside an attribute nobody can read.
     draw({ open: true, value: "a 3.3V LDO", engine: engine({ ok: false }) });

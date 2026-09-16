@@ -143,7 +143,7 @@ export interface OrbSkinProps {
 export function orbCaption(micOpen: boolean, listening: boolean, busy: boolean): string {
   if (micOpen) return "I’m listening.";
   if (busy) return "Working on it.";
-  if (listening) return "Ear on — the microphone isn’t open yet.";
+  if (listening) return "Ear on: the microphone isn’t open yet.";
   return "Click to type.";
 }
 
@@ -212,7 +212,7 @@ export const OrbSkin = ({
       <style>{ORB_SKIN_CSS}</style>
 
       {/*
-        The orb is `VoiceOrb`, scaled — not a second orb. That component owns
+        The orb is `VoiceOrb`, scaled: not a second orb. That component owns
         the one rule this skin must not get wrong, and a copy of it here
         would be a second place for the lie to come back. The inner element
         is a real button (engine re-check, same testid the strip has always
@@ -302,7 +302,7 @@ export const OrbSkin = ({
           {/*
             The paid control, and the only element in this skin that spends
             money. It is ABSENT rather than greyed whenever pressing it would
-            not be valid — nothing typed, the engine unreachable or never
+            not be valid: nothing typed, the engine unreachable or never
             probed, a run already in flight, the overlay hidden. A greyed
             button is an invitation with the reason hidden inside a disabled
             attribute; no button at all is the honest resting frame, and it
@@ -313,7 +313,7 @@ export const OrbSkin = ({
               type="button"
               className="h-7 shrink-0 rounded-md bg-primary px-2.5 text-[11px] font-medium text-primary-foreground"
               onClick={onSubmit}
-              title="Generate a board — this calls the model and costs money"
+              title="Generate a board: this calls the model and costs money"
               data-testid="orb-submit"
             >
               Generate

@@ -36,7 +36,7 @@ export interface LocalWakeStatus {
 }
 
 export function unavailableLocalWake(reason =
-  "no on-device wake — use the mic button to dictate"
+  "no on-device wake: use the mic button to dictate"
 ): LocalWakeStatus {
   return {
     available: false,
@@ -49,7 +49,7 @@ export function unavailableLocalWake(reason =
 export function describeLocalWake(available: boolean): string {
   return available
     ? "on-device wake word, then one engine transcript for the command"
-    : "no on-device wake — use the mic button to dictate";
+    : "no on-device wake: use the mic button to dictate";
 }
 
 export async function localWakeStatus(): Promise<LocalWakeStatus> {

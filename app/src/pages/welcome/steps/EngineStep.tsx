@@ -26,7 +26,7 @@ export const KICAD_FOUND_CAVEAT = "Found on this Mac. Ada did not run it, so the
 export const KICAD_MISSING_COST =
   "Ada still designs boards without it. What stops working is showing a stage in KiCad, the ERC and DRC checks, and the 3D export the order step ships.";
 export const KICAD_UNKNOWN =
-  "Ada could not ask this machine what it has — that answer only exists in the desktop app.";
+  "Ada could not ask this machine what it has. That answer only exists in the desktop app.";
 
 type KicadState = "checking" | "found" | "missing" | "unknown";
 
@@ -191,7 +191,9 @@ export const EngineStep = ({
           </Button>
         </div>
 
-        {down ? <EngineStartCommands compact only={["serve", "module"]} /> : null}
+        {down ? (
+          <EngineStartCommands compact only={["serve"]} baseUrl={baseUrl} onEngineChange={health.recheck} />
+        ) : null}
 
         <div
           className="flex items-start gap-3 rounded-lg border bg-card p-3"

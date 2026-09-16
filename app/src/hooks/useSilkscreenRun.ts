@@ -743,7 +743,7 @@ export function useSilkscreenRunState(
               ...base,
               state: "unknown",
               detail:
-                "The engine no longer has a record of this run — it was " +
+                "The engine no longer has a record of this run. It was " +
                 "forgotten or the service restarted.",
             });
             return;

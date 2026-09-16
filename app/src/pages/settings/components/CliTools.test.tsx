@@ -23,7 +23,7 @@ const mount = () =>
 
 const TOOLS: CliToolInfo[] = [
   { id: "googleapps", available: true, detail: "python -m googleapps (auth, check, run)" },
-  { id: "silkscreen", available: true, detail: "python -m silkscreen — board CLI" },
+  { id: "silkscreen", available: true, detail: "python -m silkscreen: board CLI" },
   { id: "python", available: false, detail: "venv missing; set ADA_PYTHON" },
   { id: "kicad-cli", available: false, detail: "not found" },
 ];
@@ -53,7 +53,7 @@ describe("the command-line tools settings pane", () => {
     mount();
     await waitFor(() =>
       expect(screen.getByTestId("cli-tool-detail-silkscreen").textContent).toBe(
-        "python -m silkscreen — board CLI",
+        "python -m silkscreen: board CLI",
       ),
     );
   });
@@ -99,8 +99,8 @@ describe("the command-line tools settings pane", () => {
     mount();
     const posture = screen.getByTestId("cli-tools-posture");
     expect(posture.textContent).toContain("never through a shell");
-    expect(posture.textContent).toContain("may only start the programs named above");
-    expect(posture.textContent).toContain("refused by name");
+    expect(posture.textContent).toContain("only these tools");
+    expect(posture.textContent).toContain("refused");
   });
 
   it("keeps the terminal skin's posture separate rather than blurring the two", async () => {

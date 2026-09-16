@@ -72,7 +72,7 @@ describe("EngineStep", () => {
     expect(screen.getByTestId("engine-card").getAttribute("data-state")).toBe("down");
     expect(screen.getByTestId("engine-answer").textContent).toBe(`Nothing answered at ${BASE}`);
     const steps = screen.getAllByTestId("engine-start-step").map((el) => el.getAttribute("data-step"));
-    expect(steps).toEqual(["serve", "module"]);
+    expect(steps).toEqual(["serve"]);
     expect(h.onCanContinue).toHaveBeenLastCalledWith(false);
     expect(h.onAutoAdvance).not.toHaveBeenCalled();
     expect(keyMock).not.toHaveBeenCalled();

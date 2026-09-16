@@ -291,7 +291,7 @@ export function specReviewOffer(
     };
   }
   if (blockingItems(review).length === 0) {
-    return { review, note: "No blockers — nothing needs a meeting.", refused: false };
+    return { review, note: "No blockers: nothing needs a meeting.", refused: false };
   }
   return { review, note: "", refused: false };
 }

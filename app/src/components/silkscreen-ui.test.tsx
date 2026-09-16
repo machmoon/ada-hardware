@@ -295,7 +295,7 @@ describe("RunSummary", () => {
     expect(wirelength.textContent).not.toContain("0.00");
   });
 
-  it("a genuine zero is shown as zero — measured nothing and measured zero differ", () => {
+  it("a genuine zero is shown as zero. Measured nothing and measured zero differ", () => {
     render(<RunSummary result={{ nets: [], duration_s: 0 } as RunResult} />);
     const byKey = Object.fromEntries(
       screen

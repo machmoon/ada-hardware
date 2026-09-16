@@ -123,7 +123,7 @@ const EngineMark = ({ engine, baseUrl }: { engine: EngineHealth; baseUrl: string
 
   const label = unknown
     ? `Checking ${baseUrl}…`
-    : `Engine unreachable at ${baseUrl}${engine.detail ? ` — ${engine.detail}` : ""}`;
+    : `Engine unreachable at ${baseUrl}${engine.detail ? `: ${engine.detail}` : ""}`;
 
   return (
     <button
@@ -144,7 +144,7 @@ const EngineMark = ({ engine, baseUrl }: { engine: EngineHealth; baseUrl: string
         )}
       >
         {/* Slashed hollow: asked, and the answer was no. The slash is the
-            state, not the colour — this reads the same in greyscale. */}
+            state, not the colour. This reads the same in greyscale. */}
         {!unknown ? (
           <span className="absolute left-1/2 top-1/2 h-px w-3.5 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-muted-foreground/70" />
         ) : null}

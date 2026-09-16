@@ -65,7 +65,7 @@ describe("useMicLevel", () => {
     expect(result.current.level).toBeGreaterThan(0.5);
   });
 
-  it("is deaf while inactive — the microphone is not open, so there is no level", () => {
+  it("is deaf while inactive. The microphone is not open, so there is no level", () => {
     // This is the honesty rule at the data layer: a consumer that is not in a
     // microphone-open state gets nothing, whatever the bus is carrying.
     const { result } = renderHook(() => useMicLevel(false, { now }));
@@ -91,7 +91,7 @@ describe("useMicLevel", () => {
     expect(result.current.level).toBe(0);
   });
 
-  it("clearMicLevel drops the signal at once — a closed mic is not a quiet one", () => {
+  it("clearMicLevel drops the signal at once. A closed mic is not a quiet one", () => {
     const { result } = renderHook(() => useMicLevel(true, { now }));
     act(() => {
       publishMicLevel(40, Date.now());

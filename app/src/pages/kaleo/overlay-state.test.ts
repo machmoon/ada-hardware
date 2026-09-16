@@ -94,7 +94,7 @@ describe("overlayStateFor", () => {
     // state. The raw feed is the dashboard console's job now, so a run has
     // exactly one size on the strip.
 
-    it("is fixed, not measured — the checklist is a constant seven rows", () => {
+    it("is fixed, not measured. The checklist is a constant seven rows", () => {
       expect(at({ busy: true }).measured).toBe(false);
     });
 
@@ -167,7 +167,7 @@ describe("overlayStateFor", () => {
     });
   });
 
-  describe("stacking — the case the audit's one-row-per-state table cannot express", () => {
+  describe("stacking: the case the audit's one-row-per-state table cannot express", () => {
     it("measures when two blocks are on screen at once", () => {
       // The table has a target for a result and a target for the engine-down
       // banner, and none for the two together. A fixed target for the
@@ -226,7 +226,7 @@ describe("heldDoors", () => {
     });
   });
 
-  it("offers the case gate — the one step in the API that reads free text", () => {
+  it("offers the case gate. The one step in the API that reads free text", () => {
     expect(heldDoors({ session: "s1", done: ["place", "route"], cancelled: false })).toEqual({
       note: true,
       caseStep: true,

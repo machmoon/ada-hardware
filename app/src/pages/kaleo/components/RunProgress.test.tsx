@@ -45,7 +45,7 @@ describe("RunSummary: an empty finding list", () => {
   it("a failed critic is never phrased as a clean board", () => {
     const text = summary({ findings: [], blockers: [], review: FAILED });
     expect(text).toContain(
-      "Review failed: model answered with no JSON — nothing is known about this board."
+      "Review failed: model answered with no JSON. Nothing is known about this board."
     );
     expect(text).not.toMatch(/nothing to flag|reported nothing/);
     const line = screen.getByTestId("summary-review-outcome");
@@ -61,27 +61,25 @@ describe("RunSummary: an empty finding list", () => {
 
   it("a failed critic with no detail falls back to the note, never to zero", () => {
     const text = summary({ findings: [], review: { ...FAILED, detail: null } });
-    expect(text).toContain("Review failed: the critic did not answer — nothing is known about this board.");
+    expect(text).toContain("Review failed: the critic did not answer. Nothing is known about this board.");
   });
 
   it("a skipped review says skipped, in the quiet style", () => {
     const text = summary({ findings: [], review: SKIPPED });
-    expect(text).toContain("Review skipped: review off — nothing is known about this board.");
+    expect(text).toContain("Review skipped: review off. Nothing is known about this board.");
     const line = screen.getByTestId("summary-review-outcome");
     expect(line.dataset.status).toBe("skipped");
     expect(line.className).not.toContain("text-destructive");
   });
 
   it("no block (older engine) keeps the old wording, by whether review was requested", () => {
-    expect(summary({ findings: [] }, true)).toContain(
-      "The review ran and reported nothing. Only the checks it runs were run."
-    );
+    expect(summary({ findings: [] }, true)).toContain("Review found nothing.");
     cleanup();
-    expect(summary({ findings: [] }, false)).toContain("Review was off for this run, so no checks ran.");
+    expect(summary({ findings: [] }, false)).toContain("Review was off.");
   });
 
   it("no findings list at all says nothing was checked", () => {
-    expect(summary({})).toContain("This response carried no review");
+    expect(summary({})).toContain("Not reviewed. Nothing was checked.");
   });
 
   it("findings still show as counts when the critic answered", () => {

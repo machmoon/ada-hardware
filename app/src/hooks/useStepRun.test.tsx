@@ -411,7 +411,7 @@ describe("useStepRun and the summary mode", () => {
     expect("summary" in sentPayload()).toBe(false);
   });
 
-  it("the default — no mode chosen at all — is prose", async () => {
+  it("the default: no mode chosen at all. Is prose", async () => {
     const hook = render();
     await upToReview(hook);
     armAdvance();

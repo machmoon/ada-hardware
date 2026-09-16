@@ -22,7 +22,7 @@ describe("earWord", () => {
     expect(earWord(off)).toBe("Ada off");
     expect(earWord(null)).toBe("Ada off");
     expect(earWord({ ...off, error: "the engine refused the audio" })).toBe(
-      "Ada off — the engine refused the audio"
+      "Ada off: the engine refused the audio"
     );
   });
 
@@ -50,7 +50,7 @@ describe("earWord", () => {
       earWord({ ...off, justHeard: true, lastHeard: "make me a 3.3 V LDO" })
     ).toBe("heard “Ada, make me a 3.3 V LDO”");
     expect(earWord({ ...off, justHeard: true })).toBe(
-      "heard “Ada” — tell me what you need"
+      "heard “Ada”: tell me what you need"
     );
   });
 });

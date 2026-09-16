@@ -173,7 +173,7 @@ export function NetList({
           <EmptyDescription>
             {nets
               ? "This run's schematic block carried no nets, so there is no connectivity to show."
-              : "This run returned no schematic block. Connectivity was not reported — it is unknown, not empty."}
+              : "This run returned no schematic block. Connectivity was not reported. It is unknown, not empty."}
           </EmptyDescription>
         </EmptyHeader>
       </EmptyComponent>

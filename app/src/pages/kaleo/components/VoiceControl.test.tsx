@@ -77,7 +77,7 @@ describe("micState", () => {
     expect(micState(null, false)).toBe("muted");
   });
 
-  it("does not call the switch being on 'listening' — the microphone has to be open", () => {
+  it("does not call the switch being on 'listening'. The microphone has to be open", () => {
     // The founder's bug: green came from `enabled`, which is the switch, and
     // the mic was still opening (or a probe was in flight) behind it.
     expect(micState(wakeWord({ enabled: true, listening: false }), false)).toBe("arming");
@@ -90,7 +90,7 @@ describe("micState", () => {
       enabled: false,
       sent: 1,
       cap: 1,
-      detail: "stopped after 1 clips — click the ear to listen again",
+      detail: "stopped after 1 clips. Click the ear to listen again",
     });
     expect(micState(capped, false)).toBe("spent");
     // A deliberate mute says something else, and stays muted.
@@ -106,13 +106,13 @@ describe("micState", () => {
 describe("glimpseLine", () => {
   it("turns a paid window that was not my name into one quiet sentence", () => {
     expect(glimpseLine("what's the current on that rail")).toBe(
-      "I heard “what's the current on that rail” — that was not my name."
+      "I heard “what's the current on that rail”. That was not my name."
     );
     expect(glimpseLine("(no audio in that window)")).toBe(
       "I heard the room, but no words in it."
     );
     expect(glimpseLine("engine: timed out (1/3)")).toBe(
-      "The engine couldn’t take that clip — timed out (1/3)"
+      "The engine couldn’t take that clip: timed out (1/3)"
     );
     expect(glimpseLine(null)).toBeNull();
     expect(glimpseLine("   ")).toBeNull();
@@ -184,7 +184,7 @@ describe("VoiceControl", () => {
 
   it("says the room level cannot be gated instead of looking like it is listening", () => {
     const refusal =
-      "I can’t measure the room level in this webview, so I can’t tell speech from silence — I won’t send clips I can’t gate. Use the mic button instead.";
+      "I can’t measure the room level in this webview, so I can’t tell speech from silence. I won’t send clips I can’t gate. Use the mic button instead.";
     draw({ wake: wakeWord({ enabled: false, error: refusal }) });
     expect(screen.getByTestId("voice-control").getAttribute("data-state")).toBe("refused");
     expect(screen.getByTestId("voice-refused").textContent).toBe(refusal);
@@ -211,7 +211,7 @@ describe("VoiceControl", () => {
       }),
     });
     expect(screen.getByTestId("voice-glimpse").textContent).toBe(
-      "I heard “so then I said we should just buy the eval board” — that was not my name."
+      "I heard “so then I said we should just buy the eval board”. That was not my name."
     );
   });
 
@@ -223,12 +223,12 @@ describe("VoiceControl", () => {
         backend: "windows",
         sent: 1,
         cap: 1,
-        detail: "stopped after 1 clips — click the ear to listen again",
+        detail: "stopped after 1 clips. Click the ear to listen again",
       }),
     });
     expect(screen.getByTestId("voice-control").getAttribute("data-state")).toBe("spent");
     expect(screen.getByTestId("voice-spent").textContent).toBe(
-      "I stopped after 1 window — click to listen again"
+      "I stopped after 1 window. Click to listen again."
     );
     // The count is off the face now, but the reason it stopped is not: the
     // sentence names the windows it spent, and the tooltip names them again.

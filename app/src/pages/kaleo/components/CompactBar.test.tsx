@@ -39,7 +39,7 @@ describe("CompactBar", () => {
   // the guard on the thing that keeps going wrong — the pill accumulating a
   // fourth control (a status dot, an animated orb, a stop button) until it
   // stops being a pill. There is no text field and no submit here at all.
-  it("is exactly three controls — arrow, mic, drag handle — in that order", () => {
+  it("is exactly three controls. Arrow, mic, drag handle. In that order", () => {
     render(<CompactBar {...props} />);
 
     const row = screen.getByTestId("compact-bar");

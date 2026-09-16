@@ -194,7 +194,7 @@ export const RunOptions = ({
       {/* Two switches below are read by `/generate` only. The step routes
           (`service/steps.py`) accept neither: the critic is its own step
           there, pressed or not, and no step reads `ground`. So while step
-          mode is on they are off, and say so — a switch that looks live and
+          mode is on they are off, and say so. A switch that looks live and
           reaches nothing is the defect, not the note. */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col">
@@ -206,7 +206,7 @@ export const RunOptions = ({
           </Label>
           <p className="text-[11px] text-muted-foreground" data-testid="run-options-review-note">
             {stepMode
-              ? "One-shot runs only. Stage by stage, the critic is the Review step on the strip — press it, or stop before it."
+              ? "One-shot runs only. Stage by stage, the critic is the Review step on the strip. Press it, or stop before it."
               : "Runs the critic pass. Off means nothing was checked, not that the board is clean."}
           </p>
         </div>
@@ -258,7 +258,7 @@ export const RunOptions = ({
               ? "One-shot runs only. The stage-by-stage routes do not accept grounding, so this would reach nothing."
               : groundable
               ? "After the run, check the review\u2019s findings back against these PDFs."
-              : "Needs a part and its datasheet URL — grounding has nothing to check against."}
+              : "Needs a part and its datasheet URL. Grounding has nothing to check against."}
           </p>
         </div>
         <Switch

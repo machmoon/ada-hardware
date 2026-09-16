@@ -266,7 +266,7 @@ export function SchematicView({
           <EmptyDescription>
             {schematic
               ? "This run's schematic block carried no parts or nets, so there is nothing to connect."
-              : "This run returned no schematic block. The circuit's connectivity was not reported — it is unknown, not empty."}
+              : "This run returned no schematic block. The circuit's connectivity was not reported. It is unknown, not empty."}
           </EmptyDescription>
         </EmptyHeader>
       </EmptyComponent>
@@ -280,7 +280,7 @@ export function SchematicView({
   return (
     <div className={cn("flex min-h-0 flex-col gap-2", className)}>
       <p className="text-muted-foreground text-xs" data-testid="schematic-caption">
-        Connectivity only — pins on the left, nets on the right. This is not a
+        Connectivity only: pins on the left, nets on the right. This is not a
         schematic sheet; open the emitted <code>.kicad_sch</code> in KiCad for
         that.
       </p>

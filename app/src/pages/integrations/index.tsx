@@ -21,19 +21,19 @@ import { IntegrationCard } from "./components";
 const GROUP: Record<IntegrationKind, { title: string; description: string }> = {
   delivery: {
     title: "Delivery",
-    description: "Where a finished run is sent so the team sees it",
+    description: "Where finished boards go",
   },
   meeting: {
     title: "Meetings",
-    description: "Surfaces that turn a spoken requirement into a board",
+    description: "Meetings that can start a board",
   },
   design: {
     title: "Design",
-    description: "What the engine can produce beyond the bare board",
+    description: "What Ada adds beyond the board",
   },
   fabrication: {
     title: "Fabrication",
-    description: "The tools between a routed board and a manufactured one",
+    description: "From routed board to factory",
   },
 };
 
@@ -146,8 +146,8 @@ const Integrations = () => {
 
   return (
     <PageLayout
-      title="Integrations"
-      description="Every surface Ada can reach, and whether it is set up"
+      title="Connections"
+      description="What Ada can reach, and what is set up"
       rightSlot={
         <Button
           size="sm"
@@ -173,17 +173,17 @@ const Integrations = () => {
           <XCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="text-xs leading-relaxed">
             <p className="font-medium text-destructive">
-              Could not read the integrations from {baseUrl}
+              The engine at {baseUrl} did not answer
             </p>
             {/* The engine's own words. "Connection refused" and "answered 404"
                 send the user to entirely different fixes. */}
-            <p className="mt-1 font-mono break-all text-muted-foreground">
-              {loadError}
-            </p>
             <p className="mt-1 text-muted-foreground">
-              Nothing below is current. This is not an empty list — it is a list
-              that could not be read.
+              Start it on the Engine tab, then refresh.
             </p>
+            <details className="mt-1 text-muted-foreground">
+              <summary className="cursor-pointer">Details</summary>
+              <p className="font-mono break-all">{loadError}</p>
+            </details>
           </div>
         </div>
       )}
@@ -193,7 +193,7 @@ const Integrations = () => {
           data-testid="integrations-loading"
           className="text-xs text-muted-foreground"
         >
-          Asking the engine what is configured…
+          Checking…
         </p>
       )}
 
@@ -228,36 +228,14 @@ const Integrations = () => {
           data-testid="integrations-empty"
           className="text-xs text-muted-foreground"
         >
-          The engine answered, and listed no integrations at all. That is
-          unexpected — the roster is fixed, so an empty list means the engine is
-          older than this panel.
+          The engine listed nothing. Update the engine.
         </p>
       )}
 
-      <div className="space-y-2">
-        <Header
-          title="Why nothing here is a switch"
-          description="What this panel can and cannot change"
-          isMainTitle
-        />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Every setting on this page lives in the environment the silkscreen
-          service was started with, in another process, possibly on another
-          machine. Ada cannot set one from here, and{" "}
-          <code className="font-mono">service/app.py</code> does not read{" "}
-          <code className="font-mono">.env</code> — only the CLI does. So the
-          hints are reproduced exactly as the engine wrote them, and the fix is
-          to restart the service with the variable set. Values are never shown,
-          only whether a key is set.
-        </p>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          A <span className="font-medium">ready</span> badge is a claim about
-          configuration and nothing more. It does not mean a live call has ever
-          succeeded — an integration marked{" "}
-          <span className="font-medium">unverified</span> says exactly that it
-          never has.
-        </p>
-      </div>
+      <p className="text-[11px] text-muted-foreground" data-testid="integrations-note">
+        These come from the engine's environment. Set a key, then restart the engine.
+        Ready means set up, not yet tested live.
+      </p>
     </PageLayout>
   );
 };

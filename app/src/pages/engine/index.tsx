@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button, Header } from "@/components";
-import { EngineStartCommands } from "@/components/setup";
+import { AgentAccess, EngineStartCommands } from "@/components/setup";
 import { PageLayout } from "@/layouts";
 import { useEngineHealth } from "@/hooks";
 import { useSilkscreenRun } from "@/contexts/run.context";
@@ -48,7 +48,7 @@ const Engine = () => {
   return (
     <PageLayout
       title="Engine"
-      description="The silkscreen service that generates boards"
+      description="The service that designs your boards"
       rightSlot={
         <div className="flex items-center gap-2">
           {returnTo === "/welcome" ? (
@@ -68,6 +68,11 @@ const Engine = () => {
         </div>
       }
     >
+      <div id="engine-start" className="space-y-3">
+        <Header title="Start" description="Ada can run the engine for you" isMainTitle />
+        <EngineStartCommands baseUrl={baseUrl} onEngineChange={health.recheck} />
+      </div>
+
       <EngineConnection
         baseUrl={baseUrl}
         onBaseUrlChange={applyBaseUrl}
@@ -75,42 +80,9 @@ const Engine = () => {
         onTokenChange={applyToken}
       />
 
+      <AgentAccess />
+
       <VoiceSettings />
-
-      <div id="engine-start" className="space-y-3">
-        <Header
-          title="Starting the engine"
-          description="Ada does not start or bundle the service — it is a separate Python process you run from the silkscreen checkout"
-          isMainTitle
-        />
-        <EngineStartCommands />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          The API key caveat is not a footnote: only the CLI reads{" "}
-          <code className="font-mono">.env</code>.{" "}
-          <code className="font-mono">cli.py</code> has a small dotenv loader
-          and <code className="font-mono">service/app.py</code> does not — it
-          reads the process environment only. A service started directly next to
-          a filled-in <code className="font-mono">.env</code> therefore comes up
-          with no key and answers every run with a 502 naming{" "}
-          <code className="font-mono">GOOGLE_API_KEY</code>.
-        </p>
-      </div>
-
-      <div id="engine-boundary" className="space-y-2">
-        <Header
-          title="Why loopback only"
-          description="The constraint the address field enforces"
-          isMainTitle
-        />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          The service ships no authentication and sends no CORS headers, on
-          purpose — it assumes it is reachable only from the machine it runs on.
-          Every run it accepts spends your Gemini quota. So Ada refuses any
-          address that is not <code className="font-mono">http://</code> on
-          loopback: accepting one would put an open, billable endpoint on the
-          network, and neither this app nor the service would notice.
-        </p>
-      </div>
     </PageLayout>
   );
 };

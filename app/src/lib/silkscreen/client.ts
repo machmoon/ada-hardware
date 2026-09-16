@@ -408,7 +408,7 @@ export async function generateStream(
     throw new SilkscreenError(
       "server",
       "The engine closed the stream before the run finished. It may still be " +
-        `running as ${liveRunId} — check it rather than starting again.`,
+        `running as ${liveRunId}: check it rather than starting again.`,
       { runId: liveRunId }
     );
   }

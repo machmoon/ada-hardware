@@ -54,7 +54,7 @@ export const VoiceSettings = ({ className }: { className?: string }) => {
     <div id="voice-settings" className={cn("space-y-3", className)}>
       <Header
         title="Voice"
-        description="When a run finishes, Ada reads the review's headline findings aloud"
+        description="Ada reads the top findings aloud when a run ends"
         isMainTitle
       />
 
@@ -108,7 +108,7 @@ export const VoiceSettings = ({ className }: { className?: string }) => {
           </Button>
           <span className="text-[11px] text-muted-foreground">
             {savedKey
-              ? "Using ElevenLabs — the key is stored on this machine only."
+              ? "Using ElevenLabs. The key stays on this Mac."
               : "Using the free built-in voice."}
           </span>
         </div>

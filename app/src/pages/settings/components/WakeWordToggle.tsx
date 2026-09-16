@@ -47,7 +47,7 @@ export const WakeWordToggle = ({ className, variant = "settings" }: WakeWordTogg
     <div id="wake-word" className={`space-y-2 ${className ?? ""}`} data-testid="wake-word-settings">
       <Header
         title={`“Hey ${WAKE_WORD}” (experimental)`}
-        description={`One-shot listen — not always-on like Siri. On Mac each click sends one short Gemini transcript, then the ear turns off. The mic button is the reliable way to dictate.`}
+        description={`One-shot listen: not always-on like Siri. On Mac each click sends one short Gemini transcript, then the ear turns off. The mic button is the reliable way to dictate.`}
         isMainTitle
       />
       {row}

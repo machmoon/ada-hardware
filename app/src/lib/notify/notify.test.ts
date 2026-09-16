@@ -81,12 +81,12 @@ describe("milestoneCopy", () => {
     const viaReviewed = milestoneCopy({ kind: "reviewed", findings: 0, blockers: 0, status: "failed" });
     expect(viaReviewed).toEqual({
       title: "Review failed",
-      body: "The critic answered nothing readable — nothing is known about this board",
+      body: "The critic answered nothing readable. Nothing is known about this board",
     });
     expect(milestoneCopy({ kind: "review_failed", detail: null })).toEqual(viaReviewed);
     expect(milestoneCopy({ kind: "review_failed", detail: "  model answered with no JSON " })).toEqual({
       title: "Review failed",
-      body: "model answered with no JSON — nothing is known about this board",
+      body: "model answered with no JSON. Nothing is known about this board",
     });
     for (const copy of [viaReviewed, milestoneCopy({ kind: "review_failed", detail: "x" })]) {
       expect(`${copy!.title} ${copy!.body}`).not.toMatch(/nothing to flag|nothing to say|finished/i);

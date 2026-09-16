@@ -158,7 +158,7 @@ describe("fetchIntegrations", () => {
     expect(headers.Authorization).toBeUndefined();
   });
 
-  it("passes an id it has never heard of straight through — the roster grows", async () => {
+  it("passes an id it has never heard of straight through. The roster grows", async () => {
     mockFetch.mockResolvedValueOnce(
       jsonResponse(200, {
         integrations: [entry({ id: "some_future_fab", kind: "fabrication" })],
@@ -454,7 +454,7 @@ describe("badgeFor", () => {
     });
   });
 
-  it("warns on partial — the state that looks like it works until the first call", () => {
+  it("warns on partial: the state that looks like it works until the first call", () => {
     expect(badgeFor(item("google", "delivery", "partial"))).toEqual({
       label: "Partly set up",
       tone: "warn",

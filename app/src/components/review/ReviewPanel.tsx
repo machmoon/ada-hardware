@@ -206,7 +206,7 @@ export function ReviewPanel({
 
           {rows.length === 0 && !hasStructured && legacyBlockers.length === 0 && (
             <p data-testid="review-no-review" className="text-xs text-muted-foreground">
-              This response carried no review at all — neither structured findings nor blockers.
+              This response carried no review at all. Neither structured findings nor blockers.
             </p>
           )}
 

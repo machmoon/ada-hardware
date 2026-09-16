@@ -39,7 +39,7 @@ beforeEach(() => window.localStorage.clear());
 afterEach(() => cleanup());
 
 describe("RunOptions summary mode", () => {
-  it("starts on prose — what every run does today — and says what each choice means", () => {
+  it("starts on prose: what every run does today. And says what each choice means", () => {
     mount();
     expect(option("prose").getAttribute("data-selected")).toBe("true");
     expect(option("structured").getAttribute("data-selected")).toBe("false");

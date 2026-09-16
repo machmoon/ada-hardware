@@ -57,7 +57,7 @@ describe("degenerate board sizes", () => {
     expect(boardSize(p)).toEqual({ width: 4, height: 4 });
   });
 
-  it("one negative axis invalidates the pair — width and height come from the same authority", () => {
+  it("one negative axis invalidates the pair. Width and height come from the same authority", () => {
     // A half-valid size would mix the service's claim with the derived one.
     const p = placements([50, -1], [part("U1", [0, 0, 4, 2])]);
     const size = boardSize(p);
@@ -125,7 +125,7 @@ describe("inverted and degenerate rectangles", () => {
   });
 });
 
-describe("rotated parts — expectations from independent arithmetic", () => {
+describe("rotated parts: expectations from independent arithmetic", () => {
   // The service resolves rotation before sending, so `rotated: true` changes
   // NOTHING geometrically here: the module must pass the resolved rectangles
   // through untouched, flip once in the group transform, and place the label

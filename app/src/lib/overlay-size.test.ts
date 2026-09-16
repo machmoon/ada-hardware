@@ -56,7 +56,7 @@ describe("OVERLAY_SIZES", () => {
     });
   });
 
-  it("makes the pill the only narrow shape — width is a discrete state", () => {
+  it("makes the pill the only narrow shape. Width is a discrete state", () => {
     // Anything that is not a pill is the window's native width, so a state
     // change inside the bar never touches the X axis.
     for (const state of STATES) {

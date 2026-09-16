@@ -185,7 +185,7 @@ export const ReviewOutcome = ({ details }: { details: ReviewDetails }) => {
                 <>
                   <span className="font-medium">CITED </span>
                   <span className="italic">“{citation.text}”</span>
-                  {citation.page ? <span> — p. {citation.page}</span> : null}
+                  {citation.page ? <span>. P. {citation.page}</span> : null}
                 </>
               ) : (
                 NO_CITATION

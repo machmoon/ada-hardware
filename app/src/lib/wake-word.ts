@@ -388,7 +388,7 @@ export function describeWakeBackend(backend: WakeBackendName | null): string {
     case "local":
       return "on-device wake word, then one engine transcript for the command";
     case "windows":
-      return `local speech detect, then one Gemini transcript per utterance — silence costs nothing, and the listening budget is ${DEFAULT_WINDOW_CAP} calls (not always-on; I stop and say so when it is spent). The mic button is the reliable path`;
+      return `local speech detect, then one Gemini transcript per utterance. Silence costs nothing, and the listening budget is ${DEFAULT_WINDOW_CAP} calls (not always-on; I stop and say so when it is spent). The mic button is the reliable path`;
     default:
       return "no speech recognition or recorder in this webview";
   }
@@ -480,7 +480,7 @@ export function createSpeechListener(
       events.onState(
         "error",
         code === "not-allowed" || code === "service-not-allowed"
-          ? "speech recognition was refused — enable Microphone (and Speech Recognition) for Ada in System Settings, or use the ear after a restart"
+          ? "speech recognition was refused. Enable Microphone (and Speech Recognition) for Ada in System Settings, or use the ear after a restart"
           : `speech recognition failed: ${code || event.message || "unknown"}`
       );
     };
@@ -808,7 +808,7 @@ export function createWindowListener(
         park();
         events.onState(
           "capped",
-          `that was the last of my ${cap} listening call${cap === 1 ? "" : "s"} — unmute me again for another ${cap}`
+          `that was the last of my ${cap} listening call${cap === 1 ? "" : "s"}: unmute me again for another ${cap}`
         );
       };
       if (vadMode) {
@@ -827,7 +827,7 @@ export function createWindowListener(
           events.onGlimpse?.(
             blob.size === 0
               ? "(no audio in that window)"
-              : `(${(durationMs / 1000).toFixed(1)} s of noise, not speech — nothing sent)`
+              : `(${(durationMs / 1000).toFixed(1)} s of noise, not speech. Nothing sent)`
           );
           return; // still armed; the meter opens the next window
         }
@@ -886,7 +886,7 @@ export function createWindowListener(
         // nothing, which is the one thing this must never look like.
         events.onState(
           "capped",
-          `the ${cap} listening calls for this unmute are spent — unmute me again for another ${cap}`
+          `the ${cap} listening calls for this unmute are spent. Unmute me again for another ${cap}`
         );
         return;
       }
@@ -958,7 +958,7 @@ export function createWindowListener(
           }, 100);
           events.onState(
             "listening",
-            `listening — I send one clip per thing you say, up to ${cap} this unmute (${cap - sent} left). Silence costs nothing.`
+            `listening: I send one clip per thing you say, up to ${cap} this unmute (${cap - sent} left). Silence costs nothing.`
           );
           return;
         } catch (error) {
@@ -966,14 +966,14 @@ export function createWindowListener(
           analyser = null;
           finish(
             "error",
-            `I couldn’t start the loudness meter (${(error as Error)?.message || "unknown"}), so I can’t tell speech from silence — I won’t send clips I can’t gate. Use the mic button instead.`
+            `I couldn’t start the loudness meter (${(error as Error)?.message || "unknown"}), so I can’t tell speech from silence. I won’t send clips I can’t gate. Use the mic button instead.`
           );
           return;
         }
       } else if (gateRequired) {
         finish(
           "error",
-          "I can’t measure the room level in this webview, so I can’t tell speech from silence — I won’t send clips I can’t gate. Use the mic button instead."
+          "I can’t measure the room level in this webview, so I can’t tell speech from silence. I won’t send clips I can’t gate. Use the mic button instead."
         );
         return;
       } else if (deps.AudioContext) {
@@ -1000,10 +1000,10 @@ export function createWindowListener(
       events.onState(
         "listening",
         analyser === null
-          ? `one arming, ungated — I can’t hear the room level, so I send every ${windowMs / 1000} s window blind (at most ${cap})`
+          ? `one arming, ungated: I can’t hear the room level, so I send every ${windowMs / 1000} s window blind (at most ${cap})`
           : overlap
-            ? `one arming, not always-on — ${windowMs / 1000} s windows every ${hopMs / 1000} s (at most ${cap})`
-            : `one arming, not always-on — ${windowMs / 1000} s windows (at most ${cap})`
+            ? `one arming, not always-on: ${windowMs / 1000} s windows every ${hopMs / 1000} s (at most ${cap})`
+            : `one arming, not always-on: ${windowMs / 1000} s windows (at most ${cap})`
       );
       record();
     },

@@ -80,7 +80,7 @@ export const EngineStatus = ({
       data-state={state}
       title={
         ok
-          ? "The engine answered /healthz with ok: true"
+          ? "The engine is running"
           : detail
             ? `/healthz: ${detail}`
             : label
@@ -105,11 +105,9 @@ export const EngineStatus = ({
           {showDetail && (
             <span className="text-[10px] lg:text-xs text-muted-foreground">
               {state === "never"
-                ? detail
-                  ? `No successful connection yet — ${detail}`
-                  : "No successful connection yet"
+                ? "Not running"
                 : state === "unreachable"
-                  ? detail || "stopped answering"
+                  ? "Stopped answering"
                   : lastCheckedAt
                     ? `Checked ${ago(lastCheckedAt)}`
                     : "Not checked yet"}

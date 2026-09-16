@@ -12,8 +12,8 @@ const Console = () => (
     <Header
       isMainTitle
       showBorder
-      title="Console"
-      description="What actually happened, scrubbed of credentials — exportable for bug reports."
+      title="Logs"
+      description="Everything Ada did, with keys removed"
     />
     <DebugConsole
       chrome="page"

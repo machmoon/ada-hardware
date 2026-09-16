@@ -746,7 +746,7 @@ describe("createWindowListener", () => {
     });
   });
 
-  it("outside a continuation window it never wakes — idle spotting by transcript is gone", async () => {
+  it("outside a continuation window it never wakes. Idle spotting by transcript is gone", async () => {
     FakeRecorder.instances = [];
     const { stream } = makeStream();
     // The clearest possible wake word, and the alias the old matcher was

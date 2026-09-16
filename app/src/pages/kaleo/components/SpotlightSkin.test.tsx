@@ -154,7 +154,7 @@ describe("the control that spends money", () => {
     }
   });
 
-  it("fills exactly one price badge — the row Enter would spend on", () => {
+  it("fills exactly one price badge. The row Enter would spend on", () => {
     // Two things that look like the money control in one frame is the state
     // this guards: the user cannot tell which one Enter buys.
     const { container } = draw({ value: "route", results: [command()] });
@@ -340,7 +340,7 @@ describe("the field itself", () => {
     expect(onChange).toHaveBeenCalledWith("ab");
   });
 
-  it("carries no border, ring or ground of its own — cmdk puts those on the root", () => {
+  it("carries no border, ring or ground of its own. Cmdk puts those on the root", () => {
     // The hand-rolled tell `docs/overlay-skins.md` names: PromptBar's
     // `h-9 rounded-md border border-input/50 bg-muted/30` box around the
     // field. The panel owns the radius; the field owns nothing.

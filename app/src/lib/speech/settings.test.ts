@@ -29,7 +29,7 @@ describe("isVoiceEnabled", () => {
     expect(isVoiceEnabled()).toBe(true);
   });
 
-  it("keeps someone who turned it off, off — the default never overrides a choice", () => {
+  it("keeps someone who turned it off, off. The default never overrides a choice", () => {
     saveVoiceEnabled(false);
     expect(hasVoicePreference()).toBe(true);
     expect(isVoiceEnabled()).toBe(false);

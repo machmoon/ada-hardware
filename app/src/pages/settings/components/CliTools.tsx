@@ -78,20 +78,19 @@ export const CliTools = ({ className }: { className?: string }) => {
       <Header
         isMainTitle
         title="Command-line tools"
-        description="The fixed list of programs Ada may run for you, and whether this machine has them."
+        description="Programs Ada can run on this Mac"
       />
 
       {load.state === "loading" ? (
         <p className="text-xs text-muted-foreground" data-testid="cli-tools-loading">
-          Checking this machine…
+          Checking…
         </p>
       ) : null}
 
       {load.state === "unavailable" ? (
         <div className="rounded-md border p-3" data-testid="cli-tools-unavailable">
           <p className="text-xs text-muted-foreground">
-            Ada could not ask this machine what it has. Tools run from the desktop app, so
-            this list is empty in a browser tab.
+            Open the desktop app to see this list.
           </p>
           <p className="mt-1 text-[11px] text-muted-foreground" data-testid="cli-tools-error">
             {load.reason}
@@ -101,8 +100,7 @@ export const CliTools = ({ className }: { className?: string }) => {
 
       {load.state === "ready" && load.tools.length === 0 ? (
         <p className="text-xs text-muted-foreground" data-testid="cli-tools-empty">
-          The desktop app reported no tools at all. That is a build without the CLI
-          allowlist compiled in, not a machine missing software.
+          This build has no tool list.
         </p>
       ) : null}
 
@@ -150,19 +148,10 @@ export const CliTools = ({ className }: { className?: string }) => {
         </div>
       ) : null}
 
-      <div className="space-y-1 rounded-md border p-3" data-testid="cli-tools-posture">
-        <Label className="text-sm font-medium">What this can and cannot do</Label>
-        <p className="text-xs text-muted-foreground">
-          Ada may only start the programs named above, and only as a direct argument list —
-          never through a shell, so nothing typed or generated can become a second command.
-          Anything not on this list is refused by name.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          The terminal skin is separate and stricter about nothing: it is your own shell,
-          your environment, your privileges, the same as Terminal.app. Ada never types into
-          it — a command she proposes is staged as text for you to press Enter on.
-        </p>
-      </div>
+      <p className="text-[11px] text-muted-foreground" data-testid="cli-tools-posture">
+        Ada runs only these tools, never through a shell. Anything else is refused. The
+        terminal skin is your own shell with your privileges.
+      </p>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Navigate, Routes, Route } from "react-router-dom";
 import {
   Kaleo,
   Workbench,
@@ -7,7 +7,6 @@ import {
   Integrations,
   Console,
   Settings,
-  Shortcuts,
 } from "@/pages";
 import { DashboardLayout } from "@/layouts";
 import Welcome from "@/pages/welcome";
@@ -67,7 +66,7 @@ export default function AppRoutes() {
           <Route path="/engine" element={<Engine />} />
           <Route path="/integrations" element={<Integrations />} />
           <Route path="/console" element={<Console />} />
-          <Route path="/shortcuts" element={<Shortcuts />} />
+          <Route path="/shortcuts" element={<Navigate to="/settings" replace />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       </Routes>

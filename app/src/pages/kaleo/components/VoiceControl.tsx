@@ -112,9 +112,9 @@ export function glimpseLine(glimpse: string | null | undefined): string | null {
   if (!text) return null;
   if (text === "(no audio in that window)") return "I heard the room, but no words in it.";
   if (text.startsWith("engine:")) {
-    return `The engine couldn’t take that clip — ${text.slice("engine:".length).trim()}`;
+    return `The engine couldn’t take that clip: ${text.slice("engine:".length).trim()}`;
   }
-  return `I heard “${text}” — that was not my name.`;
+  return `I heard “${text}”. That was not my name.`;
 }
 
 /**
@@ -148,7 +148,7 @@ export function micTitle(
         budget ? ` ${budget} paid windows used this listen.` : ""
       } Press and hold to talk to me directly instead.${unsaved}`;
     case "arming":
-      return `I am opening the microphone. I am not listening yet — I will say so when I am. Press and hold to talk to me right now instead.`;
+      return `I am opening the microphone. I am not listening yet. I will say so when I am. Press and hold to talk to me right now instead.`;
     case "heard":
       return `I heard my name. What follows it goes into the field for you to read before anything is sent.`;
     case "spent":
@@ -156,7 +156,7 @@ export function micTitle(
     case "refused":
       return `I am muted. ${wake.error}`;
     default:
-      return `I am muted — I am not listening for “Hey ${WAKE_WORD}”. Click to unmute; while unmuted I send four-second windows to the engine, one model call each, capped at ${wake.cap}. Press and hold to talk to me now without unmuting.${unsaved}`;
+      return `I am muted: I am not listening for “Hey ${WAKE_WORD}”. Click to unmute; while unmuted I send four-second windows to the engine, one model call each, capped at ${wake.cap}. Press and hold to talk to me now without unmuting.${unsaved}`;
   }
 }
 
@@ -333,7 +333,7 @@ export const VoiceControl = ({
   // overrides only the two things the click actually changes — what the
   // button says and what it draws.
   const title = speaking
-    ? "I’m talking — click to stop me mid-sentence. Your mute is unchanged."
+    ? "I’m talking: click to stop me mid-sentence. Your mute is unchanged."
     : micTitle(state, wake, budget);
   // Not `spent`: that state draws its own line, and the two used to render
   // together -- two `max-w-52` spans plus the mic inside a `shrink-0`
@@ -467,13 +467,13 @@ export const VoiceControl = ({
               title={
                 wake.lastHeard
                   ? `heard “${WAKE_WORD}, ${wake.lastHeard}”`
-                  : `heard “${WAKE_WORD}” — tell me what you need`
+                  : `heard “${WAKE_WORD}”: tell me what you need`
               }
               data-testid="voice-heard"
             >
               {wake.lastHeard
                 ? `heard “${WAKE_WORD}, ${wake.lastHeard}”`
-                : `heard “${WAKE_WORD}” — tell me what you need`}
+                : `heard “${WAKE_WORD}”: tell me what you need`}
             </span>
           ) : null}
 
@@ -487,7 +487,7 @@ export const VoiceControl = ({
               title={title}
               data-testid="voice-spent"
             >
-              {`I stopped after ${wake?.cap ?? 1} window${wake?.cap === 1 ? "" : "s"} — click to listen again`}
+              {`I stopped after ${wake?.cap ?? 1} window${wake?.cap === 1 ? "" : "s"}. Click to listen again.`}
             </span>
           ) : null}
 
@@ -573,7 +573,7 @@ export const VoiceControl = ({
               Separate from the microphone above: that one is whether I hear
               you, this one is whether I say anything back. I speak when a
               stage lands and is waiting for you, when something fails, and
-              when I answer a question — never a running commentary. It costs
+              when I answer a question. Never a running commentary. It costs
               nothing: the voice is your machine&rsquo;s own.
             </p>
             <Button
@@ -586,7 +586,7 @@ export const VoiceControl = ({
               title={
                 speaks
                   ? "I speak at the moments that need an answer. Click to silence my voice; the microphone is unaffected."
-                  : "My voice is silenced — I still hear you, I just say nothing back. Click to let me speak."
+                  : "My voice is silenced. I still hear you, I just say nothing back. Click to let me speak."
               }
               aria-label={
                 speaks ? "Silence my voice" : "Let me speak"
@@ -603,7 +603,7 @@ export const VoiceControl = ({
               {/* Shape and words both carry it: the icon changes AND the
                   sentence changes, because colour alone never states a state. */}
               <span data-testid="voice-speak-state">
-                {speaks ? "I speak — click to silence me" : "Silenced — click to let me speak"}
+                {speaks ? "I speak: click to silence me" : "Silenced: click to let me speak"}
               </span>
             </Button>
           </div>

@@ -101,7 +101,7 @@ function nets(routed: number, total: number, sep: " of " | "/"): string {
 
 function reviewFailedCopy(detail: string | null): NotificationCopy {
   const why = detail?.trim() || "The critic answered nothing readable";
-  return { title: "Review failed", body: `${why} — ${REVIEW_FAILED_TAIL}` };
+  return { title: "Review failed", body: `${why}. ${REVIEW_FAILED_TAIL}` };
 }
 
 /**

@@ -193,7 +193,7 @@ export function voiceStatus(
     backend: "none",
     reason:
       "the engine has no voice provisioned, so Ada is staying silent rather " +
-      "than falling back to the platform's robot voice — run " +
+      "than falling back to the platform's robot voice. Run " +
       "`scripts/install_voice.sh` to install Kokoro, or choose the platform " +
       "voice deliberately in the voice menu",
   };
@@ -317,9 +317,9 @@ export function createSpeaker(deps?: Partial<SpeakerDeps>): Speaker {
         warn(
           getSettings().platformVoice
             ? `the engine has no voice provisioned, so Ada is using the ` +
-                `platform voice you selected — ${error.reason}`
+                `platform voice you selected: ${error.reason}`
             : `the engine has no voice provisioned, so Ada is staying ` +
-                `silent — ${error.reason}`
+                `silent: ${error.reason}`
         );
       } else {
         // The message never carries the API key: the backends are written to

@@ -50,7 +50,7 @@ export function earWord(wake: EarWordInput | null | undefined): string {
   if (wake.justHeard) {
     return wake.lastHeard
       ? `heard “${WAKE_WORD}, ${wake.lastHeard}”`
-      : `heard “${WAKE_WORD}” — tell me what you need`;
+      : `heard “${WAKE_WORD}”: tell me what you need`;
   }
   if (wake.listening) {
     if (wake.backend === "windows") {
@@ -62,7 +62,7 @@ export function earWord(wake: EarWordInput | null | undefined): string {
     return `Listening for “${WAKE_WORD}” · OS`;
   }
   if (wake.enabled) return `Opening the mic for one listen`;
-  if (wake.error) return `${WAKE_WORD} off — ${wake.error}`;
+  if (wake.error) return `${WAKE_WORD} off: ${wake.error}`;
   return `${WAKE_WORD} off`;
 }
 

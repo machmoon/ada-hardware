@@ -263,14 +263,14 @@ describe("describeFrame: what became of the critic", () => {
 
   it("a failed review never reads as clean, with or without a detail", () => {
     expect(done({ status: "failed" })).toBe(
-      "Review failed: the critic answered nothing readable — nothing is known about this board."
+      "Review failed: the critic answered nothing readable. Nothing is known about this board."
     );
     expect(done({ status: "failed", detail: "model answered with no JSON" })).toBe(
-      "Review failed: model answered with no JSON — nothing is known about this board."
+      "Review failed: model answered with no JSON. Nothing is known about this board."
     );
     expect(
       done({ review: { status: "failed", ran: true, detail: "critic timed out", note: "" } })
-    ).toBe("Review failed: critic timed out — nothing is known about this board.");
+    ).toBe("Review failed: critic timed out. Nothing is known about this board.");
     for (const text of [done({ status: "failed" }), done({ status: "failed", detail: "x" })]) {
       expect(text).not.toMatch(/no findings|nothing to flag/);
     }
@@ -278,11 +278,11 @@ describe("describeFrame: what became of the critic", () => {
 
   it("a skipped review says so", () => {
     expect(done({ status: "skipped" })).toBe(
-      "Review skipped — nothing is known about this board."
+      "Review skipped. Nothing is known about this board."
     );
     expect(
       done({ review: { status: "skipped", ran: false, detail: "review=false", note: "" } })
-    ).toBe("Review skipped: review=false — nothing is known about this board.");
+    ).toBe("Review skipped: review=false. Nothing is known about this board.");
   });
 
   it("no block and no status is the older engine's own wording", () => {
@@ -299,10 +299,10 @@ describe("describeFrame: what became of the critic", () => {
 
   it("review.failed is described in the failure words and never dropped", () => {
     expect(describeFrame({ event: "review.failed", stage: "review", detail: "quota exhausted" })).toBe(
-      "Review failed: quota exhausted — nothing is known about this board."
+      "Review failed: quota exhausted. Nothing is known about this board."
     );
     expect(describeFrame({ event: "review.failed", stage: "review" })).toBe(
-      "Review failed: the critic answered nothing readable — nothing is known about this board."
+      "Review failed: the critic answered nothing readable. Nothing is known about this board."
     );
     const long = "x".repeat(400);
     expect(describeFrame({ event: "review.failed", detail: long })!.length).toBeLessThan(260);

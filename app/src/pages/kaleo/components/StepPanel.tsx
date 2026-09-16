@@ -54,6 +54,7 @@ import type { StepResponse } from "@/lib/silkscreen/types";
 import type { StepRun } from "@/hooks/useStepRun";
 import type { StepName } from "@/lib/silkscreen/types";
 import { cn } from "@/lib/utils";
+import { useCalm } from "@/lib/calm";
 
 export interface StepPanelProps {
   run: StepRun;
@@ -226,7 +227,7 @@ const RouteOutcome = ({ details }: { details: RouteDetailsData }) => (
             data-net={net}
           >
             <span className="font-mono font-medium">{net}</span>
-            <span className="text-muted-foreground"> — {reason}</span>
+            <span className="text-muted-foreground">: {reason}</span>
           </li>
         ))}
       </ul>
@@ -335,7 +336,7 @@ const CaseOutcome = ({
     }
     openPath(model).catch((caught) =>
       setOpenNote(
-        `No application opened the model (${errorText(caught)}). It is at ${model} — KiCad's 3D viewer, FreeCAD or any STEP viewer reads it.`
+        `No application opened the model (${errorText(caught)}). It is at ${model}: KiCad's 3D viewer, FreeCAD or any STEP viewer reads it.`
       )
     );
   };
@@ -489,7 +490,7 @@ const OrderOutcome = ({
     const model = details.model;
     openPath(model).catch((caught) =>
       setOpenNote(
-        `No application opened the model (${errorText(caught)}). It is at ${model} — any glTF viewer reads it.`
+        `No application opened the model (${errorText(caught)}). It is at ${model}: any glTF viewer reads it.`
       )
     );
   };
@@ -516,7 +517,7 @@ const OrderOutcome = ({
                 <span className="min-w-0 flex-1">
                   <span className="font-medium">{issue.title ?? issue.code ?? severity}</span>
                   {issue.detail ? (
-                    <span className="text-muted-foreground"> — {issue.detail}</span>
+                    <span className="text-muted-foreground">: {issue.detail}</span>
                   ) : null}
                   {issue.parts?.length ? (
                     <span className="text-muted-foreground"> ({issue.parts.join(", ")})</span>
@@ -880,6 +881,7 @@ export const StepPanel = ({
   onDisarm,
   reviewed = true,
 }: StepPanelProps) => {
+  const calm = useCalm();
   const rows = railRows({
     history: run.history,
     running: run.running,
@@ -1008,7 +1010,7 @@ export const StepPanel = ({
               data-testid="step-row"
               data-step={row.id}
               data-status={row.status}
-              className={cn("flex flex-col gap-0.5", quiet && "opacity-60")}
+              className={cn("flex flex-col gap-0.5", quiet && "opacity-60", quiet && calm && "hidden")}
             >
               <div className="flex items-center gap-1.5">
                 <Icon
@@ -1070,9 +1072,6 @@ export const StepPanel = ({
           {armed ? (
             <p className="text-[11px] font-medium text-destructive">{run.error.message}</p>
           ) : null}
-          <p className="text-[11px] text-muted-foreground">
-            Trying again is another engine call.
-          </p>
           {run.error.detail ? (
             <p className="text-[11px] text-muted-foreground">{run.error.detail}</p>
           ) : null}
@@ -1147,7 +1146,7 @@ export const StepPanel = ({
           </div>
           <Input
             className="h-7 text-[11px]"
-            placeholder="Case style, optional — e.g. snap lid, vented, wall-mount tabs"
+            placeholder="Case style (optional), like snap lid or vented"
             value={caseStyle}
             maxLength={MAX_ENCLOSURE_STYLE_CHARS}
             onChange={(event) => setCaseStyle(event.target.value)}
@@ -1156,8 +1155,8 @@ export const StepPanel = ({
           />
           <p className="text-[10px] text-muted-foreground" data-testid="case-options-note">
             {caseAfresh
-              ? "Pressing Case designs afresh with these — one more model call, instead of the design started at placement."
-              : "Pressing Case collects the design the engine started at placement. A style or the rigorous switch designs afresh instead."}
+              ? "Case will make a new design. That is one more model call."
+              : "Case collects the design the engine started at placement. Add a style to make a new one."}
           </p>
         </div>
       ) : null}
@@ -1236,7 +1235,7 @@ export const StepPanel = ({
       {run.status === "done" ? (
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] text-muted-foreground">
-            {latest?.files.board ? "The routed board is on disk." : "Nothing further to run."}
+            {latest?.files.board ? "Board saved." : "All steps done."}
           </span>
           <Button size="sm" variant="ghost" onClick={onDismiss} data-testid="step-dismiss">
             New run
@@ -1261,15 +1260,24 @@ export const StepPanel = ({
                 delete the BOM and the case receipt rather than relocate
                 them. Findings first -- a blocker is a decision to make and a
                 table of parts is not. */}
-            {stageReceipt ? <StageReceipt response={stageReceipt} /> : null}
             {latest ? <EnvelopeWarnings response={latest} /> : null}
-            {priorArt ? <PriorArtOutcome details={priorArt} /> : null}
-            {place ? <PlaceOutcome details={place} /> : null}
-            {route ? <RouteOutcome details={route} /> : null}
             {review ? <ReviewOutcome details={review} /> : null}
-            {caseOutcome ? <CaseOutcome details={caseOutcome} onOpenCase={run.openCase} /> : null}
-            {order ? <OrderOutcome details={order} onShow3d={run.show3d} /> : null}
-            {sourcing ? <SourcingOutcome details={sourcing} /> : null}
+            {/* Calm output folds the receipts; warnings and findings above
+                stay open because they are decisions. */}
+            {stageReceipt || priorArt || place || route || caseOutcome || order || sourcing ? (
+              <details open={!calm} data-testid="step-details">
+                <summary className="cursor-pointer text-[11px] text-muted-foreground">Details</summary>
+                <div className="mt-1 flex flex-col gap-2">
+                  {stageReceipt ? <StageReceipt response={stageReceipt} /> : null}
+                  {priorArt ? <PriorArtOutcome details={priorArt} /> : null}
+                  {place ? <PlaceOutcome details={place} /> : null}
+                  {route ? <RouteOutcome details={route} /> : null}
+                  {caseOutcome ? <CaseOutcome details={caseOutcome} onOpenCase={run.openCase} /> : null}
+                  {order ? <OrderOutcome details={order} onShow3d={run.show3d} /> : null}
+                  {sourcing ? <SourcingOutcome details={sourcing} /> : null}
+                </div>
+              </details>
+            ) : null}
           </div>
         </div>
       ) : null}

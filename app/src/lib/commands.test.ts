@@ -35,7 +35,7 @@ function context(overrides: Partial<CommandContext> = {}): CommandContext {
 
 const byId = (items: CommandItem[], id: string) => items.find((item) => item.id === id);
 
-describe("commandItems — what may run now", () => {
+describe("commandItems: what may run now", () => {
   it("offers one Next item per available step, priced, and none while a step is in flight", () => {
     const waiting = commandItems(context({ available: ["route", "case"] }));
     expect(waiting.filter((i) => i.group === "Next").map((i) => i.label)).toEqual([

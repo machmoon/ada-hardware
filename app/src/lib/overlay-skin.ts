@@ -40,7 +40,7 @@ export const SKINS: readonly SkinInfo[] = [
   {
     id: "plain",
     name: "Bar",
-    summary: "The original strip — a field, a mic, a run control. Nothing else.",
+    summary: "The original strip: a field, a mic, a run control. Nothing else.",
     source: "Pluely's own bar, which this app is forked from",
     built: true,
   },

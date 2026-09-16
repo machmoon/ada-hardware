@@ -28,7 +28,7 @@ const ENTRIES: Entry[] = [
   },
   {
     label: "Courtyard",
-    hint: "dashed — the keep-out the placer reserved",
+    hint: "dashed: the keep-out the placer reserved",
     swatch: (
       <span
         className="block h-3 w-6 rounded-[2px] border-2 border-dashed"
@@ -51,7 +51,7 @@ const ENTRIES: Entry[] = [
   },
   {
     label: "Selected",
-    hint: "solid — the part a finding names, or one you clicked",
+    hint: "solid: the part a finding names, or one you clicked",
     swatch: (
       <span
         className="block h-3 w-6 rounded-[2px] border-2"

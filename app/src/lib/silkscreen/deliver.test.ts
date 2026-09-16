@@ -129,10 +129,10 @@ describe("deliverable and reviewState", () => {
     expect(state.reviewed).toBe(true);
     expect(state.failed).toBe(true);
     expect(state.failure).toBe(
-      "review failed: the critic answered nothing readable — nothing is known about this board"
+      "review failed: the critic answered nothing readable. Nothing is known about this board"
     );
     expect(scheduleNote([...ROUTED_PAIR, failed])).toBe(
-      "The review failed: the critic answered nothing readable — nothing is known about this board, so nothing can be booked."
+      "The review failed: the critic answered nothing readable. Nothing is known about this board, so nothing can be booked."
     );
     // The three sentences the calendar row can say, none of them "no blockers" over a failure.
     expect(scheduleNote(ROUTED_PAIR)).toContain("has not run yet");
@@ -281,8 +281,8 @@ describe("describe*", () => {
       describeChat({ session: "s1", chat: { ok: false, error: "http_403: the Chat webhook (<set, 80 chars>) rejected the card" } })
     ).toBe("Chat refused it: http_403: the Chat webhook (<set, 80 chars>) rejected the card");
     expect(
-      describeCalendar({ session: "s1", calendar: { ok: false, skipped_reason: "no blockers — nothing scheduled" } })
-    ).toBe("Nothing booked: no blockers — nothing scheduled.");
+      describeCalendar({ session: "s1", calendar: { ok: false, skipped_reason: "no blockers: nothing scheduled" } })
+    ).toBe("Nothing booked: no blockers: nothing scheduled.");
     expect(describeCalendar({ session: "s1", calendar: { ok: false, error: "401: token" } })).toBe(
       "Calendar refused it: 401: token"
     );
@@ -365,7 +365,7 @@ describe("spec review", () => {
       step({ step: "review", stage: "routed", spec_review: nothingBlocking }),
     ]);
     expect(offer.review).toBe(nothingBlocking);
-    expect(offer.note).toBe("No blockers — nothing needs a meeting.");
+    expect(offer.note).toBe("No blockers: nothing needs a meeting.");
     expect(blockingItems(AGENDA).map((i) => i.topic)).toEqual(["Input transient rating"]);
     expect(specReviewOffer([step({ step: "review", stage: "routed", spec_review: AGENDA })]).note).toBe("");
   });
@@ -407,7 +407,7 @@ describe("spec review", () => {
     expect(offer.refused).toBe(true);
     expect(offer.review).toBeNull();
     expect(offer.note).toBe(
-      "The review failed: ModelError: 503 — nothing is known about this board, so no spec review can be booked."
+      "The review failed: ModelError: 503. Nothing is known about this board, so no spec review can be booked."
     );
     // The other answers are not refusals: the button stays live for the engine to decide.
     expect(specReviewOffer([step({ step: "review", stage: "routed", spec_review: AGENDA })]).refused).toBe(false);

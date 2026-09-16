@@ -461,9 +461,8 @@ describe("StepPanel consent", () => {
       error: { message: "route failed", detail: "solver timeout" } as StepRun["error"],
     };
     render(<StepPanel run={failed} onDismiss={() => {}} />);
-    expect(screen.getByTestId("step-panel").textContent).toContain(
-      "Trying again is another engine call."
-    );
+    const retry = screen.getAllByTestId("step-approve").find((b) => b.dataset.step === "route");
+    expect(retry?.textContent).toContain("1 call");
   });
 });
 
@@ -964,7 +963,7 @@ describe("StepPanel review outcome", () => {
     const counts = screen.getByTestId("review-counts");
     expect(counts.className).toContain("text-destructive");
     expect(counts.textContent).toBe(
-      "Review failed: the critic answered nothing readable (ModelError: 503) — nothing is known about this board."
+      "Review failed: the critic answered nothing readable (ModelError: 503). Nothing is known about this board."
     );
     expect(counts.textContent).not.toContain("nothing to flag");
     expect(screen.queryAllByTestId("finding")).toHaveLength(0);
@@ -990,7 +989,7 @@ describe("StepPanel review outcome", () => {
     const card = screen.getByTestId("review-outcome");
     expect(card.getAttribute("data-status")).toBe("skipped");
     expect(screen.getByTestId("review-counts").textContent).toBe(
-      "Review skipped: review was not requested — nothing is known about this board."
+      "Review skipped: review was not requested. Nothing is known about this board."
     );
     expect(screen.queryAllByTestId("finding")).toHaveLength(0);
   });
@@ -1260,7 +1259,7 @@ describe("StepPanel background jobs", () => {
     const note = screen.getByTestId("background-note");
     expect(note.getAttribute("data-step")).toBe("case");
     expect(note.getAttribute("data-state")).toBe("settled");
-    expect(note.textContent).toContain("press to collect");
+    expect(note.textContent).toContain("to see how it went");
     // The BOM is still running: its row still says so, with no note.
     const sourcingRow = screen
       .getAllByTestId("step-row")
@@ -1298,7 +1297,7 @@ describe("StepPanel background jobs", () => {
     const note = screen.getByTestId("background-note");
     expect(note.getAttribute("data-step")).toBe("case");
     expect(note.getAttribute("data-state")).toBe("finished");
-    expect(note.textContent).toBe("Case design finished in the background — press to collect");
+    expect(note.textContent).toBe("Case design is ready. Press to collect.");
     expect(note.className).not.toContain("text-destructive");
   });
 
@@ -1318,7 +1317,7 @@ describe("StepPanel background jobs", () => {
     expect(failed?.textContent).toBe(detail);
     expect(failed?.className).toContain("text-destructive");
     const finished = notes.find((n) => n.getAttribute("data-step") === "sourcing");
-    expect(finished?.textContent).toBe("Parts lookup finished in the background — press to collect");
+    expect(finished?.textContent).toBe("Parts lookup is ready. Press to collect.");
     // Both rows stay pressable: the engine's `next` said so.
     for (const id of ["case", "sourcing"]) {
       const row = screen.getAllByTestId("step-row").find((r) => r.getAttribute("data-step") === id);

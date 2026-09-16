@@ -58,12 +58,12 @@ export function costLine(metering: MeteringBlock | null): string {
     // `off_block()` is a dict with a reason precisely so this can be a
     // sentence rather than an absence. Rendered as the engine wrote it.
     return metering.reason
-      ? `Not charged — ${metering.reason}.`
-      : "Not charged — metering is off.";
+      ? `Not charged: ${metering.reason}.`
+      : "Not charged: metering is off.";
   }
   if (metering.state === "unrecorded") {
     return metering.reason
-      ? `Charged, but the ledger did not record it — ${metering.reason}.`
+      ? `Charged, but the ledger did not record it: ${metering.reason}.`
       : "Charged, but the ledger did not record it.";
   }
   const charged = metering.charged_mkcu;
@@ -71,7 +71,7 @@ export function costLine(metering: MeteringBlock | null): string {
     return "Metered, but this window was not told the amount.";
   }
   if (charged <= 0) {
-    return "Billed nothing — the run stopped before it used any credit.";
+    return "Billed nothing: the run stopped before it used any credit.";
   }
   const cents = metering.cost_cents;
   const money =
@@ -84,7 +84,7 @@ export function costLine(metering: MeteringBlock | null): string {
   // because "1 KCU = one minute of attributable engine wall-clock" is the
   // only part of that a hardware engineer has any use for.
   const minutes = (charged / 1000).toFixed(2);
-  return `Billed ${charged} mKCU${money} — about ${minutes} min of engine time. Work already under way is billed whether or not anyone waited for it.`;
+  return `Billed ${charged} mKCU${money}: about ${minutes} min of engine time. Work already under way is billed whether or not anyone waited for it.`;
 }
 
 /** The engine's own sentence, or this app's fallback when it sent none. */
@@ -94,7 +94,7 @@ function headlineFor(cancellation: Cancellation): string {
   }
   if (cancellation.state === "unknown") {
     // Never the word "cancelled". We do not know that.
-    return "Asked the engine to stop — it has not confirmed.";
+    return "Asked the engine to stop. It has not confirmed.";
   }
   // Settled: the engine's `headline`, rendered verbatim. The service writes
   // "cancelled -- the run stops at its next pipeline event" or
@@ -197,7 +197,7 @@ export const CancelOutcome = ({ cancellation, onDismiss }: CancelOutcomeProps) =
 
       {/* Cost. Only once the run has actually settled: a figure quoted while
           the pipeline is still spending would be out of date the moment it
-          was read, and this surface has one job — not to overstate what it
+          was read, and this surface has one job. Not to overstate what it
           knows. */}
       {state === "settled" ? (
         <p className="text-[10px] text-muted-foreground" data-testid="cancel-cost">

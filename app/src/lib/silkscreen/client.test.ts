@@ -121,7 +121,7 @@ describe("normalizeRequest", () => {
     expect(normalizeRequest({ intent: "x", review: true }).review).toBe(true);
   });
 
-  it("sends ground/debug only when explicitly true — absence is the service default", () => {
+  it("sends ground/debug only when explicitly true. Absence is the service default", () => {
     const bare = normalizeRequest({ intent: "x" });
     expect("ground" in bare).toBe(false);
     expect("debug" in bare).toBe(false);
@@ -467,7 +467,7 @@ describe("generateStream", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to one-shot /generate on a 404 — the only status allowed a second POST", async () => {
+  it("falls back to one-shot /generate on a 404. The only status allowed a second POST", async () => {
     mockFetch.mockResolvedValueOnce(new Response("not found", { status: 404 }));
     mockFetch.mockResolvedValueOnce(jsonResponse(200, { status: "FEASIBLE" }));
     const result = await generateStream("http://x", request, () => {});
@@ -490,7 +490,7 @@ describe("generateStream", () => {
     }
   );
 
-  it("a 200 with no body throws server — the run already started, so no retry", async () => {
+  it("a 200 with no body throws server. The run already started, so no retry", async () => {
     mockFetch.mockResolvedValueOnce({
       status: 200,
       ok: true,

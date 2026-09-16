@@ -293,7 +293,7 @@ export function FindingCard({
           {/* Nothing in this app applies a fix. The control is disabled and
               labelled so it cannot read as an action that silently did work. */}
           <p data-testid="finding-card-fix-note" className="mt-1 px-2 text-[11px] text-muted-foreground">
-            Suggested fix — shown for you to apply. Nothing here changes the board.
+            Suggested fix: shown for you to apply. Nothing here changes the board.
           </p>
         </div>
       )}

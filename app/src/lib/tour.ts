@@ -54,16 +54,14 @@ export const TOUR_STOPS: readonly TourStop[] = [
     target: null,
     route: "/workbench",
     title: "Steps land in KiCad",
-    body:
-      "Each step Ada finishes — place, route, review — is written into the open KiCad project. Press a step in the strip and look at KiCad, not here.",
+    body: "Each finished step is written into your open KiCad project. Watch KiCad, not this window.",
   },
   {
     id: "integrations",
     target: { testid: "integration-group" },
     route: "/integrations",
-    title: "Integrations",
-    body:
-      "Google, Microsoft and Stripe are set up here. Ready means configured, not proven against a live account.",
+    title: "Connections",
+    body: "Connect Google, Microsoft and Stripe here. Ready means set up, not yet tested live.",
   },
 ];
 

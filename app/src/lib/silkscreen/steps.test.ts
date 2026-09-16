@@ -967,8 +967,8 @@ describe("background jobs", () => {
       { step: "case", state: "settled", warning: null },
     ]);
     expect(backgroundNote(jobs[0])).toBe(warning);
-    expect(backgroundNote(jobs[1])).toContain("press to collect");
-    expect(backgroundNote(jobs[1])).toContain("only when collected");
+    expect(backgroundNote(jobs[1])).toContain("to see how it went");
+    expect(backgroundNote(jobs[1])).toContain("to see how it went");
     expect(backgroundNote({ step: "case", state: "running", warning: null })).toBeNull();
     // Both of the engine's case sentences match: `_case_failure` (the job
     // raised) and `NO_CASE_WARNING` (it finished with nothing). Byte-for-byte
@@ -999,7 +999,7 @@ describe("background jobs", () => {
     expect(byId.sourcing.status).toBe("preparing");
     expect(byId.sourcing.backgroundNote).toBeNull();
     expect(byId.case.status).toBe("available");
-    expect(byId.case.backgroundNote).toContain("Finished designing in the background");
+    expect(byId.case.backgroundNote).toContain("Case design ended");
     expect(byId.route.backgroundNote).toBeNull();
     // Rows for steps that never ran in the background carry no note at all.
     expect(stepRows(history, null).every((r) => r.backgroundNote === null)).toBe(true);
@@ -1112,19 +1112,19 @@ describe("review outcome", () => {
 
   it("writes the failed sentence with the engine's detail, and nothing for an ok review", () => {
     expect(reviewFailure(REVIEW_FAILED)).toBe(
-      "review failed: the critic answered nothing readable (ModelError: 503) — nothing is known about this board"
+      "review failed: the critic answered nothing readable (ModelError: 503). Nothing is known about this board"
     );
     // No detail: the note stands in; no note either: a fixed reason, never a blank.
     expect(reviewFailure({ ...REVIEW_FAILED, detail: null })).toBe(
-      "review failed: review failed — nothing is known about this board"
+      "review failed: review failed. Nothing is known about this board"
     );
     expect(reviewFailure({ ...REVIEW_FAILED, detail: "  ", note: "" })).toBe(
-      "review failed: the critic answered nothing readable — nothing is known about this board"
+      "review failed: the critic answered nothing readable. Nothing is known about this board"
     );
     expect(reviewFailure(REVIEW_OK)).toBeNull();
     expect(reviewFailure(undefined)).toBeNull();
     expect(reviewSkipped(REVIEW_SKIPPED)).toBe(
-      "review skipped: review was not requested — nothing is known about this board"
+      "review skipped: review was not requested. Nothing is known about this board"
     );
     expect(reviewSkipped(REVIEW_FAILED)).toBeNull();
   });
@@ -1162,23 +1162,23 @@ describe("review outcome", () => {
   it("says failed, not 'no findings', on the sentence, the receipt clause and the run receipt", () => {
     const failed = step({ step: "review", findings: [], blockers: [], review: REVIEW_FAILED });
     expect(summarizeStep(failed)).toBe(
-      "Review failed: the critic answered nothing readable (ModelError: 503) — nothing is known about this board."
+      "Review failed: the critic answered nothing readable (ModelError: 503). Nothing is known about this board."
     );
     expect(receiptLine(failed)).toBe("review failed, nothing known");
     const receipt = runReceipt([failed]);
     expect(receipt.notVerified).toContain(
-      "review failed: the critic answered nothing readable (ModelError: 503) — nothing is known about this board"
+      "review failed: the critic answered nothing readable (ModelError: 503). Nothing is known about this board"
     );
     expect(receipt.notVerified).not.toContain("the critic raised no findings, which is not a measurement");
     expect(receipt.verified.some((line) => line.includes("finding"))).toBe(false);
 
     const skipped = step({ step: "review", findings: [], blockers: [], review: REVIEW_SKIPPED });
     expect(summarizeStep(skipped)).toBe(
-      "Review skipped: review was not requested — nothing is known about this board."
+      "Review skipped: review was not requested. Nothing is known about this board."
     );
     expect(receiptLine(skipped)).toBe("review skipped, nothing known");
     expect(runReceipt([skipped]).notVerified).toContain(
-      "review skipped: review was not requested — nothing is known about this board"
+      "review skipped: review was not requested. Nothing is known about this board"
     );
 
     // An ok review with no findings keeps the clean line and the honest receipt clause.
@@ -1218,12 +1218,12 @@ describe("background outcomes", () => {
       { step: "case", state: "finished", warning: null },
     ]);
     expect(backgroundNote(jobs[0])).toBe("ModelError: 429 RESOURCE_EXHAUSTED");
-    expect(backgroundNote(jobs[1])).toBe("Case design finished in the background — press to collect");
+    expect(backgroundNote(jobs[1])).toBe("Case design is ready. Press to collect.");
     expect(backgroundNote({ step: "sourcing", state: "finished", warning: null })).toBe(
-      "Parts lookup finished in the background — press to collect"
+      "Parts lookup is ready. Press to collect."
     );
     // The finished line never claims the engine reports only when collected.
-    expect(backgroundNote(jobs[1])).not.toContain("only when collected");
+    expect(backgroundNote(jobs[1])).not.toContain("to see how it went");
   });
 
   it("a failure with no detail still says it failed, in words", () => {
@@ -1250,7 +1250,7 @@ describe("background outcomes", () => {
   it("without an outcome the older reading stands: settled, or failed only from a warning", () => {
     const jobs = backgroundJobs(["sourcing", "case"], [], [placed]);
     expect(jobs.map((j) => j.state)).toEqual(["settled", "settled"]);
-    expect(backgroundNote(jobs[1])).toContain("only when collected");
+    expect(backgroundNote(jobs[1])).toContain("to see how it went");
     // The two readings mix per job: an outcome for one, the warning path for the other.
     const warning =
       "parts were not sourced: the lookup in the background failed (ModelError: 503); the BOM lists the board's parts with no part numbers";
@@ -1284,7 +1284,7 @@ describe("background outcomes", () => {
     const rows = stepRows([placed], null, jobs);
     const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
     expect(byId.case.status).toBe("available");
-    expect(byId.case.backgroundNote).toBe("Case design finished in the background — press to collect");
+    expect(byId.case.backgroundNote).toBe("Case design is ready. Press to collect.");
     expect(byId.sourcing.backgroundNote).toBe("the model never produced valid JSON");
   });
 });

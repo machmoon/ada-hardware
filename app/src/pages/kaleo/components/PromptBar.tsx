@@ -44,8 +44,8 @@ export function listeningLine(state: MicState, speaking = false): string {
   // strip and, while I talk, clicking it stops me. Naming a Stop button here
   // is what the removed one was: a second affordance for an organ the ear's
   // own button already covers.
-  if (speaking) return "I’m talking — click the mic to stop me.";
-  if (state === "heard") return "I heard my name — tell me what you need.";
+  if (speaking) return "I’m talking: click the mic to stop me.";
+  if (state === "heard") return "I heard my name. Tell me what you need.";
   // No `recording` line, deliberately: push-to-talk is still owned by
   // VoiceControl, which swaps itself for its own recording strip, so this
   // panel never sees that state. A sentence for a state that cannot reach
@@ -85,7 +85,7 @@ const ListeningPanel = ({
       role="status"
     >
       {/* voice-orb lane: the live indicator goes here. Until it exists this
-          panel carries words only — a static shape would be decoration, and
+          panel carries words only. A static shape would be decoration, and
           the animated one is theirs to draw. */}
       <span className="min-w-0 flex-1 truncate text-[12px] leading-tight">
         {listeningLine(state, speaking)}
@@ -125,17 +125,17 @@ export function submitReason(state: SubmitState): string {
   if (!state.intent.trim()) {
     if (state.busy) return "Say what you want changed and I will hold it until this run lands";
     return state.awaitingApproval
-      ? "Answer the stage waiting above — “go” approves it"
+      ? "Answer the step above. Say “go” to approve it."
       : "Type what you want on the board first";
   }
   // Spends nothing: the sentence is held until the run in flight lands, and
   // then offered. This is checked before the engine probe on purpose —
   // holding a sentence works whether or not the engine is answering.
-  if (state.busy) return "Hold this until the run in flight lands — nothing is spent";
+  if (state.busy) return "Held until the current run ends. Nothing is spent.";
   if (!state.engineOk) return "The engine is not answering; a run would fail immediately";
   return state.awaitingApproval
     ? "Send this to the run in progress"
-    : "Generate a board — this calls the model and costs money";
+    : "Generate a board: this calls the model and costs money";
 }
 
 export interface PromptBarProps {
@@ -228,7 +228,7 @@ export const PromptBar = ({
   // for whether or not anyone is waiting for it, and the placement solve runs
   // its full budget; what a real cancel buys is the steps that now never run.
   const cancelDetail = cancelReaches
-    ? "Close this run: no further step will run. Work already under way — the placement solve, a model call in flight, the background case and parts jobs — finishes and is discarded."
+    ? "Close this run. No further step runs. Work already under way (the placement solve, a model call, the case and parts jobs) finishes and is discarded."
     : "Stop waiting on this. It does not stop the work: a model call already in flight is paid for either way, and this run has no session yet to close.";
   const reason = submitReason({
     intent: request.intent,
@@ -331,7 +331,7 @@ export const PromptBar = ({
           they are just no longer in the way. */}
 
       {/* Cancel comes BEFORE the arrow, so the arrow is the last control in
-          the row in every state — see the note on the arrow below. */}
+          the row in every state. See the note on the arrow below. */}
       {busy ? (
         <span title={cancelDetail}>
           <Button

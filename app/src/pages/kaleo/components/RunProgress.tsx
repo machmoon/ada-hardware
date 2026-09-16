@@ -48,9 +48,7 @@ export interface RunProgressProps {
  * "Cancel" let a reader assume a kill.
  */
 export const CANCEL_DETAIL =
-  "Ask the engine to stop this run. It stops at its next pipeline event — a " +
-  "model call or a solve already under way runs to completion and is still " +
-  "billed.";
+  "Stops the run at its next step. Work already under way still finishes and is billed.";
 
 /**
  * The stage checklist and the clock.
@@ -142,10 +140,7 @@ export const RunProgress = ({ stages, elapsedS, onCancel }: RunProgressProps) =>
       {!ticked ? (
         // Nothing has arrived yet. The clock is real; the list has not moved,
         // and saying so is better than a bar that fills because time passed.
-        <p className="text-[11px] text-muted-foreground">
-          Waiting for the engine's first event — the clock is real, the list
-          below it has not moved yet.
-        </p>
+        <p className="text-[11px] text-muted-foreground">Waiting for the engine…</p>
       ) : null}
     </div>
   );
@@ -295,8 +290,7 @@ export const RunSummary = ({
           </span>
         ) : findings === undefined ? (
           <span className="text-[11px] text-muted-foreground">
-            This response carried no review — nothing was checked, which is not
-            the same as nothing being wrong.
+            Not reviewed. Nothing was checked.
           </span>
         ) : findings.length === 0 ? (
           <span className="text-[11px] text-muted-foreground" data-testid="summary-review-outcome" data-status={result.review?.status}>
@@ -305,8 +299,8 @@ export const RunSummary = ({
               : // Older engine, no block: it never said what became of the
                 // critic, so the empty list keeps the reading it always had.
                 reviewRequested
-                ? "The review ran and reported nothing. Only the checks it runs were run."
-                : "Review was off for this run, so no checks ran."}
+                ? "Review found nothing."
+                : "Review was off."}
           </span>
         ) : (
           orderSeverities(counts!).map((severity) => (
@@ -366,19 +360,19 @@ function explain(
     case "offline":
       return {
         title: "The engine isn't running.",
-        body: `Nothing answered at ${baseUrl}. Ada talks to the silkscreen engine over HTTP, so the service has to be up before a run can start.`,
-        hint: "PORT=8081 python -m service.app",
+        body: `Nothing answered at ${baseUrl}. Start it from the Engine tab.`,
+        hint: "silkscreen serve --port 8081",
       };
     case "setup":
       return {
         title: "The engine has no API key.",
-        body: "It is running, but GOOGLE_API_KEY is not in its environment, so it cannot call the model. That is a setup step, not an outage.",
-        hint: "export GOOGLE_API_KEY=… && PORT=8081 python -m service.app",
+        body: "Add a model key to .env, then restart the engine.",
+        hint: "silkscreen serve --port 8081",
       };
     case "auth":
       return {
         title: "The engine refused the token.",
-        body: "It answered 401 unauthorized. This engine is running behind a token gate, and the access token on the Engine page is missing or wrong.",
+        body: "Check the access token on the Engine tab.",
       };
     case "request":
       return {
@@ -387,20 +381,20 @@ function explain(
       };
     case "upstream":
       return {
-        title: "The model provider failed.",
-        body: "The engine reached the model and the model did not answer. Nothing is wrong with your prompt.",
+        title: "The model did not answer.",
+        body: "Your prompt is fine. Try again in a moment.",
       };
     case "timeout":
       return {
-        title: "The engine is taking longer than this app waits.",
-        body: "This app stopped waiting after its 300 second ceiling. The engine was not cancelled and keeps working; the run is asked for again under the same key, and starting the same request again picks it up rather than paying for a second one.",
+        title: "Still working.",
+        body: "The engine keeps going. Try again to pick the run back up. It is not billed twice.",
       };
     case "cancelled":
       return { title: "Run cancelled.", body: "Nothing was written." };
     default:
       return {
         title: "The engine hit a bug.",
-        body: error.message || "The engine failed without saying why.",
+        body: error.message || "No reason given. Check Logs.",
       };
   }
 }

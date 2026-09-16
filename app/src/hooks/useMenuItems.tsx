@@ -1,6 +1,5 @@
 import {
   Settings,
-  SquareSlashIcon,
   PowerIcon,
   CircuitBoardIcon,
   CableIcon,
@@ -22,36 +21,11 @@ export const useMenuItems = () => {
     href: string;
     count?: number;
   }[] = [
-    {
-      icon: CircuitBoardIcon,
-      label: "Workbench",
-      href: "/workbench",
-    },
-    {
-      icon: CableIcon,
-      label: "Engine",
-      href: "/engine",
-    },
-    {
-      icon: PlugZapIcon,
-      label: "Integrations",
-      href: "/integrations",
-    },
-    {
-      icon: TerminalIcon,
-      label: "Console",
-      href: "/console",
-    },
-    {
-      icon: Settings,
-      label: "App Settings",
-      href: "/settings",
-    },
-    {
-      icon: SquareSlashIcon,
-      label: "Shortcuts",
-      href: "/shortcuts",
-    },
+    { icon: CircuitBoardIcon, label: "Board", href: "/workbench" },
+    { icon: CableIcon, label: "Engine", href: "/engine" },
+    { icon: PlugZapIcon, label: "Connections", href: "/integrations" },
+    { icon: Settings, label: "Settings", href: "/settings" },
+    { icon: TerminalIcon, label: "Logs", href: "/console" },
   ];
 
   const footerItems = [

@@ -29,7 +29,7 @@ const STATE_NOTE: Record<IntegrationState, string> = {
   partial: "Some required settings are set and some are missing.",
   unconfigured: "Available in this engine, but nothing is configured yet.",
   unavailable:
-    "Not available in this engine — the code is not installed here, so configuration cannot help until that changes.",
+    "Not available in this engine. The code is not installed here, so configuration cannot help until that changes.",
 };
 
 const TONE_CLASS: Record<"ok" | "warn" | "off", string> = {
@@ -102,7 +102,7 @@ export const IntegrationCard = ({
                 title="Built offline against the documented API. It has never been run against a live account."
               >
                 <AlertTriangleIcon className="size-2.5" />
-                Unverified — never run live
+                Unverified: never run live
               </span>
             )}
           </div>

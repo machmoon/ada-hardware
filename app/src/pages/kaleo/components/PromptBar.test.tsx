@@ -121,7 +121,7 @@ describe("PromptBar", () => {
     const submit = screen.getByTestId("prompt-submit") as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
     expect(submit.getAttribute("data-intent")).toBe("park");
-    expect(submit.getAttribute("aria-label")).toContain("nothing is spent");
+    expect(submit.getAttribute("aria-label")).toContain("Nothing is spent");
     expect(submit.getAttribute("aria-label")).not.toContain("costs money");
     // Cancel is still there, and it no longer claims "nothing more is
     // charged": a model call already in flight is paid for whether or not
@@ -136,7 +136,7 @@ describe("PromptBar", () => {
   it("with a session, cancel says what closing the run does and does not stop", () => {
     draw({ busy: true, canStart: false, cancelReaches: true });
     const label = screen.getByTestId("prompt-cancel").getAttribute("aria-label") ?? "";
-    expect(label).toContain("no further step will run");
+    expect(label).toContain("No further step runs");
     // The half that is easy to leave out and is the whole point.
     expect(label).toContain("finishes and is discarded");
   });
@@ -261,7 +261,7 @@ describe("PromptBar", () => {
     expect(screen.queryByTestId("prompt-input")).toBeNull();
     const panel = screen.getByTestId("prompt-listening");
     expect(panel.getAttribute("data-state")).toBe("speaking");
-    expect(panel.textContent).toContain("I’m talking — click the mic to stop me.");
+    expect(panel.textContent).toContain("I’m talking: click the mic to stop me.");
     expect(panel.textContent).not.toContain("listening");
   });
 

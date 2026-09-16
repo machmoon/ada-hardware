@@ -40,8 +40,8 @@ export const VoiceToggle = ({ className }: { className?: string }) => {
         enabled
           ? status.backend === "none"
             ? `Voice on, but silent: ${status.reason}`
-            : `Voice on (${status.backend}) — mute the spoken digest`
-          : "Voice off — unmute"
+            : `Voice on (${status.backend}): mute the spoken digest`
+          : "Voice off: unmute"
       }
       data-backend={status.backend}
       aria-label={enabled ? "Mute the spoken digest" : "Unmute the spoken digest"}

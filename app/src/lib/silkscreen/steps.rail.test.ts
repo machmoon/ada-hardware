@@ -89,7 +89,7 @@ describe("railRows: status precedence", () => {
     expect(row(rows, "route").rail).toBe("running");
     expect(row(rows, "route").method).toContain("A* over a 0.25 mm grid");
     expect(row(rows, "sourcing").rail).toBe("background");
-    expect(row(rows, "sourcing").method).toBe("looking up parts — started on its own");
+    expect(row(rows, "sourcing").method).toBe("looking up parts: started on its own");
   });
 
   it("a failure marks the step that was in flight, from failedStep once running is cleared", () => {

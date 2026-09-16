@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 mod cli;
 mod desk;
+mod engine;
 mod setup;
 mod pty;
 mod shortcuts;
@@ -29,6 +30,7 @@ pub fn run() {
         .manage(shortcuts::RegisteredShortcuts::default())
         .manage(shortcuts::MoveWindowState::default())
         .manage(pty::PtyState::new())
+        .manage(engine::EngineProcess::default())
         .manage(setup::SetupState::default())
         .plugin(tauri_plugin_opener::init())
         // Both must be registered before `.setup`: `setup::apply_launch_policy`
@@ -66,6 +68,9 @@ pub fn run() {
             get_app_version,
             cli::list_cli_tools,
             cli::run_cli,
+            engine::engine_status,
+            engine::engine_start,
+            engine::engine_stop,
             desk::capture_desk_context,
             wake::wake_status,
             wake::wake_start,
@@ -239,8 +244,14 @@ pub fn run() {
     }
 
     builder
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                use tauri::Manager;
+                engine::stop_on_exit(&app.state::<engine::EngineProcess>());
+            }
+        });
 }
 
 /// `tauri dev` runs the bare debug binary rather than a `.app` bundle, so

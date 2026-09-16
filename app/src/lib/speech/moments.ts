@@ -143,7 +143,7 @@ export function armedLine(step: StepName | "restart"): string {
 /** I did not understand; the answer is the list of what I would understand. */
 export function unknownCommandLine(available: readonly StepName[]): string {
   if (available.length === 0) {
-    return "I did not follow that. No stage is waiting — say “start over” to begin a new board.";
+    return "I did not follow that. No stage is waiting. Say “start over” to begin a new board.";
   }
   const options = available.map((step) => `“${SPOKEN_WORD[step]}”`);
   const list =

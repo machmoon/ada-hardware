@@ -318,14 +318,14 @@ export function backgroundJobs(
  * with no outcome: the engine has finished, and only pressing tells how.
  */
 const SETTLED_LINE: Partial<Record<StepName, string>> = {
-  sourcing: "Finished looking up parts in the background — press to collect; the engine reports the outcome only when collected.",
-  case: "Finished designing in the background — press to collect; the engine reports the outcome only when collected.",
+  sourcing: "Parts lookup ended. Press it to see how it went.",
+  case: "Case design ended. Press it to see how it went.",
 };
 
 /** What a finished job's row says: the engine reported `ok`, and pressing collects it. */
 const FINISHED_LINE: Partial<Record<StepName, string>> = {
-  sourcing: "Parts lookup finished in the background — press to collect",
-  case: "Case design finished in the background — press to collect",
+  sourcing: "Parts lookup is ready. Press to collect.",
+  case: "Case design is ready. Press to collect.",
 };
 
 /** The row's sentence for one background job, or null while it runs. */
@@ -333,9 +333,9 @@ export function backgroundNote(job: BackgroundJob | undefined): string | null {
   if (!job || job.state === "running") return null;
   if (job.state === "failed") return job.warning;
   if (job.state === "finished") {
-    return FINISHED_LINE[job.step] ?? "Finished in the background — press to collect";
+    return FINISHED_LINE[job.step] ?? "Finished in the background. Press to collect";
   }
-  return SETTLED_LINE[job.step] ?? "Finished in the background — press to collect.";
+  return SETTLED_LINE[job.step] ?? "Finished in the background. Press to collect.";
 }
 
 // ---------------------------------------------------------------- case payload
@@ -364,7 +364,7 @@ function mm(n: number | undefined): string {
 
 // ---------------------------------------------------------------- resync
 
-export const UNRECEIVED_SUMMARY = "finished while cancelled — result not received";
+export const UNRECEIVED_SUMMARY = "finished while cancelled: result not received";
 
 /**
  * The history entries that stand in for a step the engine finished but this
@@ -739,7 +739,7 @@ export function reviewOutcome(review: ReviewBlock | undefined | null): ReviewOut
 }
 
 /** What a review that answered nothing says, everywhere it is said. */
-export const REVIEW_FAILED_TAIL = "nothing is known about this board";
+export const REVIEW_FAILED_TAIL = "Nothing is known about this board";
 
 /**
  * The failed sentence, or null when the review did not fail. One function
@@ -750,7 +750,7 @@ export function reviewFailure(review: ReviewBlock | undefined | null): string | 
   const outcome = reviewOutcome(review);
   if (outcome.status !== "failed") return null;
   const why = outcome.detail ?? outcome.note.trim();
-  return `review failed: ${why || "the critic answered nothing readable"} — ${REVIEW_FAILED_TAIL}`;
+  return `review failed: ${why || "the critic answered nothing readable"}. ${REVIEW_FAILED_TAIL}`;
 }
 
 /** The skipped sentence, or null when the review was not skipped. */
@@ -758,7 +758,7 @@ export function reviewSkipped(review: ReviewBlock | undefined | null): string | 
   const outcome = reviewOutcome(review);
   if (outcome.status !== "skipped") return null;
   const why = outcome.detail ?? outcome.note.trim();
-  return `review skipped${why ? `: ${why}` : ""} — ${REVIEW_FAILED_TAIL}`;
+  return `review skipped${why ? `: ${why}` : ""}. ${REVIEW_FAILED_TAIL}`;
 }
 
 /** What an `ok` review with an empty finding list says. */
@@ -1644,8 +1644,8 @@ export const METHOD_LINE: Record<StepName, string> = {
 
 /** What a background row says, so a stage nobody pressed is not a mystery. */
 const BACKGROUND_LINE: Partial<Record<StepName, string>> = {
-  sourcing: "looking up parts — started on its own",
-  case: "designing the case — started on its own",
+  sourcing: "looking up parts: started on its own",
+  case: "designing the case: started on its own",
 };
 
 /**
@@ -1880,7 +1880,7 @@ export function findingProvenance(finding: Finding): FindingProvenance {
 }
 
 /** What the panel writes where a finding cites nothing. Never a blank cell. */
-export const NO_CITATION = "No citation — nothing was quoted for this.";
+export const NO_CITATION = "No citation: nothing was quoted for this.";
 
 export interface FindingCitation {
   /** The quoted text, exactly as the engine sent it. */

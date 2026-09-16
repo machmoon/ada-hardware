@@ -132,11 +132,11 @@ export function orbTitle(
       ? `Checking ${baseUrl}…`
       : health === "up"
         ? `Engine up at ${baseUrl}.`
-        : `Engine unreachable at ${baseUrl}${detail ? ` — ${detail}` : ""}.`;
+        : `Engine unreachable at ${baseUrl}${detail ? `: ${detail}` : ""}.`;
   const voice = (() => {
     switch (state) {
       case "recording":
-        return "I am recording you — hold the microphone and talk.";
+        return "I am recording you. Hold the microphone and talk.";
       case "heard":
         return "I heard my name.";
       case "listening":
@@ -150,7 +150,7 @@ export function orbTitle(
       case "unknown":
         return "I am not listening.";
       default:
-        return "I am not listening — the microphone is closed.";
+        return "I am not listening. The microphone is closed.";
     }
   })();
   return `${engine} ${voice} Click to re-check the engine.`;
@@ -187,7 +187,7 @@ const ORB_CSS = `
 
    Idle here means the microphone is closed. A green core pulsing at 4.2s
    next to one pulsing at 1.9s asks the reader to tell two rates apart with
-   no second orb beside it for comparison — which in practice means a
+   no second orb beside it for comparison. Which in practice means a
    breathing green dot at a shut microphone, one glance away from the exact
    lie this lane exists to kill. Still is unambiguous, and it also makes
    every hot state announce itself the instant motion starts. (Raised as a P1

@@ -103,7 +103,7 @@ describe("the single Y flip", () => {
     expect(applyTransform(flipTransform(height), { x: 7, y: 10 })).toEqual({ x: 7, y: 15 });
   });
 
-  it("leaves x untouched — a mirrored board is the bug this guards", () => {
+  it("leaves x untouched: a mirrored board is the bug this guards", () => {
     const a = applyTransform(flipTransform(height), { x: 0, y: 12 });
     const b = applyTransform(flipTransform(height), { x: 40, y: 12 });
     expect(a.x).toBe(0);
@@ -125,7 +125,7 @@ describe("the single Y flip", () => {
     expect(applyTransform(t, { x: c.x, y: c.y + c.height }).y).toBe(18);
   });
 
-  it("is an involution — applying it twice returns the original point", () => {
+  it("is an involution: applying it twice returns the original point", () => {
     const t = flipTransform(height);
     const once = applyTransform(t, { x: 3, y: 9 });
     expect(applyTransform(t, once)).toEqual({ x: 3, y: 9 });

@@ -143,7 +143,7 @@ describe("useWakeWord", () => {
     expect(result.current.listening).toBe(false);
   });
 
-  it("turns back on after a disable — the toggle is not one-way", async () => {
+  it("turns back on after a disable. The toggle is not one-way", async () => {
     const { result } = renderHook(() => useWakeWord({ ...options, onWake: vi.fn(), create }));
     act(() => result.current.setEnabled(true));
     await waitFor(() => expect(result.current.listening).toBe(true));
@@ -183,7 +183,7 @@ describe("useWakeWord", () => {
     const first = FakeListener.instances[0];
     act(() => {
       first.events.onWindow?.(1, 1);
-      first.events.onState("capped", "stopped after 1 clip — click the ear to listen again");
+      first.events.onState("capped", "stopped after 1 clip. Click the ear to listen again");
     });
     expect(result.current.enabled).toBe(false);
 
@@ -262,7 +262,7 @@ describe("useWakeWord", () => {
       FakeListener.instances[1].events.onWindow?.(3, 3);
       FakeListener.instances[1].events.onState(
         "capped",
-        "that was the last of my 3 listening calls — unmute me again for another 3"
+        "that was the last of my 3 listening calls. Unmute me again for another 3"
       );
     });
     expect(result.current.budgetSpent).toBe(true);
@@ -308,7 +308,7 @@ describe("useWakeWord", () => {
     vi.useRealTimers();
   });
 
-  it("one breath — name and command in the same clip — opens no follow-up window", async () => {
+  it("one breath: name and command in the same clip. Opens no follow-up window", async () => {
     enableWake();
     const seen: Array<() => boolean> = [];
     const spy: typeof createWakeWordListener = (opts, events) => {
@@ -350,7 +350,7 @@ describe("useWakeWord", () => {
     const first = FakeListener.instances[0];
     act(() => {
       first.events.onWindow?.(1, 1);
-      first.events.onState("capped", "stopped after 1 clip — click the ear to listen again");
+      first.events.onState("capped", "stopped after 1 clip. Click the ear to listen again");
     });
     expect(result.current.enabled).toBe(false);
     expect(result.current.listening).toBe(false);
@@ -474,7 +474,7 @@ describe("useWakeWord", () => {
     expect(result.current.listening).toBe(true);
   });
 
-  it("an empty local hit does not route yet — it opens one command clip", async () => {
+  it("an empty local hit does not route yet. It opens one command clip", async () => {
     enableWake();
     let deliver: (hit: { utterance?: string }) => void = () => {};
     const subscribeLocal = vi.fn(async (onHit: typeof deliver) => {

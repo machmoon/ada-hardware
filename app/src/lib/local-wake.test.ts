@@ -29,7 +29,7 @@ beforeEach(() => {
 });
 
 describe("describeLocalWake", () => {
-  it("is honest when the spotter is missing — PTT is the path", () => {
+  it("is honest when the spotter is missing. PTT is the path", () => {
     expect(describeLocalWake(false)).toMatch(/mic button/);
     expect(describeLocalWake(false)).not.toMatch(/Gemini|always-on|Siri/i);
     expect(describeLocalWake(true)).toMatch(/on-device/);

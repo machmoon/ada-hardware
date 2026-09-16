@@ -9,3 +9,4 @@ export * from "./schematic";
 export * from "./artifacts";
 export * from "./debug";
 export * from "./ModelViewer";
+export * from "./CommandLine";

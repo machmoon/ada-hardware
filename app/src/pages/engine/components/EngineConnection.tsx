@@ -50,7 +50,7 @@ export function validateEngineBaseUrl(raw: string): BaseUrlCheck {
     return {
       ok: false,
       url: "",
-      reason: `Only http:// (loopback) or https:// (deployed) is supported, not ${parsed.protocol}//`,
+      reason: `Use http:// for this Mac or https:// for a hosted engine.`,
     };
   }
 
@@ -64,7 +64,7 @@ export function validateEngineBaseUrl(raw: string): BaseUrlCheck {
       return {
         ok: false,
         url: "",
-        reason: "Give the origin only — no query string or fragment.",
+        reason: "Use just the address, like http://127.0.0.1:8081.",
       };
     }
     const path = parsed.pathname.replace(/\/+$/, "");
@@ -90,7 +90,7 @@ export function validateEngineBaseUrl(raw: string): BaseUrlCheck {
     return {
       ok: false,
       url: "",
-      reason: `"${parsed.hostname}" is not this machine. Over plain http the bearer token and your intents cross the network unencrypted. Use 127.0.0.1 for a local engine, or https:// for a deployed one.`,
+      reason: `${parsed.hostname} is not this Mac. Use 127.0.0.1, or https:// for a hosted engine.`,
     };
   }
 
@@ -98,7 +98,7 @@ export function validateEngineBaseUrl(raw: string): BaseUrlCheck {
     return {
       ok: false,
       url: "",
-      reason: "Give the origin only — no query string or fragment.",
+      reason: "Use just the address, like http://127.0.0.1:8081.",
     };
   }
 
@@ -218,7 +218,7 @@ export const EngineConnection = ({
     <div id="engine-connection" className={cn("space-y-3", className)}>
       <Header
         title="Engine address"
-        description="Ada talks to the silkscreen Python service over HTTP on your own machine"
+        description="Where Ada reaches the engine on this Mac"
         isMainTitle
       />
 
@@ -268,15 +268,12 @@ export const EngineConnection = ({
         </div>
 
         <p id="engine-base-url-help" className="text-xs text-muted-foreground">
-          Default is {DEFAULT_BASE_URL} — the port README.md uses for the
-          service ({" "}
-          <code className="font-mono">PORT=8081 python -m service.app</code> ).
-          Loopback addresses only.
+          Default {DEFAULT_BASE_URL}. Only this Mac's own addresses work.
         </p>
 
         {dirty && check.ok && (
           <p className="text-xs text-muted-foreground">
-            Not saved yet — testing the connection saves it.
+            Test the connection to save it.
           </p>
         )}
       </div>
@@ -304,10 +301,7 @@ export const EngineConnection = ({
           className="max-w-96"
         />
         <p id="engine-token-help" className="text-xs text-muted-foreground">
-          Only needed when the engine was started with a token gate; requests
-          then carry it as <code className="font-mono">Authorization: Bearer</code>.
-          A local engine with no token configured has no gate — leave this
-          empty and nothing is sent.
+          Only for an engine started with a token. Leave empty otherwise.
         </p>
       </div>
 
@@ -332,13 +326,7 @@ export const EngineConnection = ({
           <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-chart-2" />
           <div className="text-xs leading-relaxed">
             <p className="font-medium">
-              {test.url}/healthz answered{" "}
-              <code className="font-mono">ok: true</code>
-            </p>
-            <p className="text-muted-foreground mt-1">
-              That is the readiness probe only. It does not prove the service
-              has a GOOGLE_API_KEY — a keyless engine passes this check and then
-              fails the first run with a 502 naming that variable.
+              Connected to {test.url}
             </p>
           </div>
         </div>
@@ -353,7 +341,7 @@ export const EngineConnection = ({
           <XCircleIcon className="mt-0.5 size-4 shrink-0 text-destructive" />
           <div className="text-xs leading-relaxed">
             <p className="font-medium text-destructive">
-              {test.url}/healthz did not answer ok
+              No answer from {test.url}
             </p>
             {/* The service's own words, verbatim. "Connection refused" and
                 "answered 404" send the user to entirely different fixes. */}
@@ -361,8 +349,7 @@ export const EngineConnection = ({
               {test.detail}
             </p>
             <p className="mt-1 text-muted-foreground">
-              If that reads as a refused connection, nothing is listening on
-              that port — start the engine with one of the commands below.
+              Start the engine below, then test again.
             </p>
           </div>
         </div>

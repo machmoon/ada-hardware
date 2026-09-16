@@ -100,7 +100,7 @@ describe("the voice switch in the menu", () => {
     expect(wake.stop).not.toHaveBeenCalled();
   });
 
-  it("reads back as silenced on the next mount — a choice, not a session flag", () => {
+  it("reads back as silenced on the next mount. A choice, not a session flag", () => {
     draw();
     openMenu();
     fireEvent.click(screen.getByTestId("voice-speak-toggle"));

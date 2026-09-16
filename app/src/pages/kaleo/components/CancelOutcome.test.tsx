@@ -110,7 +110,7 @@ describe("CancelOutcome: the three states stay three", () => {
     // The engine's headline said "cancelled"; the poll said otherwise. The
     // poll wins, because it is the later fact.
     expect(screen.getByTestId("cancel-headline").textContent).toBe(
-      "Asked the engine to stop — it has not confirmed."
+      "Asked the engine to stop. It has not confirmed."
     );
     expect(screen.getByTestId("cancel-unresolved").textContent).toContain(
       "still being billed"
@@ -143,7 +143,7 @@ describe("costLine: not charged and not told are different facts", () => {
         "metering is off (KALEO_METERING is not set); this run was not charged against any ledger",
     });
     expect(line).toBe(
-      "Not charged — metering is off (KALEO_METERING is not set); this run was not charged against any ledger."
+      "Not charged: metering is off (KALEO_METERING is not set); this run was not charged against any ledger."
     );
     expect(line).not.toMatch(/mKCU|USD/);
   });
@@ -166,7 +166,7 @@ describe("costLine: not charged and not told are different facts", () => {
     // vitest's getStateString rule: the empty case is named, and no category
     // is ever printed as a zero.
     expect(costLine(enabled({ charged_mkcu: 0, cost_cents: 0 }))).toBe(
-      "Billed nothing — the run stopped before it used any credit."
+      "Billed nothing: the run stopped before it used any credit."
     );
   });
 

@@ -209,7 +209,7 @@ export const BillingSetup = ({
             if (body.check?.ok) {
                 const environment = environmentWinsSentence(body);
                 if (verifyOnly) {
-                    setResult(`Key works — ${body.check.mode} mode.`);
+                    setResult(`Key works: ${body.check.mode} mode.`);
                 } else if (demo) {
                     setResult(
                         [body.note ?? `Saved. ${body.check.mode} mode; no charge can happen in demo.`, environment]
@@ -260,7 +260,7 @@ export const BillingSetup = ({
                             <p className="text-xs text-muted-foreground">
                                 {conn.connected
                                     ? "Connected. Revoke any time in the Stripe Dashboard under user settings → OAuth sessions."
-                                    : "Sign in with Stripe in your browser — no key to copy."}
+                                    : "Sign in with Stripe in your browser. No key to copy."}
                             </p>
                         </div>
                         <Button
@@ -365,7 +365,7 @@ export const BillingSetup = ({
                                 spellCheck={false}
                                 placeholder={
                                     step?.present
-                                        ? "•••• stored — paste to replace"
+                                        ? "•••• stored: paste to replace"
                                         : field.placeholder
                                 }
                                 value={values[field.key] ?? ""}

@@ -32,7 +32,7 @@ pub struct CliToolInfo {
     pub detail: String,
 }
 
-fn repository_root() -> Result<PathBuf, String> {
+pub(crate) fn repository_root() -> Result<PathBuf, String> {
     let candidate = env::var_os("ADA_REPO_ROOT")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
@@ -50,7 +50,7 @@ fn repository_root() -> Result<PathBuf, String> {
     Ok(root)
 }
 
-fn python_interpreter(root: &Path) -> Result<OsString, String> {
+pub(crate) fn python_interpreter(root: &Path) -> Result<OsString, String> {
     if let Some(value) = env::var_os("ADA_PYTHON")
         .or_else(|| env::var_os("SILKSCREEN_PYTHON"))
         .filter(|value| !value.is_empty())
@@ -182,7 +182,7 @@ fn resolve_invocation(
     }
 }
 
-fn load_dotenv_into(cmd: &mut Command, root: &Path) {
+pub(crate) fn load_dotenv_into(cmd: &mut Command, root: &Path) {
     // Mirror the CLIs: the service does not read .env, but `python -m googleapps`
     // / `silkscreen` do. When Ada spawns them it should see the same file.
     let path = root.join(".env");

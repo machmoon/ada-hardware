@@ -7,3 +7,4 @@ export * from "./SkinPreviewPicker";
 export * from "./ThemeThumbnail";
 export * from "./ThemeCardPicker";
 export * from "./EngineStartCommands";
+export * from "./AgentAccess";

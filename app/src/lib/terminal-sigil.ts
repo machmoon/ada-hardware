@@ -106,6 +106,6 @@ export function preview(line: string, context: RouteContext = {}): Routed {
 
 /** The two-line legend the skin prints once, on open. */
 export const LEGEND = [
-  "Type as usual — it runs in your shell.",
+  "Type as usual: it runs in your shell.",
   "Start with a Capital letter to ask Ada, or ! to have her work on it.",
 ];

@@ -651,7 +651,7 @@ const Kaleo = () => {
       const parts: string[] = [];
       if (outcome.assistant) parts.push(outcome.assistant);
       if (outcome.ranBoard) {
-        parts.push("A board was generated — open the dashboard to see it.");
+        parts.push("A board was generated. Open the dashboard to see it.");
       } else if (mode === "agent" && !outcome.assistant) {
         parts.push("Nothing to do.");
       }
@@ -864,7 +864,7 @@ const Kaleo = () => {
           // Mid-run there is nothing available to arm, and the answer is not
           // "no": it is when. The stage they named is still coming.
           setArmed(null);
-          const line = `Noted — I will offer ${soon} once this stage lands.`;
+          const line = `Noted: I will offer ${soon} once this stage lands.`;
           setCommandNote(line);
           if (spoken) void announce(line);
           return true;
@@ -891,14 +891,14 @@ const Kaleo = () => {
         if (busy) {
           setHeld({ state: "parked", text: command.text });
           const line =
-            "Got it — holding that until this stage lands, then I will ask. Nothing extra is spent.";
+            "Got it: holding that until this stage lands, then I will ask. Nothing extra is spent.";
           setCommandNote(line);
           if (spoken) void announce(line);
           return true;
         }
         setHeld({ state: "offered", text: command.text });
         const line = steps.history.length
-          ? "Got it. That is a different board from this one — confirm and I will start it."
+          ? "Got it. That is a different board from this one. Confirm and I will start it."
           : "Got it. Confirm and I will start that board.";
         setCommandNote(line);
         if (spoken) void announce(line);
@@ -916,8 +916,8 @@ const Kaleo = () => {
       const line = steps.available.length
         ? `I am listening. Next up: ${steps.available
             .map((step) => STEP_DESCRIPTORS[step].action.toLowerCase())
-            .join(", ")} — or describe a different board.`
-        : "I am listening — describe the board you want.";
+            .join(", ")}: or describe a different board.`
+        : "I am listening: describe the board you want.";
       setCommandNote(line);
       if (spoken) void announce(line);
       return false;
@@ -1356,7 +1356,7 @@ const Kaleo = () => {
       if (!ear?.enabled && !ear?.listening) return;
       ear?.setEnabled(false);
       setCommandNote(
-        "The screen went away, so I stopped listening — I won’t keep a microphone open on a machine you’ve left. Click the mic when you’re back."
+        "The screen went away, so I stopped listening. I won’t keep a microphone open on a machine you’ve left. Click the mic when you’re back."
       );
     };
     document.addEventListener("visibilitychange", onAway);
@@ -1483,7 +1483,7 @@ const Kaleo = () => {
         }`}
       >
         {/* The shape the overlay just left, fading out *under* the one
-            arriving. Surface only — an empty Card at the outgoing size, so the
+            arriving. Surface only: an empty Card at the outgoing size, so the
             swap has something to cross-fade from without a second live
             subtree. It is absolutely positioned and so contributes nothing to
             the measured box, and `aria-hidden` because it says nothing.
@@ -1496,7 +1496,7 @@ const Kaleo = () => {
             collapsing, a blank 600 px card hid the pill's three controls until
             it had finished fading. Photographed both. Making the wrappers
             positioned puts them in the same paint step as the ghost, where
-            source order decides — ghost first, incoming over it — so the new
+            source order decides: ghost first, incoming over it. So the new
             content is legible from its first frame and the ghost does the one
             job it has, which is to keep the surface opaque underneath while
             the new content rises (motion.css §2). */}
@@ -1678,8 +1678,8 @@ const Kaleo = () => {
             />
             {/* Dashboard sits between the ⏎ and the handle: the strip's own
                 controls (field, mic, ⏎) are one group, and the two things
-                that are not about this sentence — the other window, and
-                moving the window — bracket it. Order is fixed by Pat, and
+                that are not about this sentence. The other window, and
+                moving the window: bracket it. Order is fixed by Pat, and
                 it is the same left-to-right story in both bar sizes.
 
                 It is deliberately NOT beside the collapse chevron. Grouping
@@ -1745,7 +1745,7 @@ const Kaleo = () => {
           ) : null}
 
           {/* The run options, out of the strip and into the card.
-              `RunOptions` is not app settings — it is the solver budget, the
+              `RunOptions` is not app settings. It is the solver budget, the
               datasheets, the step-by-step switch and the summary mode, and
               nothing in the dashboard renders it today. So removing the gear
               from the row could not simply delete it: it moved one level down,
@@ -1800,7 +1800,7 @@ const Kaleo = () => {
               </p>
 
               {/* The service's sentence, verbatim. It composes this out of
-                  facts the client does not have — whether a step was under
+                  facts the client does not have. Whether a step was under
                   the session lock, which background jobs are still going —
                   and every rewording reads rosier than the truth. */}
               {lifecycle ? (
@@ -1860,14 +1860,14 @@ const Kaleo = () => {
                     title={
                       busy
                         ? "Stops this run and starts a new one from your request plus this note. Work already under way still finishes and is discarded. This calls the model and costs money."
-                        : "Starts a new board from your request plus this note — this calls the model and costs money."
+                        : "Starts a new board from your request plus this note. This calls the model and costs money."
                     }
                   >
                     {steps.session ? "Start over with this" : "Build it"}
                   </Button>
                 ) : (
                   <span className="text-[11px] text-muted-foreground" data-testid="held-waiting">
-                    Held here — this run has no session yet, so nothing can be
+                    Held here: this run has no session yet, so nothing can be
                     attached to it and nothing is spent.
                   </span>
                 )}
@@ -1983,7 +1983,7 @@ const Kaleo = () => {
                   another window being in front. */}
               <div className="flex items-center justify-between gap-2">
                 <span className="min-w-0 truncate text-[11px] text-muted-foreground">
-                  Board ready. Open the dashboard to read it.
+                  Board ready.
                 </span>
                 <div className="flex shrink-0 items-center gap-1">
                   <Button size="sm" variant="secondary" onClick={openDashboard} data-testid="result-open-review">
@@ -2011,8 +2011,7 @@ const Kaleo = () => {
           {run.status === "cancelled" ? (
             <div className="kv-settle flex items-center justify-between gap-2 border-t border-input/40 pt-2">
               <span className="text-[11px] text-muted-foreground">
-                Run cancelled. The engine may have finished the work it had
-                already started, but nothing came back.
+                Run cancelled.
               </span>
               <Button
                 size="sm"

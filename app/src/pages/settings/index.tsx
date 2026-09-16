@@ -1,5 +1,6 @@
 import {
   Appearance,
+  CalmOutputToggle,
   AlwaysOnTopToggle,
   AppIconToggle,
   AutostartToggle,
@@ -11,6 +12,7 @@ import {
   RunSetupAgain,
 } from "./components";
 import { PageLayout } from "@/layouts";
+import { ShortcutManager } from "@/pages/shortcuts/components";
 import {
   loadEngineBaseUrl,
   loadEngineToken,
@@ -18,8 +20,9 @@ import {
 
 const Settings = () => {
   return (
-    <PageLayout title="Settings" description="Manage your settings">
+    <PageLayout title="Settings" description="How Ada looks, sounds and starts">
       <Appearance />
+      <CalmOutputToggle />
       <OverlaySkin />
       <CliTools />
       <Notifications />
@@ -28,6 +31,7 @@ const Settings = () => {
       <AppIconToggle />
       <AlwaysOnTopToggle />
       <BillingSetup baseUrl={loadEngineBaseUrl()} token={loadEngineToken()} />
+      <ShortcutManager />
       <RunSetupAgain />
     </PageLayout>
   );

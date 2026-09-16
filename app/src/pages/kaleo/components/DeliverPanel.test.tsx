@@ -207,7 +207,7 @@ describe("DeliverPanel", () => {
     deliverConfig.mockResolvedValue(READY);
     deliverRun.mockResolvedValue({
       session: "s1",
-      calendar: { ok: false, skipped_reason: "no blockers — nothing scheduled" },
+      calendar: { ok: false, skipped_reason: "no blockers: nothing scheduled" },
     });
     const { unmount } = mount();
     expect(screen.getByText(/review has not run yet/)).toBeTruthy();
@@ -224,7 +224,7 @@ describe("DeliverPanel", () => {
     expect(deliverRun.mock.calls[0][2]).toEqual({ schedule: true, attendees: ["lead@example.com"] });
     await waitFor(() =>
       expect(screen.getByTestId("deliver-result").textContent).toBe(
-        "Nothing booked: no blockers — nothing scheduled."
+        "Nothing booked: no blockers: nothing scheduled."
       )
     );
     expect(screen.queryByTestId("deliver-failure")).toBeNull();
@@ -353,7 +353,7 @@ describe("DeliverPanel", () => {
     deliverConfig.mockResolvedValue(READY);
     deliverRun.mockResolvedValue({
       session: "s1",
-      spec_review: { ok: false, skipped_reason: "no blockers — nothing needs a meeting" },
+      spec_review: { ok: false, skipped_reason: "no blockers: nothing needs a meeting" },
     });
     const first = mount(WITH_AGENDA);
     await waitFor(() => expect(screen.getByTestId("deliver-chat")).toHaveProperty("disabled", false));
@@ -361,7 +361,7 @@ describe("DeliverPanel", () => {
     fireEvent.click(screen.getByTestId("deliver-spec-review"));
     await waitFor(() =>
       expect(screen.getByTestId("deliver-result").textContent).toBe(
-        "No spec review booked: no blockers — nothing needs a meeting."
+        "No spec review booked: no blockers: nothing needs a meeting."
       )
     );
     expect(screen.queryByTestId("deliver-failure")).toBeNull();
@@ -430,7 +430,7 @@ describe("DeliverPanel over a failed review", () => {
     mount(FAILED);
     await waitFor(() => expect(screen.getByTestId("deliver-chat")).toHaveProperty("disabled", false));
     fireEvent.change(screen.getByTestId("deliver-attendees"), { target: { value: "lead@example.com" } });
-    const sentence = "review failed: ModelError: 503 — nothing is known about this board";
+    const sentence = "review failed: ModelError: 503. Nothing is known about this board";
     expect(screen.getAllByText(new RegExp(sentence)).length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/found no blockers/)).toBeNull();
     expect(screen.getByTestId("deliver-calendar")).toHaveProperty("disabled", true);

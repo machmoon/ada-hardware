@@ -52,6 +52,8 @@ export const KALEO_STORAGE_KEYS = {
    */
   OVERLAY_SKIN: "silkscreen_overlay_skin",
   TERMINAL_ADA: "silkscreen_terminal_ada",
+  /** Calm output ("1"/"0", absent means on): run receipts start folded. */
+  CALM_OUTPUT: "silkscreen_calm_output",
   /**
    * The localStorage mirror of the settings store (`src/lib/settings/`):
    * every `SettingsSchema` key is written as JSON under
@@ -108,16 +110,7 @@ export const ELEVENLABS_ENV_VAR = "ELEVENLABS_API_KEY";
  */
 export const LOOPBACK_HOSTS = ["localhost", "::1", "[::1]"] as const;
 
-/**
- * How to start the engine, quoted from the repository's own docs rather than
- * paraphrased — a command that does not run is worse than no command.
- *
- * The `.env` line is the one that catches people: `service/app.py` reads the
- * process environment only and has no dotenv loader, so a service started
- * directly with a `.env` sitting next to it comes up keyless and answers
- * `/generate` with a 502 naming `GOOGLE_API_KEY`. `silkscreen serve` loads
- * `.env` itself, which is why it is listed first.
- */
+/** How to start the engine outside the app. Quoted from the repository. */
 export interface EngineStartStep {
   id: string;
   title: string;
@@ -128,31 +121,14 @@ export interface EngineStartStep {
 export const ENGINE_START_STEPS: EngineStartStep[] = [
   {
     id: "serve",
-    title: "The easy way",
-    detail:
-      "`silkscreen serve` loads .env itself before starting the server, so the key is already in the environment. Run it from the repository checkout.",
+    title: "Or start it in a terminal",
+    detail: "Run it from the Ada checkout. It reads your .env.",
     command: "silkscreen serve --port 8081",
   },
   {
-    id: "module",
-    title: "Running the service module directly",
-    detail:
-      "python -m service.app does NOT read .env — cli.py has the dotenv loader, service/app.py reads the process environment only. Export GOOGLE_API_KEY yourself or the engine comes up keyless and every run fails with a 502 naming that variable.",
-    command: "set -a && . ./.env && set +a && PORT=8081 python -m service.app",
-  },
-  {
-    id: "module-powershell",
-    title: "The same thing on PowerShell",
-    detail:
-      "Windows equivalent of exporting the key before starting the module.",
-    command: '$env:GOOGLE_API_KEY = "..."; $env:PORT = "8081"; python -m service.app',
-  },
-  {
     id: "install",
-    title: "If nothing is installed yet",
-    detail:
-      "Create the venv and install the engine editable, from the repository root. The install is ~400 MB, almost all of it OR-Tools.",
-    command:
-      'python3 -m venv .venv && ./.venv/bin/pip install -e ".[dev,agents,cloud,adk]"',
+    title: "First time on this Mac",
+    detail: "Installs the engine into the checkout. About 400 MB.",
+    command: 'python3 -m venv .venv && ./.venv/bin/pip install -e ".[agents,cad]"',
   },
 ];

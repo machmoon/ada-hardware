@@ -949,7 +949,7 @@ export function useStepRun({ baseUrl, token, summary }: UseStepRunOptions): Step
       // it somehow does, saying so is better than a silent no-op.
       throw new SilkscreenError(
         "request",
-        "This run has no session yet — the first stage cannot be cancelled."
+        "This run has no session yet. The first stage cannot be cancelled."
       );
     }
     const result = await cancelStep(baseUrl, sessionId, undefined, token);
@@ -965,7 +965,7 @@ export function useStepRun({ baseUrl, token, summary }: UseStepRunOptions): Step
       if (!sessionId) {
         throw new SilkscreenError(
           "request",
-          "This run has no session yet — there is nothing to attach a note to."
+          "This run has no session yet. There is nothing to attach a note to."
         );
       }
       const result = await amendStep(baseUrl, sessionId, text, step, undefined, token);
@@ -983,7 +983,7 @@ export function useStepRun({ baseUrl, token, summary }: UseStepRunOptions): Step
     if (!sessionId) {
       throw new SilkscreenError(
         "request",
-        "This run has no session yet — there is no board to show."
+        "This run has no session yet. There is no board to show."
       );
     }
     return showBoard3d(baseUrl, sessionId, undefined, token);
@@ -994,7 +994,7 @@ export function useStepRun({ baseUrl, token, summary }: UseStepRunOptions): Step
     if (!sessionId) {
       throw new SilkscreenError(
         "request",
-        "This run has no session yet — there is no case to open."
+        "This run has no session yet. There is no case to open."
       );
     }
     return openCaseRequest(baseUrl, sessionId, undefined, token);

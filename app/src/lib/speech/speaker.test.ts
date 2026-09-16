@@ -92,7 +92,7 @@ describe("fetchElevenLabsAudio", () => {
     );
   });
 
-  it("throws the status only — never the key, never the response body", async () => {
+  it("throws the status only. Never the key, never the response body", async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ detail: "bad key qqq" }), { status: 401 })
     );

@@ -33,12 +33,12 @@ export interface WhatWasCheckedProps {
 
 /** What no pass in this pipeline looks at, stated plainly and always. */
 const NOT_CHECKED = [
-  "Signal integrity — impedance, length matching, return paths, crosstalk.",
+  "Signal integrity: impedance, length matching, return paths, crosstalk.",
   "EMC and emissions.",
   "Thermal margins, and whether copper is thick enough for the current it carries.",
   "Manufacturability at your fab: its own DRC, stackup, minimum trace and drill.",
   "Part availability, cost, and whether the footprints match the parts you will buy.",
-  "Mechanical fit — connectors, mounting holes, enclosure.",
+  "Mechanical fit: connectors, mounting holes, enclosure.",
 ];
 
 function datasheetLabel(entry: unknown): string {
@@ -73,7 +73,7 @@ export function WhatWasChecked({
     // netlist plus whatever datasheet facts it was given. Naming it is not an
     // invention — it is the only pass `/generate` runs.
     ran.push(
-      "Design review — one adversarial model pass over the netlist and the datasheet facts it was given."
+      "Design review: one adversarial model pass over the netlist and the datasheet facts it was given."
     );
   }
   if (rulesRun && rulesRun.length > 0) {
@@ -89,7 +89,7 @@ export function WhatWasChecked({
   const notRun: string[] = [];
   if (reviewSkipped) {
     notRun.push(
-      "The design review did not run — this board was placed from the netlist alone, and nothing checked it."
+      "The design review did not run. This board was placed from the netlist alone, and nothing checked it."
     );
   }
   if (!rulesRun || rulesRun.length === 0) {
@@ -97,7 +97,7 @@ export function WhatWasChecked({
     // separate `silkscreen-review` pass, and this response carries no
     // `rules_run`, so claiming any of them ran would be a fabrication.
     notRun.push(
-      "No deterministic geometry, clearance, or connectivity rule ran on this response — nothing here was measured off the board file."
+      "No deterministic geometry, clearance, or connectivity rule ran on this response. Nothing here was measured off the board file."
     );
   }
   if (sheets.length === 0) {

@@ -129,8 +129,8 @@ const Workbench = () => {
 
   return (
     <PageLayout
-      title="Workbench"
-      description="Review a finished run — board, schematic, findings and artifacts."
+      title="Board"
+      description="Your latest board"
     >
       {history.length > 1 && (
         <div
@@ -169,31 +169,27 @@ const Workbench = () => {
         >
           {status === "running" ? (
             <>
-              <p className="text-sm font-medium">A run is in progress</p>
-              <p className="max-w-sm text-sm text-muted-foreground">
-                The overlay is driving it. The result lands here the moment
-                the engine finishes.
-              </p>
+              <p className="text-sm font-medium">A board is being made</p>
+              <p className="max-w-sm text-sm text-muted-foreground">It shows here when it is done.</p>
             </>
           ) : (
             <>
-              <p className="text-sm font-medium">No board on the bench yet</p>
+              <p className="text-sm font-medium">No board yet</p>
               <p className="max-w-sm text-sm text-muted-foreground">
-                Describe a board from the overlay bar to start a run
+                Describe one in the Ada bar.
                 {overlayHotkey ? (
                   <>
-                    {" — "}
+                    {" Open it with "}
                     <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-xs">
                       {overlayHotkey}
-                    </kbd>{" "}
-                    brings it up
+                    </kbd>
+                    .
                   </>
                 ) : null}
-                . The finished board comes back to this window.
               </p>
               {status === "error" && error ? (
                 <p className="max-w-sm text-sm text-destructive">
-                  The last attempt failed: {error.message}
+                  Last run failed: {error.message}
                 </p>
               ) : null}
             </>
@@ -206,8 +202,7 @@ const Workbench = () => {
               className="text-xs text-muted-foreground"
               data-testid="workbench-running-note"
             >
-              A new run is in progress — this view still shows the last
-              finished one.
+              A new board is being made. This is the last one.
             </p>
           )}
 
