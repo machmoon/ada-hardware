@@ -11,7 +11,7 @@ import { initSettings } from "@/lib/settings/store";
 // must not delay the strip.
 void initSettings();
 
-// Only two windows exist now (the Kaleo bar and the dashboard); both render
+// Only two windows exist now (the Ada bar and the dashboard); both render
 // the same app and route by URL. The capture-overlay-* branch died with
 // capture.rs -- nothing creates those windows anymore.
 {

@@ -230,7 +230,7 @@ The MudrikNow architecture, ported. Four pieces:
    tree.** Earlier revisions of this document cited
    `app/src-tauri/src/capture.rs:95-158` as a working multi-monitor overlay
    builder; that file was **deleted in `376ee57`** ("Remove the legacy Pluely
-   product from Kaleo") and nothing replaced it. Budget this as new work.
+   product from Ada") and nothing replaced it. Budget this as new work.
 2. **Screen capture**, to give the model something to look at. Also new work:
    `xcap` is **not** in `app/src-tauri/Cargo.toml` any more, and no
    `Monitor::all()` call survives. Adding it means adding a dependency, a capture

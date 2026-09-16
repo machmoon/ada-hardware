@@ -282,7 +282,7 @@ def register_client(
     """
     body = json.dumps(
         {
-            "client_name": "Hardy",
+            "client_name": "Ada",
             "redirect_uris": [redirect_uri],
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
@@ -630,12 +630,12 @@ def revoke(transport: Transport | None = None, *, path: Path | None = None) -> b
 # -- browser + loopback -----------------------------------------------------
 
 _LANDING_OK = (
-    b"<!doctype html><meta charset='utf-8'><title>Hardy</title>"
-    b"<p>Stripe connected. You can close this tab and return to Hardy.</p>"
+    b"<!doctype html><meta charset='utf-8'><title>Ada</title>"
+    b"<p>Stripe connected. You can close this tab and return to Ada.</p>"
 )
 _LANDING_DENIED = (
-    b"<!doctype html><meta charset='utf-8'><title>Hardy</title>"
-    b"<p>Stripe was not connected. Nothing was stored; return to Hardy and "
+    b"<!doctype html><meta charset='utf-8'><title>Ada</title>"
+    b"<p>Stripe was not connected. Nothing was stored; return to Ada and "
     b"try again.</p>"
 )
 
@@ -679,7 +679,7 @@ def _bind_callback(ports: tuple[int, ...], handler: Any) -> http.server.HTTPServ
         except OSError as exc:
             last = exc
     raise OAuthError(
-        "none of Hardy's Stripe sign-in ports "
+        "none of Ada's Stripe sign-in ports "
         f"({', '.join(str(p) for p in ports)}) were free"
         + (f": {last}" if last else "")
     ) from last

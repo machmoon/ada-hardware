@@ -129,7 +129,7 @@ def test_every_validation_failure_arrives_in_one_error_not_the_first():
     data["power"]["connector_package"] = "Barrel_Jack_2.5mm_Imaginary"
     data["rails"] = []
     data["blocks"] = [{"name": "MCU"}]  # no purpose
-    data["connectivity"] = [{"purpose": "sensor", "package": "JST_XH_4P"}]
+    data["connectivity"] = [{"purpose": "sensor", "package": "JST_QQ_4P"}]
 
     with pytest.raises(PlanValidationError) as excinfo:
         parse_plan_response(json.dumps(data), vocab=VOCAB)
@@ -143,7 +143,7 @@ def test_every_validation_failure_arrives_in_one_error_not_the_first():
     assert "Barrel_Jack_2.5mm_Imaginary" in joined
     assert "rail(s)" in joined
     assert "blocks[0].purpose" in joined
-    assert "JST_XH_4P" in joined
+    assert "JST_QQ_4P" in joined
 
 
 def test_an_unbuildable_package_is_named_with_the_ones_that_are():

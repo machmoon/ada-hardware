@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from ..units import DEFAULT_GRID_NM, mm
 
 __all__ = [
+    "LABEL_DEPTH_NM",
     "FIT_PRESS_NM",
     "FIT_SLIDE_NM",
     "FIT_LOOSE_NM",
@@ -266,6 +267,16 @@ CUTOUT_CHAMFER_NM: int = mm(0.6)
 MOUNTING_HOLE_MIN_DRILL_NM: int = mm(2.0)
 #: Faces steeper than this from horizontal print without support.
 OVERHANG_LIMIT_DEG: int = 45
+
+#: Depth of the lid label's deboss. It is cut into the lid's *outer* face
+#: (the print bed when the lid prints, so an emboss there would sit under a
+#: ceiling and fail ``overhang`` honestly), and ``cad.py`` never cuts it
+#: deeper than leaves ``MIN_WALL_NM`` of plate. The kernel's ``min_wall``
+#: clause reads it too: the plate under the letters is ``wall - depth`` by
+#: design, and a wall clause that demanded the full spec wall there failed
+#: every labelled lid (TODO.txt feature 28, measured 2026-09-07 and again
+#: 2026-09-13: 1.400 mm vs 1.950 mm required, on every board).
+LABEL_DEPTH_NM: int = mm(0.6)
 
 
 # --- Connector plug envelopes ---------------------------------------------------

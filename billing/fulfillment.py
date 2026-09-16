@@ -207,7 +207,7 @@ def _off_session(event: dict[str, Any], kind: str) -> Outcome:
     obj = event.get("data", {}).get("object", {})
     obj = obj if isinstance(obj, dict) else {}
     if obj.get("metadata", {}).get("kaleo_kind") != "overage":
-        return Outcome(action="ignored", detail=f"{kind}; not a Hardy overage charge")
+        return Outcome(action="ignored", detail=f"{kind}; not a Ada overage charge")
     if kind == "payment_intent.succeeded":
         return Outcome(
             action="ignored", detail=f"overage charge {obj.get('id')} succeeded"

@@ -532,3 +532,41 @@ def test_a_board_with_a_connector_places_and_emits():
     assert jack.footprint.name == "Barrel_Jack_5.5x2.1mm"
     text = emit_kicad_pcb(board)
     assert '"J1"' in text
+
+
+def test_a_large_board_is_compact_not_the_solvers_first_loose_answer():
+    # Measured 2026-09-14: these 64 parts gave a 277 x 352 mm board at 20 s,
+    # and a live 80-part robot-arm run shipped 146 x 439 mm with every part in
+    # one corner. The packer now warm-starts CP-SAT from a shelf layout; at 5 s
+    # this board measures 53.8 x 80.8 mm. The bound leaves room for load.
+    from silkscreen.board import tie_package_pins
+    from silkscreen.netlist import parse_circuit_spec
+
+    devices = {
+        "ESP32-WROOM-32E": {"pins": {"GND": "1", "VDD": "2", "IO21": "33", "IO22": "36"}},
+        "PCA9685PW": {"pins": {"VSS": "14", "VDD": "28", "SDA": "27", "SCL": "26",
+                               **{f"LED{i}": str(6 + i if i < 8 else 7 + i) for i in range(16)}}},
+    }
+    passives, nets = {}, {
+        "GND": ["ESP32-WROOM-32E.GND", "PCA9685PW.VSS"],
+        "+3V3": ["ESP32-WROOM-32E.VDD", "PCA9685PW.VDD"],
+        "SDA": ["ESP32-WROOM-32E.IO21", "PCA9685PW.SDA"],
+        "SCL": ["ESP32-WROOM-32E.IO22", "PCA9685PW.SCL"],
+    }
+    for i in range(16):
+        devices[f"J_S{i}"] = {"kind": "connector", "package": "PinHeader_1x03_P2.54mm",
+                              "pins": {"SIG": "1", "VP": "2", "G": "3"}}
+        passives[f"R{i}"] = {"type": "resistor", "value": "220"}
+        nets[f"PWM{i}"] = [f"PCA9685PW.LED{i}", f"R{i}.1"]
+        nets[f"S{i}"] = [f"R{i}.2", f"J_S{i}.SIG"]
+        nets["GND"].append(f"J_S{i}.G")
+    nets["VSERVO"] = [f"J_S{i}.VP" for i in range(16)]
+    for i in range(30):
+        passives[f"C{i}"] = {"type": "capacitor", "value": "100nF"}
+        nets["GND"].append(f"C{i}.2")
+        nets["+3V3"].append(f"C{i}.1")
+    spec, _ = tie_package_pins(
+        parse_circuit_spec({"devices": devices, "passives": passives, "nets": nets})
+    )
+    w, h = build_board(spec, time_limit_s=5).size_mm
+    assert w * h < 9000, (w, h)  # 53.8 x 80.8 = 4347 mm2 measured; broken was 97,000

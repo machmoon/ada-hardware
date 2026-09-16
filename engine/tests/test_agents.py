@@ -751,7 +751,9 @@ def test_events_trace_every_stage_and_model_call(tmp_path, offline_pdf_fetch):
         # a client can label its progress rail before a stage has started.
         "effort.selected",
         "stage.start", "read.part", "read.fetch", "model.call", "stage.done",
-        "stage.start", "model.call", "stage.done",
+        # One propose.verdict per round (electrical completeness; ERC is off in
+        # the suite, see the root conftest).
+        "stage.start", "model.call", "propose.verdict", "stage.done",
         "stage.start", "stage.done",
         "stage.start", "stage.done",
         "stage.start", "stage.done",
@@ -809,7 +811,7 @@ def test_the_event_name_set_is_frozen(tmp_path, offline_pdf_fetch):
     assert {e["event"] for e in events} == {
         "effort.selected",
         "stage.start", "stage.done", "read.part", "read.fetch",
-        "propose.round", "model.call",
+        "propose.round", "propose.verdict", "model.call",
     }
     # The two conditional names have their own tests here: model.response fires
     # only under include_responses, model.retry only behind a failover model.
@@ -1950,3 +1952,40 @@ def test_a_response_with_no_candidates_is_not_treated_as_truncated(monkeypatch):
         candidates = []
 
     model._reject_truncation(_NoCandidates(), 8192, 4)
+
+
+def test_route_stage_narrates_copper_only_when_a_live_sink_is_given():
+    """The live seam (stages.route_stage ``live=``): with a sink, each net
+    is announced as a ``route.net`` event and handed to the sink in KiCad's
+    frame; without one the event stream is exactly what it always was."""
+    from silkscreen.agents.stages import route_stage
+    from silkscreen.board import build_board
+    from silkscreen.netlist import parse_circuit_spec
+
+    spec = parse_circuit_spec(GOOD_CIRCUIT)
+    board = build_board(spec, time_limit_s=5.0)
+    quiet: list[dict] = []
+    route_stage(board, route=True, emit=quiet.append, enter=lambda _s: None)
+    assert [e["event"] for e in quiet] == ["stage.start", "stage.done"]
+
+    board = build_board(spec, time_limit_s=5.0)
+    events: list[dict] = []
+    copper: list[tuple[str, str, dict]] = []
+    result = route_stage(
+        board, route=True, emit=events.append, enter=lambda _s: None,
+        live=lambda action, net, c: copper.append((action, net, c)),
+    )
+    nets = [e for e in events if e["event"] == "route.net"]
+    assert [e["net"] for e in nets if e["action"] == "committed"] == result.routed
+    assert events[0]["event"] == "stage.start" and events[-1]["event"] == "stage.done"
+    assert all(e["stage"] == "route" for e in nets)
+    assert "segments" not in nets[0], "the event stream carries counts, not copper"
+    # The sink got KiCad's frame: the file's own flip, applied once.
+    for _, net, c in copper:
+        for seg in c["segments"]:
+            assert seg["layer"] in ("F.Cu", "B.Cu") and seg["net"] == net
+            assert 0 <= seg["y0_mm"] <= board.height_nm / 1e6 + 5
+    first = next(c for a, _, c in copper if a == "committed")
+    track = next(t for t in result.tracks if t.net == copper[0][1])
+    flipped = round((board.height_nm - track.start_y_nm) / 1e6, 6)
+    assert first["segments"][0]["y0_mm"] == flipped

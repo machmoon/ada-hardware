@@ -1,7 +1,7 @@
 //! A real pseudo-terminal, so the terminal skin is a terminal.
 //!
 //! The overlay's terminal skin was asked for as "a literal terminal, so it
-//! doubles as Hardy and terminal". That rules out the shape this repo already
+//! doubles as Ada and terminal". That rules out the shape this repo already
 //! had: [`crate::cli`] runs an allowlisted tool, waits, and hands back the
 //! captured stdout. `vim`, `htop`, `ssh`, tab completion, Ctrl-C and a shell
 //! prompt all need a pty on the other end of the file descriptor, not a
@@ -40,7 +40,7 @@
 //!
 //! * a session only exists because the user opened the terminal skin;
 //! * nothing model-generated is written into a session by this module — the
-//!   frontend routes a typed line to the shell or to Hardy by the sigil the
+//!   frontend routes a typed line to the shell or to Ada by the sigil the
 //!   user typed, and any model-*proposed* command is staged as text for the
 //!   user to press Enter on, never injected;
 //! * sessions are capped and every one is killed on close, so a closed

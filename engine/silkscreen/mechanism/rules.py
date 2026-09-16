@@ -25,6 +25,16 @@ Sources, read in source form (shallow clones, 2026-09-13):
   standard-size servo class the MG996R shares): body 20.1 x 39.9 x 36.1, shaft
   30 mm from one end (9.9 from the other), plate d12 x 0.4, spline d5 x 4.9,
   ears 2.5 thick at z 26.6 extending 7.6 mm, two d4 holes 10 mm apart.
+* **Control interface** -- the STS3215 is a serial *bus* servo addressed by
+  id over a UART at a configured baud rate: huggingface/lerobot
+  ``src/lerobot/motors/feetech/tables.py`` lists ``"sts3215"`` under the
+  STS/SMS control table, whose ``Baud_Rate`` register (address 6) and the
+  ``STS_SMS_SERIES_BAUDRATE_TABLE`` exist only for a bus device, and
+  SO-ARM100 ``README.md`` drives it from a "Motor Control Board" (Waveshare's
+  bus-servo adapter) rather than a PWM driver. SG90 and MG996R are hobby PWM
+  servos -- the class Adafruit's PCA9685 library
+  (adafruit/Adafruit-PWM-Servo-Driver-Library ``README.md``: "16-channel PWM &
+  Servo driver") exists to drive.
 * **Bearings** -- gumyr/bd_warehouse
   ``src/bd_warehouse/data/single_row_deep_groove_ball_bearing_parameters.csv``
   rows ``M8-22-7`` (608), ``M10-19-5`` (61800, sold as "6800") and ``M3-10-4``
@@ -62,6 +72,7 @@ from ..units import mm
 __all__ = [
     "Actuator",
     "ACTUATORS",
+    "INTERFACES",
     "Bearing",
     "BEARINGS",
     "KGCM_TO_UNMM",
@@ -95,6 +106,9 @@ __all__ = [
     "MAX_JOINTS",
     "MAX_LINK_NM",
 ]
+
+#: The control-interface vocabulary of :attr:`Actuator.interface`.
+INTERFACES: tuple[str, ...] = ("pwm", "serial_bus")
 
 #: 1 kg-cm = 9.80665 N x 10 mm = 98.0665 N-mm = 98_066_500 uN-mm.
 KGCM_TO_UNMM: int = 98_066_500
@@ -144,6 +158,11 @@ class Actuator:
     stall_unmm: int
     stall_note: str
     mass_mg: int
+    #: How the servo is commanded: ``"pwm"`` (a 50 Hz pulse per channel, what
+    #: a PCA9685 makes) or ``"serial_bus"`` (addressed packets on a shared
+    #: UART, what an STS3215 needs). A board and an arm that disagree on this
+    #: are a controller that cannot move the arm.
+    interface: str = "pwm"
 
 
 ACTUATORS: dict[str, Actuator] = {
@@ -176,7 +195,7 @@ ACTUATORS: dict[str, Actuator] = {
         ear_len_nm=0, ear_t_nm=0, ear_s_nm=0, ear_hole_d_nm=0,
         ear_hole_from_end_nm=0, ear_hole_v_nm=(),
         stall_unmm=int(16.5 * KGCM_TO_UNMM), stall_note="16.5 kg-cm at 6 V (7.4 V C001)",
-        mass_mg=55_000,
+        mass_mg=55_000, interface="serial_bus",
     ),
     "STS3215_12V": Actuator(
         "STS3215_12V", "SO-ARM100 sts3215_03a_no_horn_v1.stl; README.md:73",
@@ -186,7 +205,7 @@ ACTUATORS: dict[str, Actuator] = {
         ear_len_nm=0, ear_t_nm=0, ear_s_nm=0, ear_hole_d_nm=0,
         ear_hole_from_end_nm=0, ear_hole_v_nm=(),
         stall_unmm=int(30.0 * KGCM_TO_UNMM), stall_note="30 kg-cm at 12 V",
-        mass_mg=55_000,
+        mass_mg=55_000, interface="serial_bus",
     ),
 }
 

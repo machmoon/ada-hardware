@@ -41,14 +41,22 @@
 
   const entries = $derived($run.entries || [])
 
+  // The model catalogue is what the run controls are built from. When the
+  // service cannot be asked, the selects are empty for a reason the engineer
+  // has to read -- an empty list with no sentence looks like a build with no
+  // models, and the run then submits with whatever defaults remain.
+  let modelsError = $state('')
+
   onMount(async () => {
     try {
       const catalog = await listModels()
       models = catalog.models
       placementCapabilities = catalog.placement
-    } catch {
+      modelsError = ''
+    } catch (error) {
       models = []
       placementCapabilities = {}
+      modelsError = `The model list could not be loaded (${error?.message || error}); the selectors below are empty, not a choice.`
     }
   })
 
@@ -107,6 +115,7 @@
     <input bind:this={file} class="file" type="file" accept=".json,application/json" onchange={openFile} />
   </div>
   {#if importError}<p class="import-error" role="alert">{importError}</p>{/if}
+  {#if modelsError}<p class="import-error" role="alert" data-testid="models-error">{modelsError}</p>{/if}
 
   {#if !entries.length}
     <IntentForm
@@ -125,7 +134,7 @@
           <article class="message" class:user={entry.role === 'user'} class:assistant={entry.role === 'assistant'}>
             <div class="avatar mono" data-material="tint">{entry.role === 'user' ? 'YOU' : 'AI'}</div>
             <div class="message-body" data-material={entry.role === 'user' ? 'panel' : undefined}>
-              <div class="role lbl">{entry.role === 'user' ? 'You' : 'Hardy'}</div>
+              <div class="role lbl">{entry.role === 'user' ? 'You' : 'Ada'}</div>
               <p>{entry.text}</p>
               {#if entry.result}
                 <ArtifactCards
@@ -161,7 +170,7 @@
           <!-- Not an outage: an unkeyed clone is the ordinary first run. Setup
                instructions come first, and there is no retry button — retrying
                without the key cannot succeed. -->
-          <div class="lbl">Hardy has no Gemini key yet</div>
+          <div class="lbl">Ada has no Gemini key yet</div>
           <p>
             The engine and the placer run without any key, but reading datasheets and proposing a
             circuit go through Gemini. Set the key where the service can see it, then restart it.

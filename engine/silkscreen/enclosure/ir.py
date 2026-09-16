@@ -21,7 +21,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from silkscreen.units import mm
+from silkscreen.units import mm, to_mm
 
 from .errors import EnclosureValidationError
 
@@ -212,6 +212,56 @@ def _dim_nm(
         errors.append(f"{key!r} is {float(value)} mm; {what} must be {limit}")
         return default_nm
     return value_nm
+
+
+def spec_to_dict(spec: EnclosureSpec) -> dict:
+    """The JSON form of a spec: the exact vocabulary :func:`parse_enclosure_spec`
+    reads, millimetres as floats, so ``parse_enclosure_spec(spec_to_dict(s))
+    == s`` (pinned by test). This is what a client edits: it never sees
+    nanometres, and it never sees a field the parser would refuse."""
+    return {
+        "wall_mm": to_mm(spec.wall_nm),
+        "clearance_mm": to_mm(spec.clearance_nm),
+        "corner_radius_mm": to_mm(spec.corner_radius_nm),
+        "lid": spec.lid,
+        "cutouts": [
+            {
+                "id": c.id,
+                "ref": c.ref,
+                "face": c.face,
+                "margin_mm": to_mm(c.margin_nm),
+            }
+            for c in spec.cutouts
+        ],
+        "standoffs": spec.standoffs,
+        "vents": spec.vents,
+        "label": spec.label,
+        "mount": spec.mount,
+        "insert": spec.insert,
+        "material": spec.material,
+    }
+
+
+def apply_edits(spec: EnclosureSpec, edits: dict) -> EnclosureSpec:
+    """``spec`` with ``edits`` laid over its JSON form, re-validated whole.
+
+    The edit vocabulary is the spec's own (``wall_mm``, ``lid``, ``cutouts``,
+    …), so a person adjusting a number by hand is held to exactly the bounds
+    the model is held to, and every failure -- an unknown key, a wall under
+    the printable minimum, a cutout naming a face the part is not on -- is
+    collected into one :class:`EnclosureValidationError` the same way. A
+    key set to ``None`` for ``label`` clears it; ``cutouts`` replaces the
+    whole list rather than merging, since a cutout is identified by its
+    ``id`` and a partial merge would silently keep one the edit meant to
+    drop. No model is consulted anywhere in this path.
+    """
+    if not isinstance(edits, dict):
+        raise EnclosureValidationError(
+            [f"edits must be a JSON object, got {type(edits).__name__}"]
+        )
+    merged = spec_to_dict(spec)
+    merged.update(edits)
+    return parse_enclosure_spec(merged)
 
 
 def parse_enclosure_spec(text: str | dict) -> EnclosureSpec:

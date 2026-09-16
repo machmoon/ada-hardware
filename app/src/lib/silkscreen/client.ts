@@ -1,4 +1,4 @@
-// The only place Kaleo talks to the silkscreen engine.
+// The only place Ada talks to the silkscreen engine.
 //
 // The boundary is HTTP and it is deliberate. This directory is GPL-3.0 and the
 // Python side is MIT; they stay separable because they are two programs that
@@ -505,10 +505,24 @@ export async function startSteps(
 ): Promise<StepResponse> {
   const { intent, datasheets, time_limit_s, review: _review, ...rest } =
     normalizeRequest(request) as StepRequest;
+  // `normalizeRequest` rebuilds the body from the `/generate` fields, so the
+  // step-only flags `StepRequest` declares must be re-added here or they never
+  // reach the wire. They were not: `useStepRun` asked for `plan_first` and the
+  // engine never heard it, so a 90 s brief became one plan+propose+draw request
+  // that outlived the timeout (measured 2026-09-16, 870.6 s). Sent only when
+  // true, since `false` is the engine's default (`service/steps.py::start`).
   return stepPost(
     baseUrl,
     "/steps",
-    { intent, datasheets, time_limit_s, ...rest, kicad_live: request.kicad_live ?? false },
+    {
+      intent,
+      datasheets,
+      time_limit_s,
+      ...rest,
+      kicad_live: request.kicad_live ?? false,
+      ...(request.plan_first === true ? { plan_first: true } : {}),
+      ...(request.research === true ? { research: true } : {}),
+    },
     signal,
     token,
     idempotencyKey
@@ -645,6 +659,32 @@ export async function cancelStep(
   );
 }
 
+/**
+ * Backoff before repeating a start the engine says is still running, after
+ * stripe-python `_http_client.py`: `INITIAL_DELAY` 0.5 s doubling per retry,
+ * capped at `MAX_DELAY` 5 s. Stripe also jitters the delay to spread many
+ * clients; one desktop repeating its own press has nobody to collide with,
+ * so this stays deterministic.
+ */
+export function startRetryDelayMs(retry: number): number {
+  return Math.min(500 * 2 ** Math.max(0, retry - 1), 5_000);
+}
+
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 async function stepPost<T = StepResponse>(
   baseUrl: string,
   path: string,
@@ -654,6 +694,39 @@ async function stepPost<T = StepResponse>(
   idempotencyKey?: string
 ): Promise<T> {
   const deadline = withTimeout(signal);
+  // A start under a key the engine is still running comes back 409 with
+  // `should_retry` (service/steps.py::StartInFlightError). That is the same
+  // press still working, not a failure: shown as one, it read "could not
+  // finish the schematic" over a run that went on to finish. Wait and ask
+  // again under the same key until it answers, inside the one deadline.
+  for (let retry = 1; ; retry += 1) {
+    const { response, body } = await stepPostOnce(
+      baseUrl, path, payload, deadline, signal, token, idempotencyKey
+    );
+    if (response.status === 409 && idempotencyKey && body.should_retry === true) {
+      try {
+        await pause(startRetryDelayMs(retry), deadline.signal);
+      } catch {
+        if (deadline.timedOut() && !signal?.aborted) throw timeoutError();
+        throw new SilkscreenError("request", String(body.error ?? "start abandoned"), {
+          status: 409,
+        });
+      }
+      continue;
+    }
+    return stepResult<T>(response, body);
+  }
+}
+
+async function stepPostOnce(
+  baseUrl: string,
+  path: string,
+  payload: Record<string, unknown>,
+  deadline: { signal: AbortSignal; timedOut: () => boolean },
+  signal: AbortSignal | undefined,
+  token: string | undefined,
+  idempotencyKey: string | undefined
+): Promise<{ response: Response; body: Record<string, unknown> }> {
   let response: Response;
   try {
     response = await tauriFetch(`${baseUrl}${path}`, {
@@ -672,7 +745,10 @@ async function stepPost<T = StepResponse>(
       detail: (error as Error)?.message ?? "",
     });
   }
-  const body = await readJson(response);
+  return { response, body: await readJson(response) };
+}
+
+function stepResult<T>(response: Response, body: Record<string, unknown>): T {
   if (!response.ok) {
     if (response.status === 404 || response.status === 409) {
       throw new SilkscreenError(
@@ -730,7 +806,7 @@ export async function deliverConfig(
 /**
  * Open Google's OAuth consent page via the engine, then wait for the redirect.
  *
- * Hardy opens the URL with Tauri `openUrl` (the service often cannot open a
+ * Ada opens the URL with Tauri `openUrl` (the service often cannot open a
  * browser from a worker thread). Needs `GOOGLEAPPS_CLIENT_ID` + `SECRET` on
  * the service process.
  */

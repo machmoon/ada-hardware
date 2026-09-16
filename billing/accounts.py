@@ -55,7 +55,7 @@ class AccountResolver(Protocol):
 class SingleAccountResolver:
     """One account for the whole install. The honest default for today.
 
-    Kaleo is a desktop app with no login, so "the person at this machine" is
+    Ada is a desktop app with no login, so "the person at this machine" is
     the only subject that exists. This makes that explicit instead of
     pretending there is multi-tenancy.
     """

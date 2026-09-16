@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ada</title>
+<meta name="description" content="Ada is an autonomous hardware engineer: it designs your board, proves it with KiCad's own checks, and routes it ready to order.">
+<link rel="icon" href="assets/icon.png">
+<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wdth,wght@75..100,400..700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=2026-09-16">
+<meta property="og:title" content="Ada">
+<meta property="og:description" content="Order boards that work. Ada designs the board, proves it with KiCad's own checks, and routes it ready to order.">
+<meta property="og:image" content="assets/board.png">
+</head>
+<body>
+
+<header class="bar" data-over-scene>
+  <a class="brand" href="#" aria-label="Ada home"><svg viewBox="20 110 472 292" fill="none" stroke="currentColor" stroke-width="50" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M42 293 H157 L311 139 H470"/><path d="M42 373 H157 L311 219 H470"/></svg></a>
+  <nav><ul>
+    <li><a class="plain" href="#notes">Notes</a></li>
+    <li><a class="cta ghost compact" href="#download">Download</a></li>
+    <li><button class="theme" id="theme" aria-label="Toggle theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg></button></li>
+  </ul></nav>
+</header>
+
+<div class="night-start">
+<section class="hero">
+  <canvas class="field"></canvas>
+  <div class="hero-copy">
+    <p class="badge animate-intro"><span>Open source</span><i></i><span>Checked by KiCad 10, not by us</span></p>
+    <h1 class="animate-intro" style="animation-delay:.08s">Order boards that work.</h1>
+    <p class="subtitle animate-intro" style="animation-delay:.16s">Ada is an autonomous hardware engineer: it designs your board, proves it with KiCad's own checks, and routes it ready to order.</p>
+    <div class="cta-row animate-intro" style="animation-delay:.24s">
+      <a class="cta primary" href="#download">Download Ada <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a>
+      <a class="cta ghost" href="#notes">Read our notes <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a>
+    </div>
+  </div>
+</section>
+
+<main class="sheet">
+<section class="used-by" id="what-ada-does">
+  <header>
+    <h2>Ada works where a respin is expensive</h2>
+    <p>It finds the unwired ground and the missing pull-up before you order, not after the boards arrive.</p>
+  </header>
+  <div class="lattice">
+    <span class="cell"><span class="wordmark">KiCad</span></span>
+    <span class="cell"><span class="wordmark">ngspice</span></span>
+    <span class="cell"><span class="wordmark">OR-Tools</span></span>
+    <span class="cell"><span class="wordmark">OpenCascade</span></span>
+    <span class="cell"><span class="wordmark">build123d</span></span>
+    <span class="cell"><span class="wordmark">FreeCAD</span></span>
+    <figure class="feature">
+      <blockquote>“Six of six test boards pass KiCad's electrical, design-rule and schematic-match checks with zero errors. The USB pair routes coupled, at a constant 0.25 mm gap.”</blockquote>
+      <figcaption>— Ada's evaluation run, 16 September 2026</figcaption>
+      <a class="feature-link" href="https://github.com/machmoon/Ada/blob/main/scripts/board_eval.py">See how it is measured <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a>
+    </figure>
+  </div>
+</section>
+
+<section class="bento-section" id="see-it-work">
+  <header>
+    <h2>Watch it design</h2>
+    <p>What Ada draws, how it proves it, and how it hands it to you.</p>
+  </header>
+  <div class="bento">
+    <article class="tile t-feed">
+      <div class="cap"><h3>Every check in one receipt</h3><p>Each claim about the board names the check that proved it, and a red check stops the run.</p></div>
+      <div class="window">
+        <div class="tabs"><span class="tab active">Passed <span class="count">7</span></span><span class="tab">Warnings <span class="count">0</span></span><span class="tab">Blocked <span class="count">0</span></span></div>
+        <ul class="rows">
+          <li class="row"><span class="sev ok">PASS</span><span class="id">ERC</span><span class="text">KiCad 10.0.6, 0 errors</span><span class="time">1s</span></li>
+          <li class="row"><span class="sev ok">PASS</span><span class="id">DRC</span><span class="text">0 violations, 0 unconnected</span><span class="time">2s</span></li>
+          <li class="row"><span class="sev ok">PASS</span><span class="id">PARITY</span><span class="text">Schematic and board agree</span><span class="time">2s</span></li>
+          <li class="row"><span class="sev ok">PASS</span><span class="id">SPICE</span><span class="text">Vout 3.30 V, margin +0.12 V</span><span class="time">4s</span></li>
+          <li class="row"><span class="sev ok">PASS</span><span class="id">CASE</span><span class="text">13 of 13 clauses, min wall +0.4 mm</span><span class="time">9s</span></li>
+        </ul>
+      </div>
+    </article>
+    <article class="tile t-integr">
+      <div class="cap"><h3>Inside your KiCad</h3><p>Ada sits over the KiCad window. Each stage lands in the editor, and each paid step waits for your yes.</p></div>
+      <div class="window shot"><img src="assets/strip.png" alt="Ada's strip: prompt field, microphone, attach, history, settings, Generate"></div>
+    </article>
+    <article class="tile t-poc">
+      <div class="cap"><h3>Verified circuits</h3><p>KiCad's ERC runs while Ada proposes. A forgotten ground pin comes back as a fix in round one.</p></div>
+      <pre class="window term"><span class="dim">propose · round 1</span>
+<span class="bad">✗</span> AMS1117-3.3.GND is on no net
+  put it on the ground net
+<span class="bad">✗</span> erc.pin_not_connected  U1 pin 1
+
+<span class="dim">propose · round 2</span>
+<span class="good">✓</span> one ground: GND
+<span class="good">✓</span> erc clean</pre>
+    </article>
+    <article class="tile t-fixpr">
+      <div class="cap"><h3>Grounded and routed</h3><p>Ground is poured on both layers and stitched. USB runs as a real differential pair at one fixed gap.</p></div>
+      <div class="window shot"><img id="board-shot" src="assets/board.png" alt="The ESP32 dev board Ada placed and routed, rendered by kicad-cli from the KiCad file"></div>
+    </article>
+    <article class="tile t-carousel">
+      <div class="cap"><h3>Review on every board</h3><p>Ada argues against its own design before you see it, and drops any finding the circuit does not back.</p></div>
+      <div class="car-tabs" role="tablist">
+        <button class="car-tab active" data-slide="0">U1 · J2 serial header</button>
+        <button class="car-tab" data-slide="1">U1 · J6 I2C bus</button>
+        <button class="car-tab" data-slide="2">U2 · J2 3.3 V rail</button>
+      </div>
+      <div class="car-stage">
+        <div class="gh-card active"><p class="gh-title"><span class="sev high">HIGH</span> Serial header TX and RX wired straight through</p><p>TXD0 lands on the header pin named TXD. On an FTDI adapter that pin is an output too, so two drivers fight and both receivers float.</p><p class="fix">fix: cross the pair, TXD0 to header RXD</p></div>
+        <div class="gh-card"><p class="gh-title"><span class="sev high">HIGH</span> No pull-ups on SDA and SCL</p><p>The Qwiic port hangs off IO21 and IO22 with nothing pulling either line to 3.3 V. I2C is open-drain, so the bus never idles high.</p><p class="fix">fix: 4.7 kΩ from SDA and SCL to +3V3</p></div>
+        <div class="gh-card"><p class="gh-title"><span class="sev high">HIGH</span> The header's 3.3 V pin backfeeds the regulator</p><p>The header shares the regulator's output net with no diode, so a 3.3 V cable and USB-C plugged in together fight each other.</p><p class="fix">fix: a Schottky or a solder jumper on that pin</p></div>
+      </div>
+      <p class="car-note">A real review of an ESP32 dev board, 15 September 2026.</p>
+    </article>
+  </div>
+</section>
+
+<section class="featured-posts" id="notes">
+  <header><h2>Notes</h2><p>What we measured building Ada, and what we changed because of it.</p></header>
+  <div class="carousel">
+    <a class="featured-blog-card" href="https://github.com/machmoon/Ada/blob/main/docs/agent-harness.md"><div class="cover"><span>The ground pin</span><small>Why ERC passed an open GND</small></div><div class="card-body"><strong>The harness is not the moat</strong><span class="description">An unwired ground pin passed KiCad ERC with zero violations. One field in the circuit format fixed it.</span><span class="meta"><time>Sep 15, 2026</time><span class="tags"><span>#agents</span><span>#verification</span></span></span></div></a>
+    <a class="featured-blog-card" href="https://github.com/machmoon/Ada/blob/main/docs/harness-prior-art.md"><div class="cover"><span>Prior art</span><small>Six projects, read at source</small></div><div class="card-body"><strong>How open-source AI PCB tools loop</strong><span class="description">tscircuit, atopile, CADAM and three more, read file by file before we wrote ours.</span><span class="meta"><time>Sep 15, 2026</time><span class="tags"><span>#prior-art</span></span></span></div></a>
+    <a class="featured-blog-card" href="https://github.com/machmoon/Ada/blob/main/docs/design-quality.md"><div class="cover"><span>Nine prompts</span><small>Graded by SPICE</small></div><div class="card-body"><strong>Does it design correct circuits?</strong><span class="description">Nine requests, a simulated specification for each, and the numbers as they came out.</span><span class="meta"><time>Sep 8, 2026</time><span class="tags"><span>#spice</span><span>#measurement</span></span></span></div></a>
+    <a class="featured-blog-card" href="https://github.com/machmoon/Ada/blob/main/docs/critic-split.md"><div class="cover"><span>The critic</span><small>Findings must state a premise</small></div><div class="card-body"><strong>A filter that drops silently lies</strong><span class="description">Why every dropped review finding is reported, and how a premise is checked.</span><span class="meta"><time>Sep 8, 2026</time><span class="tags"><span>#review</span></span></span></div></a>
+    <a class="featured-blog-card" href="https://github.com/machmoon/Ada/blob/main/docs/ai-cad-plan.md"><div class="cover"><span>AI CAD</span><small>Thirteen frozen clauses</small></div><div class="card-body"><strong>A CAD engineer, not a style picker</strong><span class="description">Real solids, signed margins, and why the OpenSCAD path was deleted.</span><span class="meta"><time>Sep 3, 2026</time><span class="tags"><span>#enclosure</span><span>#cad</span></span></span></div></a>
+  </div>
+  <a class="all" href="https://github.com/machmoon/Ada/tree/main/docs">All notes →</a>
+</section>
+
+<section class="featured-posts" id="download">
+  <header><h2>Download</h2><p>The desktop app for macOS on Apple silicon. It drives the KiCad you already have.</p></header>
+  <div class="bento">
+    <article class="tile t-half">
+      <div class="cap"><h3>Ada for macOS</h3><p>Requires macOS 13 and KiCad 8 or newer. This build is not notarized yet: right-click the app and choose Open the first time.</p></div>
+      <div><a class="cta primary" href="downloads/Ada_0.3.1_aarch64.dmg">Download 0.3.1 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a></div>
+    </article>
+    <article class="tile t-half">
+      <div class="cap"><h3>Run the engine yourself</h3><p>Your keys stay in your environment. Ada sends the request and the datasheets to the model you configured, and nothing else.</p></div>
+      <pre class="window term">pip install "silkscreen[agents,cad] @ https://github.com/machmoon/Ada/releases/download/v0.1.0/silkscreen-0.1.0-py3-none-any.whl"
+export ANTHROPIC_API_KEY=…
+silkscreen serve</pre>
+    </article>
+  </div>
+</section>
+</main>
+</div>
+
+<section class="final-cta">
+  <canvas class="field"></canvas>
+  <div class="content">
+    <h2>Know it works before you order.</h2>
+    <p>See what Ada catches in your next board.</p>
+    <a class="cta primary" href="#download">Download Ada <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a>
+  </div>
+  <footer>
+    <span>© 2026 Ada</span>
+    <ul>
+      <li><a href="https://github.com/machmoon/Ada" aria-label="GitHub">GitHub</a></li>
+      <li><a href="https://github.com/machmoon/Ada/blob/main/docs/install.md">Install</a></li>
+      <li><a href="mailto:hello@ada.engineering">Contact</a></li>
+    </ul>
+  </footer>
+</section>
+<script src="stars.js?v=2026-09-16"></script>
+</body>
+</html>

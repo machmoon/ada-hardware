@@ -1,8 +1,8 @@
 /**
- * One orchestrator turn: ask Hardy a question, get her answer back.
+ * One orchestrator turn: ask Ada a question, get her answer back.
  *
  * `POST /chat/stream` already existed on the engine and had no client. It is
- * the right endpoint for the terminal skin's Hardy half — but it has a property
+ * the right endpoint for the terminal skin's Ada half — but it has a property
  * that makes a naive client dangerous, and this module exists to handle it:
  *
  * **The orchestrator can start a board run.** `service/app.py` hands it a
@@ -26,7 +26,7 @@ import { REQUEST_TIMEOUT_MS, SilkscreenError, authHeaders, parseFrame } from "./
 import type { RunResult, StreamFrame } from "./types";
 
 export interface ChatOutcome {
-  /** Hardy's reply, as text. */
+  /** Ada's reply, as text. */
   assistant: string;
   /** She is asking for more before she can act. */
   needsClarification: boolean;
@@ -34,6 +34,11 @@ export interface ChatOutcome {
   ranBoard: boolean;
   result: RunResult | null;
   model: string;
+  /**
+   * With `confirmBeforeBuild`: the board the orchestrator wants to build,
+   * waiting for a human yes. Nothing has been spent on it.
+   */
+  proposal: string | null;
 }
 
 export interface AskOptions {
@@ -43,6 +48,12 @@ export interface AskOptions {
   /** Called with one plain sentence per frame, for live output. */
   onLine?: (line: string) => void;
   sessionId?: string;
+  /**
+   * The approval gate: the orchestrator may only propose a board, never run
+   * one. The voice path always sets it — a sentence spoken to a colleague is
+   * as often "can you hear me" as a board request.
+   */
+  confirmBeforeBuild?: boolean;
 }
 
 /**
@@ -50,7 +61,7 @@ export interface AskOptions {
  *
  * Throws `SilkscreenError` rather than returning a falsy answer: a terminal
  * that printed an empty line when the engine was unreachable would read as
- * "Hardy had nothing to say", which is the one thing that must not happen.
+ * "Ada had nothing to say", which is the one thing that must not happen.
  */
 export async function ask(question: string, options: AskOptions): Promise<ChatOutcome> {
   const text = question.trim();
@@ -74,11 +85,12 @@ export async function ask(question: string, options: AskOptions): Promise<ChatOu
         body: JSON.stringify({
           intent: text,
           ...(options.sessionId ? { session_id: options.sessionId } : {}),
+          ...(options.confirmBeforeBuild ? { confirm_before_build: true } : {}),
         }),
         signal: controller.signal,
       });
     } catch (error) {
-      if (timedOut) throw new SilkscreenError("timeout", "Hardy took too long to answer.");
+      if (timedOut) throw new SilkscreenError("timeout", "Ada took too long to answer.");
       throw new SilkscreenError("offline", "Could not reach the engine.", {
         detail: (error as Error)?.message ?? "",
       });
@@ -115,7 +127,7 @@ export async function ask(question: string, options: AskOptions): Promise<ChatOu
       if (frame.event === "chat.error" || frame.event === "run.error") {
         failure = new SilkscreenError(
           "server",
-          String(frame.error ?? "Hardy could not finish that."),
+          String(frame.error ?? "Ada could not finish that."),
           { status: Number(frame.status ?? 500) },
         );
       }
@@ -134,7 +146,7 @@ export async function ask(question: string, options: AskOptions): Promise<ChatOu
         }
       }
     } catch (error) {
-      if (timedOut) throw new SilkscreenError("timeout", "Hardy took too long to answer.");
+      if (timedOut) throw new SilkscreenError("timeout", "Ada took too long to answer.");
       // A terminal frame already arrived, so the turn finished on the engine.
       // The socket dying afterwards does not un-finish it, and reporting a
       // completed turn as failed would throw away a board that was paid for.
@@ -146,7 +158,7 @@ export async function ask(question: string, options: AskOptions): Promise<ChatOu
     if (!outcome) {
       throw new SilkscreenError(
         "server",
-        "The engine closed the stream before Hardy answered.",
+        "The engine closed the stream before Ada answered.",
       );
     }
     return outcome;
@@ -165,5 +177,9 @@ function doneOutcome(frame: StreamFrame, ranBoard: boolean): ChatOutcome {
     ranBoard: ranBoard || result !== null,
     result,
     model: String(frame.model ?? ""),
+    proposal:
+      typeof frame.proposal === "string" && frame.proposal.trim()
+        ? frame.proposal.trim()
+        : null,
   };
 }

@@ -10,12 +10,13 @@ model text inside a worker thread with no handler and let the thread die.
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..board import package_errors, supported_packages_text
+from ..board import package_errors, supported_packages_text, tie_package_pins
 from ..netlist import CircuitSpec, ValidationError, parse_circuit_spec
 from .datasheet import PartFacts
 from .model import Model
@@ -89,7 +90,8 @@ circuit as ONE JSON object -- no prose, no code fence.
 
 {
   "devices": {
-    "<MANUFACTURER PART NUMBER>": {"pins": {"<pin name>": "<pin number>", ...}},
+    "<MANUFACTURER PART NUMBER>": {"pins": {"<pin name>": "<pin number>", ...},
+                                   "no_connect": ["<pin name>", ...]},
     "<connector id>": {"kind": "connector", "package": "<package name>",
                        "pins": {"<pin name>": "<pad number>", ...}},
     "<battery id>":   {"kind": "battery", "package": "<package name>",
@@ -104,8 +106,8 @@ circuit as ONE JSON object -- no prose, no code fence.
   }
 }
 
-The first "devices" form is an IC: it carries "pins" and nothing else. Only
-the "connector" and "battery" forms take a "package".
+The first "devices" form is an IC: it carries "pins" and an optional
+"no_connect" list. Only the "connector" and "battery" forms take a "package".
 
 Hard rules -- a proposal breaking any of these is rejected automatically:
 
@@ -115,12 +117,16 @@ Hard rules -- a proposal breaking any of these is rejected automatically:
    floating and will be rejected.
 3. Every net needs at least two endpoints. A signal you name but wire to only
    one pin is not a connection -- take it to a connector pin, or drop it.
-   For a device pin you are deliberately leaving unused, the way to say so is
-   to LIST IT IN NO NET AT ALL. Do not invent a net with that one pin on it
-   (a "NC", "UNUSED_OUT" or "CTRL" net with a single endpoint is the second
-   most common rejection). If the pin must instead be held at a level, put it
-   on the real net that holds it -- GND or the rail -- which gives that net
-   its second endpoint honestly.
+   For a device pin you are deliberately leaving unused, declare it in the
+   pins map and LIST ITS NAME UNDER "no_connect". Do not invent a net with
+   that one pin on it (a "NC", "UNUSED_OUT" or "CTRL" net with a single
+   endpoint is the second most common rejection). A pin that is neither on a
+   net nor under "no_connect" is reported as forgotten. A ground or supply
+   pin is never unused: every GND/VSS pin goes on the ground net and every
+   VCC/VDD/VIN pin on its rail, thermal pads included when the datasheet
+   ties them. If a pin must be held at a level, put it on the real net that
+   holds it -- GND or the rail -- which gives that net its second endpoint
+   honestly.
 4. A PIN JOINS EXACTLY ONE NET. Listing "<part>.<pin>" under two different net
    names is the most common rejection: it describes one physical node under
    two names, and every file downstream then disagrees about which name it
@@ -242,6 +248,48 @@ _GENERIC_NAMES = frozenset(
 )
 
 
+#: Set to ``0`` to keep KiCad ERC out of the repair loop. On by default when
+#: ``kicad-cli`` is installed; the root ``conftest.py`` turns it off for the
+#: suite so a test's scripted circuit behaves the same with and without KiCad,
+#: and the gated tests in ``test_verify.py`` turn it back on deliberately.
+ERC_IN_LOOP_ENV = "SILKSCREEN_ERC_IN_LOOP"
+
+
+def verifier_errors(spec: CircuitSpec, on_event=None) -> list[str]:
+    """Repair items from the deterministic verifiers, and one event per verdict.
+
+    ``electrical_completeness`` always runs (it is pure Python over the IR).
+    ``erc`` runs when :data:`ERC_IN_LOOP_ENV` is not ``0`` and ``kicad-cli`` is
+    found; without it the verdict is ``unverified`` and says so in the event,
+    which is not an error -- "could not check" must not read as a failure any
+    more than as a pass. Only blocking clauses become repair items; warnings
+    ride the event for the receipt.
+    """
+    from ..verify import electrical_completeness, erc_from_spec
+
+    verdicts = [electrical_completeness(spec)]
+    if os.getenv(ERC_IN_LOOP_ENV, "1").strip() != "0":
+        verdicts.append(erc_from_spec(spec))
+    items: list[str] = []
+    for verdict in verdicts:
+        items.extend(verdict.repair_items())
+        if on_event is not None:
+            on_event(
+                {
+                    "event": "propose.verdict",
+                    "verifier": verdict.verifier,
+                    "status": verdict.status,
+                    "failed": len(verdict.failures),
+                    "blocking": len(verdict.repair_items()),
+                    "first": (
+                        verdict.failures[0].detail[:160] if verdict.failures else None
+                    ),
+                    "unverified_reason": verdict.unverified_reason,
+                }
+            )
+    return items
+
+
 def part_number_errors(spec: CircuitSpec) -> list[str]:
     """Every IC whose key is not a manufacturer part number, as messages.
 
@@ -318,6 +366,99 @@ def _facts_block(facts: list[PartFacts]) -> str:
     return "\n".join(chunks)
 
 
+#: A token that looks like a part number: letters and digits together, at
+#: least four characters, optionally with "-", "." or "/" inside.
+_PART_TOKEN = re.compile(
+    r"\b(?=[A-Za-z0-9.\-/]*\d)(?=[A-Za-z0-9.\-/]*[A-Za-z])"
+    r"[A-Za-z0-9][A-Za-z0-9.\-/]{3,}\b"
+)
+
+#: Most library parts listed in one prompt.
+MAX_LIBRARY_PARTS = 12
+
+
+def library_block(text: str) -> str:
+    """KiCad's real pinout and footprint for every part number in ``text``.
+
+    Empty when the library is off or nothing named resolves. What the model
+    reads here is what :func:`_apply_library` will hold its answer to, so the
+    two cannot disagree: rule 9's pin-count packages apply only to ICs that are
+    *not* listed.
+    """
+    from .. import kicadlib
+    from ..kicadlib.resolve import resolve_part
+
+    index = kicadlib.library_index()
+    if index is None:
+        return ""
+    lines: list[str] = []
+    seen: set[str] = set()
+    for token in _PART_TOKEN.findall(text):
+        entry = resolve_part(index, token.strip(".-/"))
+        if entry is None or entry.lib_id in seen or not entry.footprint:
+            continue
+        seen.add(entry.lib_id)
+        pins = ", ".join(f"{n} {name}" for n, name, _ in entry.pins if name != "~")
+        lines.append(
+            f"- {token}: KiCad {entry.lib_id}, footprint {entry.footprint}, "
+            f"pins: {pins}"
+        )
+        if len(lines) >= MAX_LIBRARY_PARTS:
+            break
+    if not lines:
+        return ""
+    return (
+        "Parts found in KiCad's installed library. Use each one's pin NUMBERS "
+        "exactly as listed (you may keep your own pin names); it is drawn with "
+        "that real footprint, so rule 9's pin-count packages do not apply to "
+        "these parts and the key must still be the part number:\n"
+        + "\n".join(lines)
+        + "\n\n"
+    )
+
+
+@dataclass
+class _LibraryResult:
+    spec: CircuitSpec
+    errors: list[str]
+
+
+def _apply_library(spec: CircuitSpec, on_event) -> _LibraryResult:
+    """Bind ICs to KiCad library symbols when the library is enabled."""
+    from .. import kicadlib
+    from ..board import _CHIP_REFUSALS, _MODULE_PACKAGES, _NAMED_CHIPS, _normalised
+    from ..kicadlib.resolve import apply_library
+
+    def drawn_by_engine(device) -> bool:
+        # The hand-checked named chips, modules and refused chips keep the
+        # engine's own rule; the library does not override a verified pattern.
+        name = _normalised(device.name)
+        keys = (*_NAMED_CHIPS, *_MODULE_PACKAGES, *_CHIP_REFUSALS)
+        return any(key in name for key in keys)
+
+
+    index = kicadlib.library_index()
+    if index is None:
+        return _LibraryResult(spec, [])
+    bound, notes, errors = apply_library(
+        spec,
+        index,
+        skip=drawn_by_engine,
+    )
+    if on_event is not None:
+        symbols = sum(1 for d in bound.devices if d.symbol)
+        if symbols or notes:
+            on_event(
+                {
+                    "event": "propose.library",
+                    "symbols": symbols,
+                    "corrected": len(notes),
+                    "first": notes[0][:160] if notes else "",
+                }
+            )
+    return _LibraryResult(bound, errors)
+
+
 def propose_circuit(
     model: Model,
     intent: str,
@@ -351,6 +492,7 @@ def propose_circuit(
     # "a home security camera system" -- became a netlist with nothing having
     # reasoned about where power enters.
     plan_block = f"The plan for this board:\n{brief}\n\n" if brief else ""
+    plan_block += library_block(f"{intent}\n{brief or ''}")
     prompt = (
         f"{PROPOSE_PROMPT}\n\n"
         f"What to build:\n{intent}\n\n"
@@ -397,8 +539,44 @@ def propose_circuit(
             # fix, and after the proposal is accepted nobody can. Both lists
             # are collected together so one repair round addresses both -- the
             # netlist.py convention, applied past the IR's own edge.
+            # Complete the contact groups a connector ties by function (a USB-C
+            # receptacle's four GND and four VBUS pads) *before* the pad rule
+            # runs: wiring A4 and not its stacked B9 used to be refused and
+            # cost a repair round, and wiring one stacked land but not the
+            # other shipped half a receptacle unpowered. Reported, not quiet.
+            spec, tied = tie_package_pins(spec)
+            if tied and on_event is not None:
+                on_event(
+                    {"event": "propose.tied", "pads": len(tied), "first": tied[0][:160]}
+                )
+            # Hold every IC KiCad knows to its library symbol: the model's pin
+            # numbers are checked against the real pinout and corrected where
+            # the names agree, and anything else goes back as a repair item
+            # carrying that pinout (silkscreen.kicadlib.resolve).
+            library_errors = _apply_library(spec, on_event)
+            spec = library_errors.spec
             unsupported = package_errors(spec)
-            errors = unsupported + part_number_errors(spec)
+            # Bus design checks (signals.py, atopile's requires_pulls shape):
+            # a missing I2C pull-up or a TX-to-TX UART goes back in this same
+            # repair round rather than reaching layout.
+            from ..signals import signal_errors
+
+            errors = (
+                library_errors.errors
+                + unsupported
+                + part_number_errors(spec)
+                + signal_errors(spec)
+            )
+            # The deterministic verifiers (silkscreen.verify): a ground or
+            # supply pin on no net, two grounds, a rail shorted to ground go
+            # back as repair items in this same round, and, when kicad-cli is
+            # installed, so does anything KiCad's own ERC reports on the
+            # schematic this spec would draw. aider's shape
+            # (aider/coders/base_coder.py: lint and test output become
+            # ``reflected_message`` and the model repairs against it), and
+            # the reason the model can no longer leave a regulator's GND
+            # off and have the run report success (measured 2026-09-15).
+            errors += verifier_errors(spec, on_event)
 
         if errors:
             attempt.errors = errors

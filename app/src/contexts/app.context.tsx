@@ -204,7 +204,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const toggleWakeWord = (isEnabled: boolean) => {
-    const newState = updateWakeWord(isEnabled);
+    // The overlay's ear (`useWakeWord`) reports a refused save on its own
+    // tooltip; this pane keeps the in-memory state so the switch reflects the
+    // click either way.
+    const { state: newState } = updateWakeWord(isEnabled);
     setCustomizable(newState);
   };
 

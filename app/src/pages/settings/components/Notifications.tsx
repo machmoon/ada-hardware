@@ -30,7 +30,7 @@ function readOs(): NotifyOs {
  * Native macOS banners for run milestones (contract C4).
  *
  * The test button is the opt-in: pressing it turns notifications on first,
- * and the helper text says so, because macOS lists Kaleo in System Settings
+ * and the helper text says so, because macOS lists Ada in System Settings
  * only after the first banner — a switch alone would leave nothing to find
  * there. Default off.
  */
@@ -141,7 +141,7 @@ export const Notifications = ({ variant = "settings", className }: Notifications
       <Header
         isMainTitle
         title="Notifications"
-        description="Hardy tells you when a run finishes. macOS lists Hardy in System Settings only after the first banner."
+        description="Ada tells you when a run finishes. macOS lists Ada in System Settings only after the first banner."
       />
       {body}
     </div>

@@ -61,7 +61,7 @@ def test_every_bad_field_is_refused_by_name(payload, fragment):
 
 def test_an_overlong_text_is_refused_rather_than_truncated():
     """The alternative -- speaking the first 1200 characters -- ends the
-    readback mid-word, which a listener cannot distinguish from Hardy deciding
+    readback mid-word, which a listener cannot distinguish from Ada deciding
     there was nothing more to say."""
     with pytest.raises(ValueError) as excinfo:
         tts.speak_request({"text": "V bus. " * 400})
@@ -284,7 +284,7 @@ def test_the_hosted_engine_asks_for_raw_pcm_and_the_flash_model(monkeypatch):
 
 def test_the_hosted_engine_refuses_a_200_with_no_audio(monkeypatch):
     """An empty 200 is exactly the failure a listener cannot distinguish from
-    Hardy having nothing to say. It is named, not passed on as silence."""
+    Ada having nothing to say. It is named, not passed on as silence."""
     monkeypatch.setenv("ELEVENLABS_API_KEY", "sk-test-key")
     transport, _ = _recorded([b"", b""])
     engine = tts.ElevenLabsEngine(transport=transport)

@@ -5,6 +5,7 @@ be *correct* can be tested without a network. This package is the only place a
 model call happens, and every stage checks the model rather than trusting it.
 """
 
+from .claude import ClaudeModel
 from .datasheet import PartFacts, read_datasheet
 from .desk import DeskResolution, DeskValidationError, resolve_desk
 from .model import Document, GeminiModel, Model, ModelError, ScriptedModel
@@ -24,7 +25,7 @@ from .review import (
 from .transcribe import transcribe_audio
 
 __all__ = [
-    "Model", "GeminiModel", "ScriptedModel", "ModelError", "Document",
+    "Model", "GeminiModel", "ClaudeModel", "ScriptedModel", "ModelError", "Document",
     "PartFacts", "read_datasheet",
     "propose_circuit", "ProposalError",
     "Finding", "Severity", "Domain", "review_circuit", "run_review",

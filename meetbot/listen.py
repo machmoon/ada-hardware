@@ -272,7 +272,7 @@ class CaptionStabilizer:
     def __init__(
         self,
         *,
-        self_name: str = "Hardy",
+        self_name: str = "Ada",
         self_labels: frozenset[str] | None = None,
         stabilize_s: float = 0.9,
     ) -> None:
@@ -439,7 +439,7 @@ async def transcript_stream(
             "without transcriber="
         )
     page = session.page
-    name = self_name or getattr(session, "display_name", None) or "Hardy"
+    name = self_name or getattr(session, "display_name", None) or "Ada"
     stabilizer = CaptionStabilizer(self_name=name, stabilize_s=stabilize_s)
 
     joined_at: float | None = None  # first poll that saw the in-call controls

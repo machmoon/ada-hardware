@@ -66,7 +66,7 @@ __all__ = [
 #: live side refuses.
 DEMO_MARKER = "KALEO_DEMO"
 DEMO_HEADER = "# KALEO DEMO STATE -- not a credential"
-LIVE_HEADER = "# Written by Hardy's Setup Assistant. Never commit this file."
+LIVE_HEADER = "# Written by Ada's Setup Assistant. Never commit this file."
 
 #: In the order ``billing_routes`` writes them; the tuple is the one
 #: definition and ``billing_routes._SETTABLE`` is an alias of it.

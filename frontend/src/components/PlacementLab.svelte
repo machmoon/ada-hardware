@@ -18,6 +18,7 @@
   let profile = $state('compact-control')
   let policy = $state('deterministic')
   let placementCapabilities = $state({})
+  let capabilitiesError = $state('')
   let experimental = $state(false)
   let recordTrace = $state(false)
   let result = $state(null)
@@ -124,8 +125,12 @@
     }
     try {
       placementCapabilities = (await listModels()).placement
-    } catch {
+      capabilitiesError = ''
+    } catch (error) {
+      // Nothing is gated on: every policy shows as unsupported, and the
+      // sentence says that is a lookup failure, not the service's answer.
       placementCapabilities = {}
+      capabilitiesError = `Placement capabilities could not be loaded (${error?.message || error}); policies show as unsupported until the service answers.`
     }
     await run()
   })
@@ -196,6 +201,9 @@
       </div>
     </section>
 
+    {#if capabilitiesError}
+      <div class="error" role="alert" data-testid="capabilities-error">{capabilitiesError}</div>
+    {/if}
     {#if error}
       <div class="error" role="alert">{error}</div>
     {:else if result}

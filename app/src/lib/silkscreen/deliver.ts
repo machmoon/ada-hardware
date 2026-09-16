@@ -72,7 +72,7 @@ export function deliverable(history: readonly StepResponse[]): boolean {
 /** True when the engine has an OAuth client but no usable Google token yet. */
 export function needsGoogleSignIn(
   config: DeliverConfig | null,
-  /** Hardy can run `python -m googleapps auth` even when the service lacks env. */
+  /** Ada can run `python -m googleapps auth` even when the service lacks env. */
   cliGoogleapps = false
 ): boolean {
   if (!config?.available) return false;
@@ -80,7 +80,7 @@ export function needsGoogleSignIn(
   if (config.oauth_client === true) return true;
   if (cliGoogleapps) return true;
   // Older engines omit the flag; fall back to the hint text.
-  return config.hints.some((h) => /googleapps auth|sign in with Google|(Hardy|Hardy)'s Send panel/i.test(h));
+  return config.hints.some((h) => /googleapps auth|sign in with Google|(Ada|Hardy)'s Send panel/i.test(h));
 }
 
 /**
@@ -213,6 +213,22 @@ export function describeDelivery(response: DeliverResponse): Partial<Record<Dest
  * this app's opinion presented as the engine's, and the whole point of showing
  * it before the send is that the engineer approves what will actually go out.
  */
+/** The service's own wording for an agenda it could not prepare (`service/steps.py::_review`). */
+const AGENDA_FAILURE = /^the spec-review agenda could not be prepared/i;
+
+/**
+ * The latest review step's "agenda could not be prepared" warning, verbatim,
+ * or null when the latest review carried none.
+ */
+export function agendaFailure(history: readonly StepResponse[]): string | null {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const response = history[i];
+    if (response?.step !== "review") continue;
+    return (response.warnings ?? []).find((w) => AGENDA_FAILURE.test(w)) ?? null;
+  }
+  return null;
+}
+
 export function specReviewFrom(history: readonly StepResponse[]): SpecReviewBlock | null {
   for (let i = history.length - 1; i >= 0; i -= 1) {
     const block = history[i]?.spec_review;
@@ -257,11 +273,20 @@ export function specReviewOffer(
   }
   const review = specReviewFrom(history);
   if (!review) {
+    // `spec_review: null` arrives for two different reasons, and only the
+    // envelope's warning tells them apart: the engine had nothing to propose,
+    // or it could not prepare the agenda at all (a model outage, no calendar
+    // credentials). The second is a failure and is repeated here in the
+    // engine's words; reading it as "nothing needs a meeting" is the lie this
+    // branch used to tell.
+    const failedAgenda = agendaFailure(history);
     return {
       review: null,
-      note: state.reviewed
-        ? "The review ran but proposed no agenda, so there is nothing to put in a meeting."
-        : "The review step has not run, so there is no agenda yet.",
+      note: failedAgenda
+        ? `${failedAgenda[0].toUpperCase()}${failedAgenda.slice(1)}, so there is no agenda to book.`
+        : state.reviewed
+          ? "The review ran but proposed no agenda, so there is nothing to put in a meeting."
+          : "The review step has not run, so there is no agenda yet.",
       refused: false,
     };
   }

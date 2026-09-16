@@ -24,11 +24,18 @@ import tempfile
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any, Generic, NamedTuple, TypeVar
 
-from ..board import BoardResult, build_board, route_board, write_board
+from ..board import (
+    BoardResult,
+    build_board,
+    footprint_lib_id,
+    live_copper,
+    route_board,
+    write_board,
+)
 from ..enclosure.board_shape import board_envelope
-from ..enclosure.cad import ExportPaths, export_model
+from ..enclosure.cad import ExportPaths, export_model, export_shape
 from ..enclosure.errors import EnclosureError
 from ..enclosure.ir import EnclosureSpec
 from ..enclosure.kernel import KernelReport
@@ -44,9 +51,12 @@ from ..sourcing import SourcingResult, bom_rows
 from ..spice.errors import SpiceError
 from ..spice.simulators import Simulator
 from ..units import NM_PER_MM, to_mm
+from ..web_research import PART_FIELDS, ResearchBudget, WebResearchResult
 from .datasheet import PartFacts, read_datasheet
-from .enclosure import propose_enclosure
-from .model import Model
+from .enclosure import kernel_round, propose_enclosure
+from .firecrawl import FirecrawlError
+from .mechanism import MechanismResult
+from .model import Model, ModelError
 from .plan import PlanResult, propose_plan
 from .prior_art import GitHubError, Transport, research
 from .propose import ProposalAttempt, propose_circuit
@@ -59,8 +69,14 @@ from .review import (
 )
 from .simulate import SimulationResult, simulate_circuit
 from .sourcing import propose_sourcing
+from .web_research import research_web
 
 __all__ = [
+    "research_stage",
+    "start_research_stage",
+    "Lane",
+    "ResearchJob",
+    "research_sourcing_context",
     "prior_art_stage",
     "design_brief",
     "plan_stage",
@@ -300,6 +316,202 @@ def read_stage(
     return facts
 
 
+def research_stage(
+    agent_model: Model,
+    *,
+    intent: str,
+    research: bool,
+    emit: Emit,
+    enter: Enter,
+    transport: Any = None,
+    environ: Any = None,
+    budget: ResearchBudget | None = None,
+) -> WebResearchResult | None:
+    """Research the request on the web (Firecrawl), or None when off.
+
+    Opt-in, the :func:`prior_art_stage` rule: model calls and paid Firecrawl
+    pages nobody pressed for, so ``research=False`` emits nothing. What it
+    found reaches the designer only through :func:`design_brief` and the
+    sourcing prompt, as cited facts.
+
+    It never fails the run. With no ``FIRECRAWL_API_KEY`` the result is
+    status ``unconfigured`` and a ``research.refused`` event says so in words
+    -- not a silent skip, and not a failed stage. A Firecrawl error or a
+    ``ValueError`` that escapes becomes status ``unavailable`` after a
+    ``research.failed`` event. A ``ModelError`` or a callback exception
+    propagates, as from every other stage.
+    """
+    if not research:
+        return None
+    enter("research")
+    emit({"event": "stage.start", "stage": "research"})
+    try:
+        result = research_web(
+            intent,
+            model=agent_model,
+            transport=transport,
+            environ=environ,
+            budget=budget if budget is not None else ResearchBudget(),
+            on_event=emit,
+        )
+    except (FirecrawlError, ValueError) as exc:
+        detail = f"web research failed: {exc}"
+        emit({"event": "research.failed", "stage": "research", "detail": detail[:200]})
+        result = WebResearchResult(intent=intent, status="unavailable", warnings=[detail])
+    if result.status == "unconfigured":
+        emit(
+            {
+                "event": "research.refused",
+                "stage": "research",
+                "detail": result.warnings[0][:200] if result.warnings else "",
+            }
+        )
+    emit(
+        {
+            "event": "stage.done",
+            "stage": "research",
+            "status": result.status,
+            "queries": len(result.queries),
+            "pages": result.pages,
+            "findings": len(result.findings),
+            "dropped": len(result.dropped),
+            "stops": len(result.stops),
+            "warnings": len(result.warnings),
+        }
+    )
+    return result
+
+
+T = TypeVar("T")
+
+
+class Lane(Generic[T]):
+    """One stage in flight on its own thread, or already settled.
+
+    :meth:`result` joins the thread and then either returns what the stage
+    returned or re-raises exactly what it raised -- a ``ModelError``, or an
+    event callback that hung up -- so a failure in the background carries the
+    same meaning at the join as it would have had in line. A lane that was
+    never started settles at once with ``default`` and no events: ``None``
+    for the optional lanes, the ``SKIPPED`` report for the critic.
+
+    One class for the six background lanes (research, critic, case,
+    sourcing, simulation, mechanism). They were six copies of this body until
+    2026-09-16; the old names stay as aliases below.
+    """
+
+    def __init__(
+        self, thread: threading.Thread | None = None, default: T | None = None
+    ) -> None:
+        self._thread = thread
+        self._result: T | None = default
+        self._error: BaseException | None = None
+
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def wait(self) -> None:
+        """Block until the stage has finished. Raises nothing; idempotent."""
+        if self._thread is not None:
+            self._thread.join()
+
+    def result(self) -> T | None:
+        self.wait()
+        if self._error is not None:
+            raise self._error
+        return self._result
+
+    def _run(self, work: Callable[[], T]) -> None:
+        try:
+            self._result = work()
+        except BaseException as exc:  # noqa: BLE001 -- re-raised at the join
+            self._error = exc
+
+
+class ReviewJob(Lane[ReviewReport]):
+    """The critic's lane: never started, it settles to the ``SKIPPED`` report
+    :func:`review_stage` would have returned (the review-off no-op)."""
+
+    def __init__(self, thread: threading.Thread | None = None) -> None:
+        super().__init__(thread, default=ReviewReport(status=ReviewStatus.SKIPPED))
+
+
+ResearchJob = Lane
+EnclosureJob = Lane
+SourcingJob = Lane
+SimulationJob = Lane
+MechanismJob = Lane
+
+
+def start_research_stage(
+    agent_model: Model,
+    *,
+    intent: str,
+    research: bool,
+    emit: Emit,
+    enter: Enter,
+    transport: Any = None,
+    environ: Any = None,
+    budget: ResearchBudget | None = None,
+    daemon: bool = False,
+) -> ResearchJob:
+    """Run :func:`research_stage` on a worker thread from the moment the
+    intent arrives.
+
+    Both drivers call this first -- before the datasheets are read, before
+    prior art and the plan -- and join it right before propose, so the web is
+    being read while those stages run and its cited findings are in the brief
+    propose designs against. The research budget
+    (:class:`~silkscreen.web_research.ResearchBudget`, a wall clock among its
+    axes) is what bounds the wait at the join.
+
+    **Model calls overlap.** Unlike the enclosure/sourcing/simulation lanes,
+    this lane runs while the driver thread may be reading datasheets or
+    planning, so two worker-model calls can be in flight at once. That is the
+    point -- research that waited for them would add its whole latency to the
+    run -- and it keeps the offline suite deterministic for the reason the
+    three background lanes do: every research prompt carries its own step
+    marker, so a :class:`~silkscreen.agents.model.ScriptedModel` keyed by
+    marker answers it the same way whatever the interleaving.
+
+    ``enter("research")`` is called here, on the calling thread, before the
+    thread starts: the event tap takes the first thread to enter a stage as
+    the driver's, and a worker that entered first would take that role. With
+    ``research`` off nothing is started and nothing is emitted.
+    """
+    if not research:
+        return ResearchJob()
+    enter("research")
+    job = ResearchJob()
+
+    def work() -> WebResearchResult | None:
+        return research_stage(
+            agent_model,
+            intent=intent,
+            research=True,
+            emit=emit,
+            enter=enter,
+            transport=transport,
+            environ=environ,
+            budget=budget,
+        )
+
+    thread = threading.Thread(
+        target=job._run, args=(work,), name="silkscreen-research", daemon=daemon
+    )
+    job._thread = thread
+    thread.start()
+    return job
+
+
+def research_sourcing_context(result: WebResearchResult | None) -> str | None:
+    """The part facts web research cited, for the sourcing prompt, or None."""
+    if result is None:
+        return None
+    return result.brief_text(fields=PART_FIELDS)
+
+
 def prior_art_stage(
     agent_model: Model,
     *,
@@ -348,9 +560,12 @@ def prior_art_stage(
 
 
 def design_brief(
-    plan_result: PlanResult | None, prior_art_result: PriorArtResult | None
+    plan_result: PlanResult | None,
+    prior_art_result: PriorArtResult | None,
+    research_result: WebResearchResult | None = None,
 ) -> str | None:
-    """What propose designs against: the plan's brief, then the prior art.
+    """What propose designs against: the plan's brief, the prior art, then
+    the cited web research.
 
     Both drivers call this so they cannot hand propose different text.
     """
@@ -359,6 +574,7 @@ def design_brief(
         if plan_result is not None and plan_result.plan is not None
         else None,
         prior_art_result.brief_text() if prior_art_result is not None else None,
+        research_result.brief_text() if research_result is not None else None,
     ]
     joined = "\n\n".join(p for p in parts if p)
     return joined or None
@@ -589,7 +805,7 @@ def schematic_stage(
     stem = out_path.stem
     sheet = build_schematic(
         spec,
-        footprints={p.ref: f"silkscreen:{p.footprint.name}" for p in board.parts},
+        footprints={p.ref: footprint_lib_id(p) for p in board.parts},
     )
     board.warnings.extend(sheet.warnings)
     artifacts = SchematicArtifacts(
@@ -603,7 +819,7 @@ def schematic_stage(
             today=datetime.date.today(),
         ),
         project_path=write_project(
-            out_path.with_name(f"{stem}.kicad_pro"), project_name=stem
+            out_path.with_name(f"{stem}.kicad_pro"), project_name=stem, spec=spec
         ),
         placed_board_path=write_board(
             board, out_path.with_name(f"{stem}.placed.kicad_pcb")
@@ -626,6 +842,7 @@ def route_stage(
     route: bool,
     emit: Emit,
     enter: Enter,
+    live: LiveCopper | None = None,
 ) -> RouteResult | None:
     """Lay copper on the placed board. Skipped -- and silent -- when off.
 
@@ -633,12 +850,38 @@ def route_stage(
     carries the tracks. Nets the router could not finish are named in the
     result and in ``board.unrouted_nets``; a caller reporting the board as
     routed without reading them is the failure the router exists to avoid.
+
+    ``live`` is the seam for showing the copper in an open editor *while*
+    the router runs (the desktop's KiCad bridge). With it set, every net the
+    router commits or lifts is announced twice: as a ``route.net`` event on
+    the normal stream (net, action, counts -- never the copper itself, the
+    stream stays small) and as a call to ``live(action, net, copper)`` with
+    the copper in KiCad's own frame from :func:`silkscreen.board.live_copper`.
+    Without it nothing is announced and the event stream is exactly what it
+    was, which the offline tests pin.
     """
     if not route:
         return None
     enter("route")
     emit({"event": "stage.start", "stage": "route"})
-    result = route_board(board)
+    if live is None:
+        result = route_board(board)
+    else:
+
+        def on_net(action: str, net: str, tracks, vias) -> None:
+            emit(
+                {
+                    "event": "route.net",
+                    "stage": "route",
+                    "net": net,
+                    "action": action,
+                    "tracks": len(tracks),
+                    "vias": len(vias),
+                }
+            )
+            live(action, net, live_copper(board, tracks, vias))
+
+        result = route_board(board, on_net=on_net)
     emit(
         {
             "event": "stage.done",
@@ -651,6 +894,16 @@ def route_stage(
         }
     )
     return result
+
+
+#: ``live(name, seq, path)`` -- one finished case solid (``board``, ``base``
+#: or ``lid``) written as STEP at ``path``, in build order.
+LiveCase = Callable[[str, int, Path], None]
+
+#: ``live(action, net, copper)`` -- the copper dict from
+#: :func:`silkscreen.board.live_copper`; ``action`` is ``"committed"`` or
+#: ``"lifted"``.
+LiveCopper = Callable[[str, str, dict[str, Any]], None]
 
 
 class EnclosureResult(NamedTuple):
@@ -711,6 +964,9 @@ def enclosure_stage(
     stem: str = "enclosure",
     emit: Emit,
     enter: Enter,
+    live: LiveCase | None = None,
+    restyle: bool = False,
+    style_model: Model | None = None,
 ) -> EnclosureResult | None:
     """Propose, verify, and emit a case for the placed board. Opt-in.
 
@@ -784,15 +1040,45 @@ def enclosure_stage(
         # so the stage never re-verifies what was already verified. Fast mode
         # (the default) never lets a failing clause block; ``rigorous``
         # restores the strict repair loop.
-        spec, repair_rounds, model, kernel, brief = proposal_fields(
-            propose_enclosure(
-                agent_model,
-                envelope,
-                style_hint=enclosure_style,
-                rigorous=rigorous,
-                on_event=emit,
-            )
+        # The live show: each finished solid is written as its own STEP under
+        # ``<directory>/live`` and announced, so a CAD window can be told to
+        # swap it in while the next one is still being built. Only with a
+        # directory -- there is nowhere to put a live file otherwise -- and
+        # only when asked; the event stream is untouched by default.
+        on_stage = None
+        if live is not None and directory is not None:
+            live_dir = directory / "live"
+            live_dir.mkdir(parents=True, exist_ok=True)
+            seq = 0
+
+            def on_stage(name: str, shape) -> None:
+                nonlocal seq
+                seq += 1
+                path = export_shape(shape, live_dir / f"{stem}-{seq:02d}-{name}.step")
+                emit(
+                    {
+                        "event": "enclosure.stage",
+                        "stage": "enclosure",
+                        "name": name,
+                        "seq": seq,
+                        "file": path.name,
+                    }
+                )
+                live(name, seq, path)
+
+        proposal = propose_enclosure(
+            agent_model,
+            envelope,
+            style_hint=enclosure_style,
+            rigorous=rigorous,
+            on_event=emit,
+            on_stage=on_stage,
         )
+        if restyle:
+            proposal = _restyled(
+                style_model or agent_model, proposal, envelope, enclosure_style, emit
+            )
+        spec, repair_rounds, model, kernel, brief = proposal_fields(proposal)
         if directory is not None:
             directory.mkdir(parents=True, exist_ok=True)
             exports = export_model(model, directory, stem)
@@ -870,42 +1156,141 @@ def placed_snapshot(board: BoardResult) -> BoardResult:
     )
 
 
-class EnclosureJob:
-    """The enclosure stage in flight on its own thread, or already settled.
+def enclosure_edit_stage(
+    board: BoardResult,
+    previous: EnclosureResult,
+    edits: dict[str, Any],
+    *,
+    rigorous: bool = False,
+    export_dir: str | Path,
+    stem: str = "enclosure",
+    emit: Emit,
+    enter: Enter,
+    live: LiveCase | None = None,
+) -> EnclosureResult:
+    """Rebuild the case from ``previous`` with ``edits`` applied. **No model.**
 
-    :meth:`result` joins the thread and then either returns what the stage
-    returned or re-raises exactly what it raised -- a ``ModelError``, or an
-    event callback that hung up -- so a failure in the background carries
-    the same meaning at the join as it would have had in line. A job that
-    was never started (the run did not ask for a case) settles immediately
-    with ``None`` and no events, the ``enclosure_stage`` no-op preserved.
+    The direct-edit path of docs/ai-cad-plan.md v5: a person changes a
+    number or a choice on a finished case (``wall_mm``, ``lid``, a cutout's
+    face -- the spec's own vocabulary, see
+    :func:`~silkscreen.enclosure.ir.apply_edits`) and the kernel builds and
+    verifies the result through :func:`~silkscreen.agents.enclosure.kernel_round`,
+    the same function the model's proposals go through. Bounds and
+    cross-checks hold exactly as they do for the model, and every failure is
+    one batched :class:`~silkscreen.enclosure.errors.EnclosureValidationError`.
+
+    Unlike :func:`enclosure_stage` this raises rather than answering None: an
+    edit that does not build is the person's to fix, and the previous case is
+    still on disk untouched until the export below succeeds. The kernel
+    report is attached whether or not it passed; ``rigorous`` only decides
+    whether a failing report is an error (there is no repair loop -- the
+    repairer here is the person). ``repair_rounds`` is 0 and ``brief`` names
+    the edits, so a receipt can say the case was edited by hand rather than
+    designed.
     """
+    from ..enclosure.errors import EnclosureValidationError
+    from ..enclosure.ir import apply_edits, spec_to_dict
 
-    def __init__(self, thread: threading.Thread | None = None) -> None:
-        self._thread = thread
-        self._result: EnclosureResult | None = None
-        self._error: BaseException | None = None
+    enter("enclosure")
+    emit({"event": "stage.start", "stage": "enclosure", "edit": True})
+    spec = apply_edits(previous.spec, edits)
+    directory = Path(export_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="silkscreen-enclosure-") as tmp:
+        measured = write_board(board, Path(tmp) / "board.kicad_pcb")
+        envelope = board_envelope(measured)
+    on_stage = None
+    if live is not None:
+        live_dir = directory / "live"
+        live_dir.mkdir(parents=True, exist_ok=True)
+        seq = 0
 
-    @property
-    def running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
+        def on_stage(name: str, shape) -> None:
+            nonlocal seq
+            seq += 1
+            path = export_shape(shape, live_dir / f"{stem}-{seq:02d}-{name}.step")
+            emit(
+                {
+                    "event": "enclosure.stage",
+                    "stage": "enclosure",
+                    "name": name,
+                    "seq": seq,
+                    "file": path.name,
+                }
+            )
+            live(name, seq, path)
 
-    def wait(self) -> None:
-        """Block until the stage has finished. Raises nothing; idempotent."""
-        if self._thread is not None:
-            self._thread.join()
+    model, kernel, errors = kernel_round(
+        spec, envelope, rigorous, 0, emit, on_stage=on_stage
+    )
+    if model is None or errors:
+        raise EnclosureValidationError(errors or ["the kernel built nothing"])
+    exports = export_model(model, directory, stem)
+    step_text = exports.step.read_text(encoding="utf-8")
+    snapshots: tuple[Path, ...] = ()
+    try:
+        snapshots = tuple(render_packet(model, directory))
+    except Exception as exc:  # noqa: BLE001 - advisory, never the gate
+        emit(
+            {
+                "event": "enclosure.warning",
+                "warning": f"snapshots not rendered: {exc}"[:160],
+            }
+        )
+    before = spec_to_dict(previous.spec)
+    changed = sorted(k for k in edits if before.get(k) != edits[k])
+    brief = "edited by hand: " + (", ".join(changed) if changed else "no field changed")
+    emit(
+        {
+            "event": "stage.done",
+            "stage": "enclosure",
+            "edit": True,
+            "changed": changed,
+            "cutouts": len(spec.cutouts),
+            "lid": spec.lid,
+            "wall_mm": round(to_mm(spec.wall_nm), 3),
+            "repair_rounds": 0,
+            "kernel_passed": None if kernel is None else bool(kernel.passed),
+            "kernel_failed": [] if kernel is None else list(kernel.failed),
+            "exports": [exports.step.name, exports.base_stl.name, exports.lid_stl.name],
+        }
+    )
+    return EnclosureResult(
+        spec=spec,
+        step_text=step_text,
+        repair_rounds=0,
+        kernel=kernel,
+        exports=exports,
+        snapshots=snapshots,
+        brief=brief,
+    )
 
-    def result(self) -> EnclosureResult | None:
-        self.wait()
-        if self._error is not None:
-            raise self._error
-        return self._result
 
-    def _run(self, work: Callable[[], EnclosureResult | None]) -> None:
-        try:
-            self._result = work()
-        except BaseException as exc:  # noqa: BLE001 -- re-raised at the join
-            self._error = exc
+def _restyled(model: Model, proposal, envelope, style_hint: str, emit: Emit):
+    """The design pass over an accepted case; the plain case when it fails.
+
+    :func:`~silkscreen.agents.enclosure_style.restyle_enclosure` handles every
+    script failure itself. A model outage here is caught too, unlike in the
+    proposal: the verified case already exists and has been paid for, so an
+    unreachable model costs the styling, never the case -- and says so.
+    """
+    from .enclosure_style import restyle_enclosure
+
+    try:
+        outcome = restyle_enclosure(
+            model, proposal, envelope, style_hint=style_hint, on_event=emit
+        )
+    except ModelError as exc:
+        emit(
+            {
+                "event": "enclosure.warning",
+                "warning": f"restyle not run, the plain case ships: {exc}"[:160],
+            }
+        )
+        return proposal
+    for warning in outcome.warnings:
+        emit({"event": "enclosure.warning", "warning": warning[:160]})
+    return outcome.proposal
 
 
 def start_enclosure_stage(
@@ -922,6 +1307,9 @@ def start_enclosure_stage(
     emit: Emit,
     enter: Enter,
     daemon: bool = False,
+    live: LiveCase | None = None,
+    restyle: bool = False,
+    style_model: Model | None = None,
 ) -> EnclosureJob:
     """Run :func:`enclosure_stage` on a worker thread from a placed snapshot.
 
@@ -966,6 +1354,9 @@ def start_enclosure_stage(
             stem=stem,
             emit=emit,
             enter=enter,
+            live=live,
+            restyle=restyle,
+            style_model=style_model,
         )
 
     thread = threading.Thread(
@@ -983,6 +1374,7 @@ def sourcing_stage(
     emit: Emit,
     enter: Enter,
     probe: Callable[[str], str] | None = None,
+    context: str | None = None,
 ) -> SourcingResult:
     """Source the placed board's parts: MPN proposals, probed datasheets, BOM.
 
@@ -994,7 +1386,9 @@ def sourcing_stage(
 
     ``probe`` is the datasheet probe seam of
     :func:`~silkscreen.agents.sourcing.propose_sourcing` (default: the real
-    network probe); the service pins it offline in tests.
+    network probe); the service pins it offline in tests. ``context`` is
+    handed to it unchanged -- the cited web research's part facts
+    (:func:`research_sourcing_context`), or None.
 
     Failure never fails the run: a ``ValueError`` -- a
     :class:`~silkscreen.sourcing.SourcingValidationError` that escaped the
@@ -1010,7 +1404,7 @@ def sourcing_stage(
     emit({"event": "stage.start", "stage": "sourcing"})
     try:
         result = propose_sourcing(
-            agent_model, bom_rows(board), probe=probe, on_event=emit
+            agent_model, bom_rows(board), probe=probe, on_event=emit, context=context
         )
     except ValueError as exc:
         emit({"event": "sourcing.failed", "error": str(exc)[:160]})
@@ -1031,44 +1425,6 @@ def sourcing_stage(
     return result
 
 
-class SourcingJob:
-    """The sourcing stage in flight on its own thread, or already settled.
-
-    :meth:`result` joins the thread and then either returns what the stage
-    returned or re-raises exactly what it raised -- a ``ModelError``, or an
-    event callback that hung up -- so a failure in the background carries
-    the same meaning at the join as it would have had in line (the
-    :class:`EnclosureJob` semantics, exactly). A job that was never started
-    settles immediately with ``None`` and no events.
-    """
-
-    def __init__(self, thread: threading.Thread | None = None) -> None:
-        self._thread = thread
-        self._result: SourcingResult | None = None
-        self._error: BaseException | None = None
-
-    @property
-    def running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
-
-    def wait(self) -> None:
-        """Block until the stage has finished. Raises nothing; idempotent."""
-        if self._thread is not None:
-            self._thread.join()
-
-    def result(self) -> SourcingResult | None:
-        self.wait()
-        if self._error is not None:
-            raise self._error
-        return self._result
-
-    def _run(self, work: Callable[[], SourcingResult]) -> None:
-        try:
-            self._result = work()
-        except BaseException as exc:  # noqa: BLE001 -- re-raised at the join
-            self._error = exc
-
-
 def start_sourcing_stage(
     agent_model: Model,
     board: BoardResult,
@@ -1077,6 +1433,7 @@ def start_sourcing_stage(
     enter: Enter,
     daemon: bool = False,
     probe: Callable[[str], str] | None = None,
+    context: str | None = None,
 ) -> SourcingJob:
     """Run :func:`sourcing_stage` on a worker thread from a placed snapshot.
 
@@ -1099,7 +1456,7 @@ def start_sourcing_stage(
 
     def work() -> SourcingResult:
         return sourcing_stage(
-            agent_model, snapshot, emit=emit, enter=enter, probe=probe
+            agent_model, snapshot, emit=emit, enter=enter, probe=probe, context=context
         )
 
     thread = threading.Thread(
@@ -1180,42 +1537,6 @@ def simulate_stage(
         }
     )
     return result
-
-
-class SimulationJob:
-    """The simulation stage in flight on its own thread, or already settled.
-
-    :meth:`result` joins the thread and then either returns what the stage
-    returned or re-raises exactly what it raised (the :class:`SourcingJob`
-    semantics, exactly). A job that was never started settles immediately
-    with ``None`` and no events.
-    """
-
-    def __init__(self, thread: threading.Thread | None = None) -> None:
-        self._thread = thread
-        self._result: SimulationResult | None = None
-        self._error: BaseException | None = None
-
-    @property
-    def running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
-
-    def wait(self) -> None:
-        """Block until the stage has finished. Raises nothing; idempotent."""
-        if self._thread is not None:
-            self._thread.join()
-
-    def result(self) -> SimulationResult | None:
-        self.wait()
-        if self._error is not None:
-            raise self._error
-        return self._result
-
-    def _run(self, work: Callable[[], SimulationResult]) -> None:
-        try:
-            self._result = work()
-        except BaseException as exc:  # noqa: BLE001 -- re-raised at the join
-            self._error = exc
 
 
 def start_simulation_stage(
@@ -1329,44 +1650,6 @@ def review_stage(
     )
 
 
-class ReviewJob:
-    """The critic in flight on its own thread, or already settled.
-
-    The same shape as :class:`EnclosureJob`: :meth:`result` joins and either
-    returns the report or re-raises exactly what the thread raised, so a
-    failure in the background means what it would have meant in line. A job
-    that was never started (``review=False``) settles at once with the
-    ``SKIPPED`` report :func:`review_stage` would have returned, and emits
-    nothing -- the review-off no-op preserved.
-    """
-
-    def __init__(self, thread: threading.Thread | None = None) -> None:
-        self._thread = thread
-        self._result: ReviewReport = ReviewReport(status=ReviewStatus.SKIPPED)
-        self._error: BaseException | None = None
-
-    @property
-    def running(self) -> bool:
-        return self._thread is not None and self._thread.is_alive()
-
-    def wait(self) -> None:
-        """Block until the stage has finished. Raises nothing; idempotent."""
-        if self._thread is not None:
-            self._thread.join()
-
-    def result(self) -> ReviewReport:
-        self.wait()
-        if self._error is not None:
-            raise self._error
-        return self._result
-
-    def _run(self, work: Callable[[], ReviewReport]) -> None:
-        try:
-            self._result = work()
-        except BaseException as exc:  # noqa: BLE001 -- re-raised at the join
-            self._error = exc
-
-
 def start_review_stage(
     agent_model: Model,
     spec: CircuitSpec,
@@ -1426,108 +1709,148 @@ def start_review_stage(
     return job
 
 
-class MechanismResult(NamedTuple):
-    """What the mechanism stage produced (a jointed printed assembly).
-
-    ``kernel`` is the :class:`~silkscreen.mechanism.kernel.MechanismReport`
-    -- the only receipt; ``exports`` the STEP/STL paths when a directory was
-    given, else ``None``; ``step_text`` the STEP assembly either way.
-    """
-
-    spec: Any
-    step_text: str
-    repair_rounds: int
-    kernel: Any = None
-    exports: Any = None
-    brief: str = ""
-
-
 def mechanism_stage(
     agent_model: Model,
     intent: str,
     *,
-    mechanism: bool,
+    board_spec: CircuitSpec | None = None,
     prior_art: Any = None,
+    output: str | Path | None = None,
+    emit_stages: bool = True,
     export_dir: str | Path | None = None,
     stem: str = "mechanism",
     emit: Emit,
     enter: Enter,
-) -> MechanismResult | None:
-    """Propose, build, verify and export a mechanism for ``intent``. Opt-in.
+) -> MechanismResult:
+    """Propose, build, verify and export a mechanism (a printed arm). Opt-in;
+    the caller holds the switch (the sourcing and simulation rule).
 
-    The :func:`enclosure_stage` shape: a no-op when not asked for; a
-    :class:`~silkscreen.mechanism.errors.MechanismError` (including the
-    proposal budget running out), a missing kernel, ``ValueError`` and
-    ``OSError`` become a ``mechanism.failed`` event and ``None``; a
-    ``ModelError`` or a callback exception propagates. Needs only the intent,
-    not a board. Imports lazily so a run that never asks pays nothing.
+    Needs the intent, and uses two things the run already has when it has
+    them: the validated circuit (``board_spec``) so the arm's actuators are
+    ones the board's servo driver can command, and the prior art. It needs
+    no placement, so both drivers start it on a worker thread beside the
+    other background lanes (:func:`start_mechanism_stage`) and join it last.
+
+    Files follow :func:`enclosure_stage`'s rule: ``export_dir`` when given,
+    else beside ``output`` when it is set and ``emit_stages`` is on
+    (``mechanism.step`` plus one printed-orientation STL per part), else
+    nothing durable -- but the STEP text is still produced from a scratch
+    export, so the one-shot ``/generate`` JSON carries a whole arm.
+
+    **Never None.** Every ending is a status on :class:`MechanismResult`, in
+    words: ``unavailable`` (no ``cad`` extra; no model call was spent),
+    ``failed`` (nothing built within the repair budget, or the export
+    raised), ``kernel_failed`` (built and exported; the failing clauses are
+    named) and ``passed``. A board/arm interface mismatch rides
+    ``warnings``. A :class:`~silkscreen.agents.model.ModelError` or a
+    callback exception propagates, as from every other stage. Imports
+    lazily, so a run that never asks pays nothing.
     """
-    if not mechanism:
-        return None
     from ..enclosure.errors import KernelUnavailable
     from ..mechanism.cad import export_mechanism
     from ..mechanism.errors import MechanismError
-    from .mechanism import propose_mechanism
+    from .mechanism import MechanismResult, interface_warnings, propose_mechanism
 
     enter("mechanism")
     emit({"event": "stage.start", "stage": "mechanism"})
-    exports = None
+    if export_dir is not None:
+        directory: Path | None = Path(export_dir)
+    elif output is not None and emit_stages:
+        directory = Path(output).parent
+    else:
+        directory = None
+    result: MechanismResult
     try:
-        proposal = propose_mechanism(agent_model, intent, prior_art=prior_art, on_event=emit)
-        if export_dir is not None:
-            exports = export_mechanism(proposal.model, export_dir, stem)
-            step_text = exports.step.read_text(encoding="utf-8")
-        else:
-            with tempfile.TemporaryDirectory(prefix="silkscreen-mechanism-") as tmp:
-                step_text = export_mechanism(proposal.model, tmp, stem).step.read_text(
-                    encoding="utf-8"
-                )
-    except (MechanismError, KernelUnavailable, ValueError, OSError) as exc:
+        proposal = propose_mechanism(
+            agent_model, intent, prior_art=prior_art, board_spec=board_spec,
+            on_event=emit,
+        )
+    except KernelUnavailable as exc:
         emit({"event": "mechanism.failed", "error": str(exc)[:160]})
-        return None
-    report = proposal.kernel
+        result = MechanismResult(status="unavailable", detail=str(exc),
+                                 warnings=[f"no mechanism was built: {exc}"])
+    except (MechanismError, ValueError) as exc:
+        emit({"event": "mechanism.failed", "error": str(exc)[:160]})
+        result = MechanismResult(
+            status="failed", detail=f"{type(exc).__name__}: {str(exc)[:400]}",
+            warnings=[f"no mechanism was built: {str(exc)[:200]}"],
+        )
+    else:
+        report = proposal.kernel
+        warnings = interface_warnings(proposal.spec, board_spec)
+        exports = None
+        try:
+            if directory is not None:
+                exports = export_mechanism(proposal.model, directory, stem)
+                step_text = exports.step.read_text(encoding="utf-8")
+            else:
+                with tempfile.TemporaryDirectory(prefix="silkscreen-mechanism-") as tmp:
+                    step_text = export_mechanism(proposal.model, tmp, stem).step.read_text(
+                        encoding="utf-8"
+                    )
+        except (MechanismError, OSError) as exc:
+            emit({"event": "mechanism.failed", "error": str(exc)[:160]})
+            result = MechanismResult(
+                status="failed",
+                detail=f"built and verified, but not exported: {str(exc)[:300]}",
+                spec=proposal.spec, repair_rounds=proposal.repair_rounds,
+                kernel=report, brief=proposal.brief,
+                warnings=[*warnings, f"mechanism files were not written: {exc}"],
+            )
+        else:
+            passed = report is not None and report.passed
+            detail = (
+                "every kernel clause passed" if passed
+                else "failing clauses: " + ", ".join(report.failed)
+            )
+            result = MechanismResult(
+                status="passed" if passed else "kernel_failed", detail=detail,
+                spec=proposal.spec, step_text=step_text,
+                repair_rounds=proposal.repair_rounds, kernel=report,
+                exports=exports, brief=proposal.brief, warnings=warnings,
+            )
+    kernel = result.kernel
     emit({
         "event": "stage.done",
         "stage": "mechanism",
-        "joints": len(proposal.spec.joints),
-        "repair_rounds": proposal.repair_rounds,
-        "kernel_passed": None if report is None else bool(report.passed),
-        "kernel_failed": [] if report is None else list(report.failed),
-        "exports": [] if exports is None else [p.name for p in (exports.step, *exports.stls)],
+        "status": result.status,
+        "joints": 0 if result.spec is None else len(result.spec.joints),
+        "repair_rounds": result.repair_rounds,
+        "kernel_passed": None if kernel is None else bool(kernel.passed),
+        "kernel_failed": [] if kernel is None else list(kernel.failed),
+        "warnings": len(result.warnings),
+        "exports": (
+            [] if result.exports is None
+            else [p.name for p in (result.exports.step, *result.exports.stls)]
+        ),
     })
-    return MechanismResult(
-        spec=proposal.spec, step_text=step_text, repair_rounds=proposal.repair_rounds,
-        kernel=report, exports=exports, brief=proposal.brief,
-    )
-
-
-class MechanismJob(EnclosureJob):
-    """The mechanism stage on its own thread; :meth:`result` joins and
-    re-raises exactly what the stage raised (the :class:`EnclosureJob` rule)."""
+    return result
 
 
 def start_mechanism_stage(
     agent_model: Model,
     intent: str,
     *,
-    mechanism: bool,
+    board_spec: CircuitSpec | None = None,
     prior_art: Any = None,
+    output: str | Path | None = None,
+    emit_stages: bool = True,
     export_dir: str | Path | None = None,
     stem: str = "mechanism",
     emit: Emit,
     enter: Enter,
     daemon: bool = False,
 ) -> MechanismJob:
-    """Run :func:`mechanism_stage` on a worker thread; settles to ``None`` at
-    once when ``mechanism`` is off."""
+    """Run :func:`mechanism_stage` on a worker thread. The caller holds the
+    switch: off means do not call this, and use a bare :class:`MechanismJob`
+    (the sourcing rule)."""
     job = MechanismJob()
-    if not mechanism:
-        return job
 
-    def work() -> MechanismResult | None:
+    def work() -> MechanismResult:
         return mechanism_stage(
-            agent_model, intent, mechanism=True, prior_art=prior_art,
-            export_dir=export_dir, stem=stem, emit=emit, enter=enter,
+            agent_model, intent, board_spec=board_spec, prior_art=prior_art,
+            output=output, emit_stages=emit_stages, export_dir=export_dir,
+            stem=stem, emit=emit, enter=enter,
         )
 
     thread = threading.Thread(

@@ -19,9 +19,12 @@ RUN npm run build
 # Cloud Run container. Slim base: the engine is pure Python plus OR-Tools.
 FROM python:3.11-slim
 
+# SILKSCREEN_LOG_FORMAT=json: one JSON line per event, the shape CloudWatch
+# Logs Insights parses without configuration (service/logs.py).
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8080
+    PORT=8080 \
+    SILKSCREEN_LOG_FORMAT=json
 
 WORKDIR /app
 

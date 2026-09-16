@@ -414,10 +414,11 @@ def test_export_writes_three_files_and_step_reimports_two_solids(envelope, tmp_p
     assert paths.lid_stl.name == "enclosure-lid.stl"
     for p in (paths.step, paths.base_stl, paths.lid_stl):
         assert p.exists() and p.stat().st_size > 84, p
-    # Three files and no fourth: the OpenSCAD preview wrapper is gone
-    # (docs/ai-cad-plan.md v3), so nothing here writes a .scad.
+    # The STEP, both STLs and the glTF preview the desktop viewer reads
+    # (``ExportPaths.glb``) -- and still no .scad: the OpenSCAD preview
+    # wrapper is gone (docs/ai-cad-plan.md v3).
     assert sorted(p.name for p in out.iterdir()) == [
-        "enclosure-base.stl", "enclosure-lid.stl", "enclosure.step",
+        "enclosure-base.stl", "enclosure-lid.stl", "enclosure.glb", "enclosure.step",
     ]
     imported = import_step(paths.step)
     assert len(imported.solids()) == 2

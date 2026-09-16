@@ -1,13 +1,13 @@
-//! The menu bar (tray) icon: Hardy up beside Cold Turkey, Claude and Box.
+//! The menu bar (tray) icon: Ada up beside Cold Turkey, Claude and Box.
 //!
-//! One status item with two jobs. The glyph itself says whether Hardy's
+//! One status item with two jobs. The glyph itself says whether Ada's
 //! microphone is open -- a filled orb while it listens, an outline ring while
 //! it is muted -- so the menu bar shows the mic state the way Claude's icon
 //! shows its own. And it carries the quick actions: left click toggles the
 //! overlay, right click opens a menu with show/hide, the listening switch,
 //! the dashboard, about and quit.
 //!
-//! Two honesty rules, both about the "Hardy listening" check item:
+//! Two honesty rules, both about the "Ada listening" check item:
 //!
 //! * The mark follows the *real* microphone state, which lives in React
 //!   (`useWakeWord`), not in this file. Clicking the item only emits
@@ -36,9 +36,9 @@ use tauri::{
     AppHandle, Emitter, Manager, Runtime,
 };
 
-/// Emitted to the main window when "Hardy listening" is clicked. The front end
+/// Emitted to the main window when "Ada listening" is clicked. The front end
 /// answers by flipping the ear and calling `tray_set_state`.
-pub const TOGGLE_EVENT: &str = "tray-hardy-toggle";
+pub const TOGGLE_EVENT: &str = "tray-ada-toggle";
 
 /// The tray icon's id (one per app; `Manager::tray_by_id`).
 pub const TRAY_ID: &str = "kaleo";
@@ -49,12 +49,12 @@ pub const ID_DASHBOARD: &str = "tray-dashboard";
 pub const ID_ABOUT: &str = "tray-about";
 pub const ID_QUIT: &str = "tray-quit";
 
-pub const LABEL_SHOW: &str = "Show Hardy";
-pub const LABEL_HIDE: &str = "Hide Hardy";
-pub const LABEL_LISTENING: &str = "Hardy listening";
+pub const LABEL_SHOW: &str = "Show Ada";
+pub const LABEL_HIDE: &str = "Hide Ada";
+pub const LABEL_LISTENING: &str = "Ada listening";
 pub const LABEL_DASHBOARD: &str = "Open dashboard";
-pub const LABEL_ABOUT: &str = "About Hardy";
-pub const LABEL_QUIT: &str = "Quit Hardy";
+pub const LABEL_ABOUT: &str = "About Ada";
+pub const LABEL_QUIT: &str = "Quit Ada";
 
 #[cfg(target_os = "macos")]
 const ICON_IDLE: &[u8] = include_bytes!("../icons/tray/idleTemplate@2x.png");
@@ -98,7 +98,7 @@ pub fn show_label(visible: bool) -> &'static str {
 
 /// The tooltip: the app and its version, so hovering answers "which build".
 pub fn tooltip() -> String {
-    format!("Hardy {}", env!("CARGO_PKG_VERSION"))
+    format!("Ada {}", env!("CARGO_PKG_VERSION"))
 }
 
 /// Build the status item and its menu, and manage the handles on the app.
@@ -193,7 +193,7 @@ fn show_about<R: Runtime>(app: &AppHandle<R>) {
     use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
     app.dialog()
         .message(format!(
-            "Hardy {}\n\nDescribe a board; the engine designs it; review it in KiCad.\nA GPL-3.0 fork of Pluely.",
+            "Ada {}\n\nDescribe a board; the engine designs it; review it in KiCad.\nA GPL-3.0 fork of Pluely.",
             env!("CARGO_PKG_VERSION")
         ))
         .title(LABEL_ABOUT)
@@ -317,19 +317,19 @@ mod tests {
 
     #[test]
     fn labels_name_the_app_and_the_ear() {
-        assert_eq!(show_label(true), "Hide Hardy");
-        assert_eq!(show_label(false), "Show Hardy");
-        assert_eq!(LABEL_LISTENING, "Hardy listening");
+        assert_eq!(show_label(true), "Hide Ada");
+        assert_eq!(show_label(false), "Show Ada");
+        assert_eq!(LABEL_LISTENING, "Ada listening");
         assert_eq!(LABEL_DASHBOARD, "Open dashboard");
-        assert_eq!(LABEL_ABOUT, "About Hardy");
-        assert_eq!(LABEL_QUIT, "Quit Hardy");
-        assert!(tooltip().starts_with("Hardy "));
+        assert_eq!(LABEL_ABOUT, "About Ada");
+        assert_eq!(LABEL_QUIT, "Quit Ada");
+        assert!(tooltip().starts_with("Ada "));
     }
 
     #[test]
     fn toggle_event_matches_the_frontend_seam() {
         // `useTrayState.ts` listens for this exact name.
-        assert_eq!(TOGGLE_EVENT, "tray-hardy-toggle");
+        assert_eq!(TOGGLE_EVENT, "tray-ada-toggle");
     }
 
     #[test]

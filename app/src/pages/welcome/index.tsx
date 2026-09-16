@@ -51,10 +51,14 @@ const Welcome = () => {
     if (isSetupStepId(jump)) dispatch({ type: "jump", step: jump });
   }, [params, dispatch]);
 
-  // The store already says finished: this window has no business here.
+  // The gate says finished: this window has no business here. Only once the
+  // shell has answered -- the store's synchronous read is a mirror that can
+  // lag the file the shell gated on (`useSetup.resolved`).
   useEffect(() => {
-    if (!setup.needsSetup && !params.get("jump")) navigate("/workbench", { replace: true });
-  }, [setup.needsSetup, params, navigate]);
+    if (setup.resolved && !setup.needsSetup && !params.get("jump")) {
+      navigate("/workbench", { replace: true });
+    }
+  }, [setup.resolved, setup.needsSetup, params, navigate]);
 
   // Crossfade presence: keep the outgoing step mounted for its fade, then
   // swap. Reduced motion swaps in one frame.
@@ -100,7 +104,7 @@ const Welcome = () => {
   const onExit = useCallback(() => dispatch({ type: "exit" }), [dispatch]);
   const onAutoAdvance = useCallback(() => dispatch({ type: "autoAdvance", from: "engine" }), [dispatch]);
 
-  if (!setup.needsSetup && !params.get("jump")) return null;
+  if (setup.resolved && !setup.needsSetup && !params.get("jump")) return null;
 
   const step = (() => {
     switch (shown) {

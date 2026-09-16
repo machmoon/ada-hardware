@@ -91,7 +91,7 @@ describe("parseEnvFile", () => {
     expect(
       parseEnvFile(
         [
-          "# Written by Hardy's Setup Assistant. Never commit this file.",
+          "# Written by Ada's Setup Assistant. Never commit this file.",
           "",
           "ELEVENLABS_API_KEY=abc123",
           'export OTHER="quoted value"',

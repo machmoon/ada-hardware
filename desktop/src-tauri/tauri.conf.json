@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Hardy",
+  "productName": "Ada",
   "version": "0.1.0",
-  "identifier": "com.machmoon.hardy",
+  "identifier": "com.machmoon.ada",
   "build": {
     "beforeBuildCommand": "npm --prefix ../../frontend run build",
     "frontendDist": "../../frontend/dist"

@@ -11,7 +11,7 @@ export interface CustomizableState {
     isEnabled: boolean;
   };
   /**
-   * The "Hardy" wake word. Off by default: on macOS the paid path is one
+   * The "Ada" wake word. Off by default: on macOS the paid path is one
    * Gemini transcript per click, not always-on spotting. The ear and
    * Settings share this switch; the mic button is the reliable voice path.
    */
@@ -20,7 +20,7 @@ export interface CustomizableState {
   };
 }
 
-// Hardy is a control strip floating over KiCad, so it stays on
+// Ada is a control strip floating over KiCad, so it stays on
 // top by default: a stage that launches KiCad would otherwise bury it.
 export const DEFAULT_CUSTOMIZABLE_STATE: CustomizableState = {
   appIcon: { isVisible: true },
@@ -67,14 +67,18 @@ export const getCustomizableState = (): CustomizableState => {
 /**
  * Save customizable state to localStorage
  */
-export const setCustomizableState = (state: CustomizableState): void => {
+export const setCustomizableState = (state: CustomizableState): boolean => {
   try {
     localStorage.setItem(
       STORAGE_KEYS.CUSTOMIZABLE,
       JSON.stringify({ ...state, version: CUSTOMIZABLE_VERSION })
     );
+    return true;
   } catch (error) {
+    // Returned, not only logged: the ear switch and the shortcut editor
+    // are preferences a person just set, and a failed save has to reach them.
     console.error("Failed to save customizable state:", error);
+    return false;
   }
 };
 
@@ -113,9 +117,17 @@ export const updateAutostart = (isEnabled: boolean): CustomizableState => {
 /**
  * Update the wake-word switch
  */
-export const updateWakeWord = (isEnabled: boolean): CustomizableState => {
+/**
+ * Store the ear's on/off. `saved` is false when the browser refused the
+ * write: the switch still holds for this session (the hook keeps its own
+ * state) but the other window will not hear of it and the next launch will
+ * not remember it, and the caller says so.
+ */
+export const updateWakeWord = (
+  isEnabled: boolean
+): { state: CustomizableState; saved: boolean } => {
   const currentState = getCustomizableState();
   const newState = { ...currentState, wakeWord: { isEnabled } };
-  setCustomizableState(newState);
-  return newState;
+  const saved = setCustomizableState(newState);
+  return { state: newState, saved };
 };

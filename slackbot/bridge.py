@@ -1,9 +1,9 @@
-"""Slack -> Hardy on the laptop: say an idea in Slack, the desktop starts the design.
+"""Slack -> Ada on the laptop: say an idea in Slack, the desktop starts the design.
 
 ``python -m slackbot socket`` runs this. It is the Socket Mode sibling of
 :mod:`slackbot.app`, with one difference that decides everything else: it does
 **not** run the pipeline. :mod:`slackbot.app` generates a whole board inside
-the bot process and uploads it; this bridge hands the sentence to the Hardy
+the bot process and uploads it; this bridge hands the sentence to the Ada
 overlay on the same laptop, which starts the ordinary approval-gated step run
 with it -- so the engineer sees it in KiCad and presses every step after the
 first, exactly as if they had typed the sentence into the bar.
@@ -23,7 +23,7 @@ them and the overlay never talks to Slack.
 What one message costs, stated rather than implied: the overlay's first step,
 ``propose``, reads, plans and proposes a circuit -- model calls nobody pressed
 a button on the laptop for. Every later step still waits for a press. That is
-the feature (the user asked for "I send it and Hardy starts working"), and it is
+the feature (the user asked for "I send it and Ada starts working"), and it is
 why ``SILKSCREEN_SLACK_USERS`` exists: a workspace can install the app and
 still keep who may spend on this laptop to a named list.
 """
@@ -72,8 +72,8 @@ UNREACHABLE_POLLS = 10
 WATCH_S = 3 * 60 * 60
 
 HELP = (
-    "Tell me what to build and I'll hand it to Hardy on the laptop — for example "
-    "_a 3.3 V LDO board for a sensor, powered from USB-C_. Hardy starts the design "
+    "Tell me what to build and I'll hand it to Ada on the laptop — for example "
+    "_a 3.3 V LDO board for a sensor, powered from USB-C_. Ada starts the design "
     "there, and you approve each step on the laptop. I'll post progress here."
 )
 
@@ -339,7 +339,7 @@ class Bridge:
         self, text: str, *, channel: str, thread_ts: str, user: str, key: str
     ) -> str | None:
         """Reply, file the idea, and follow it. Returns the idea id, or None."""
-        self._say(channel, thread_ts, "On it — handing this to Hardy on the laptop.")
+        self._say(channel, thread_ts, "On it — handing this to Ada on the laptop.")
         status, body = self.engine.post_idea(
             text,
             key=key,
@@ -351,7 +351,7 @@ class Bridge:
                 channel,
                 thread_ts,
                 (
-                    f"I couldn't reach the Hardy engine at {self.engine.base_url}. "
+                    f"I couldn't reach the Ada engine at {self.engine.base_url}. "
                     "Start it "
                     "on the laptop with `silkscreen serve`, then send the idea again."
                 ),
@@ -362,7 +362,7 @@ class Bridge:
                 channel,
                 thread_ts,
                 (
-                    "The Hardy engine refused this bridge (its SILKSCREEN_ACCESS_TOKEN "
+                    "The Ada engine refused this bridge (its SILKSCREEN_ACCESS_TOKEN "
                     "does not match). Nothing was started."
                 ),
             )
@@ -370,7 +370,7 @@ class Bridge:
         if status not in (200, 201) or not body.get("id"):
             detail = str(body.get("error") or f"HTTP {status}")
             self._say(
-                channel, thread_ts, f"The Hardy engine didn't take that: {detail}"
+                channel, thread_ts, f"The Ada engine didn't take that: {detail}"
             )
             return None
         idea_id = str(body["id"])
@@ -407,7 +407,7 @@ class Bridge:
                         channel,
                         thread_ts,
                         (
-                            "I've lost contact with the Hardy engine on the laptop. "
+                            "I've lost contact with the Ada engine on the laptop. "
                             "I'll keep trying for a while; the run itself is "
                             "unaffected if it's still up."
                         ),
@@ -420,7 +420,7 @@ class Bridge:
                     channel,
                     thread_ts,
                     (
-                        "The Hardy engine no longer has this "
+                        "The Ada engine no longer has this "
                         + ("run" if session else "request")
                         + " — it probably restarted. Send the idea again to start over."
                     ),
@@ -439,25 +439,25 @@ class Bridge:
                             channel,
                             thread_ts,
                             (
-                                "Still waiting for Hardy to pick this up. Is the Hardy "
+                                "Still waiting for Ada to pick this up. Is the Ada "
                             "app open "
-                                "on the laptop? It will start as soon as Hardy is free."
+                                "on the laptop? It will start as soon as Ada is free."
                             ),
                         )
                 elif new_state in ("failed", "expired"):
                     detail = str(body.get("detail") or new_state)
-                    self._say(channel, thread_ts, f"Hardy didn't start this: {detail}.")
+                    self._say(channel, thread_ts, f"Ada didn't start this: {detail}.")
                     return
                 elif new_state == "accepted" and state == "pending":
                     self._say(
                         channel,
                         thread_ts,
-                        "Hardy picked it up on the laptop and is starting the design.",
+                        "Ada picked it up on the laptop and is starting the design.",
                     )
                 elif new_state == "started":
                     if state == "pending":
                         self._say(
-                            channel, thread_ts, "Hardy picked it up on the laptop."
+                            channel, thread_ts, "Ada picked it up on the laptop."
                         )
                     session = str(body.get("session", ""))
                     self._say(

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision Hardy's voice: Kokoro-82M, locally, no key and no per-word cost.
+# Provision Ada's voice: Kokoro-82M, locally, no key and no per-word cost.
 #
 # WHY THIS FILE EXISTS. `service/tts.py` deliberately refuses to download
 # weights on demand -- a first spoken word that silently pulls 330 MB is a
@@ -20,7 +20,7 @@
 #
 #     curl -s localhost:8081/speak | python3 -m json.tool
 #
-# `"selected": "kokoro"` means Hardy has her voice. Anything else prints the
+# `"selected": "kokoro"` means Ada has her voice. Anything else prints the
 # reason in words -- `service/tts.py` never answers with a quiet zero.
 
 set -euo pipefail
@@ -82,7 +82,7 @@ fetch() {
   echo "  $name: installed ($got bytes)"
 }
 
-say "Hardy's voice: Kokoro-82M (Apache-2.0 code AND weights)"
+say "Ada's voice: Kokoro-82M (Apache-2.0 code AND weights)"
 cat <<EOF
   This downloads two files, about 340 MB in total, to:
 

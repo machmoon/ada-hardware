@@ -11,7 +11,8 @@ from pathlib import Path
 
 from .agents import ModelError, generate_pcb
 from .agents.effort import DEFAULT_EFFORT, UNSET, Effort, slider
-from .agents.model import DEFAULT_MODEL, MODEL_ENV_VAR, GeminiModel
+from .agents.model import DEFAULT_MODEL, MODEL_ENV_VAR
+from .agents.providers import worker_model
 from .agents.review import Severity
 
 _SEVERITY_MARK = {
@@ -31,6 +32,27 @@ def _load_dotenv(path: Path) -> None:
             continue
         key, _, value = line.partition("=")
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+def _restyle_for_cli(proposal, envelope, intent: str):
+    """The design pass for ``silkscreen case``; the plain case on any failure.
+
+    The verified case already exists when this runs, so nothing the style pass
+    does -- a model outage, a script the kernel rejects, anything else -- may
+    cost it. Every such outcome is a ``note:`` line and the plain case ships.
+    """
+    try:
+        from .agents.enclosure_style import restyle_enclosure
+
+        outcome = restyle_enclosure(
+            worker_model(), proposal, envelope, style_hint=intent
+        )
+    except Exception as exc:  # noqa: BLE001 - the case is the product
+        print(f"note: restyle not run, the plain case ships: {exc}", file=sys.stderr)
+        return proposal
+    for warning in outcome.warnings:
+        print(f"note: {warning}", file=sys.stderr)
+    return outcome.proposal
 
 
 def _case_main(argv: list[str]) -> int:
@@ -65,6 +87,13 @@ def _case_main(argv: list[str]) -> int:
                         help="run the full strict verify-and-repair loop "
                              "(slower); default is demo-fast, where a failing "
                              "kernel clause rides the receipt as a note")
+    parser.add_argument(
+        "--no-restyle",
+        action="store_true",
+        help="skip the design pass: by default the model writes a build123d "
+        "script that restyles the verified case (rounded corners, softened "
+        "edges...) and the kernel re-checks every clause before it is used",
+    )
     parser.add_argument("--assemble", action="store_true",
                         help="also write <stem>-assembly.step: the real board "
                              "(from `kicad-cli pcb export step`, with every "
@@ -110,7 +139,6 @@ def _case_main(argv: list[str]) -> int:
         _load_dotenv(Path.cwd() / ".env")
         try:
             from .agents.enclosure import propose_enclosure
-            from .agents.model import CHEAP_MODEL
         except ImportError as exc:
             print(
                 "error: model-driven case generation is not available in this "
@@ -120,7 +148,7 @@ def _case_main(argv: list[str]) -> int:
             )
             return 2
         try:
-            model = GeminiModel(CHEAP_MODEL)
+            model = worker_model(cheap=True)
         except ModelError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
@@ -129,11 +157,12 @@ def _case_main(argv: list[str]) -> int:
         try:
             # The loop's accepted KernelReport is the receipt; no
             # re-verification.
-            spec, repair_rounds, model_built, kernel, _brief = proposal_fields(
-                propose_enclosure(
-                    model, envelope, style_hint=args.intent, rigorous=args.rigorous
-                )
+            proposal = propose_enclosure(
+                model, envelope, style_hint=args.intent, rigorous=args.rigorous
             )
+            if not args.no_restyle:
+                proposal = _restyle_for_cli(proposal, envelope, args.intent or "")
+            spec, repair_rounds, model_built, kernel, _brief = proposal_fields(proposal)
         except Exception as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
@@ -229,12 +258,168 @@ def _print_prior_art(found) -> None:
         print(f"  note: {warning}", file=sys.stderr)
 
 
+def _print_mechanism(found) -> None:
+    """The arm's kernel receipt, one clause per line -- or why there is none."""
+    print()
+    if found is None:
+        print("Mechanism: the stage did not run", file=sys.stderr)
+        return
+    print(found.note())
+    if found.spec is not None:
+        for joint in found.spec.joints:
+            lo, hi = (v / 1000 for v in joint.range_mdeg)
+            bearing = "" if joint.bearing == "none" else f", {joint.bearing} bearing"
+            print(f"  {joint.id}: {joint.axis} {lo:g}..{hi:g} deg, {joint.actuator}"
+                  f"{bearing}, link {joint.link_nm / 1e6:g} mm")
+    if found.repair_rounds:
+        print(f"  repair rounds: {found.repair_rounds}", file=sys.stderr)
+    if found.kernel is not None:
+        print("Mechanism kernel report:")
+        print(found.kernel.text())
+    for warning in found.warnings:
+        print(f"  note: {warning}", file=sys.stderr)
+
+
+def _assemble_generated_robot(found, board_path: Path) -> None:
+    """After an ``--arm`` run, put the arm and the routed board on one bench.
+
+    Done here rather than inside the pipeline so the two drivers stay
+    identical: the arm is rebuilt from its validated spec (a few seconds of
+    kernel, no model call), the board is exported through ``kicad-cli``, and
+    ``robot.step`` lands beside the board with its clauses printed. Every
+    reason it cannot happen is one sentence on stderr, never a traceback.
+    """
+    if found is None or found.spec is None or not board_path.is_file():
+        return
+    from .enclosure.assembly import export_board_step
+    from .enclosure.errors import EnclosureError
+    from .mechanism.cad import build_mechanism
+    from .mechanism.errors import MechanismError
+    from .mechanism.system import assemble_system, export_system, verify_system
+
+    stem = board_path.stem
+    try:
+        board_step = export_board_step(
+            board_path, board_path.with_name(f"{stem}-board.step")
+        )
+        assembly = assemble_system(
+            arm=build_mechanism(found.spec), board_step=board_step
+        )
+        report = verify_system(assembly)
+        path = export_system(assembly, board_path.parent, stem=f"{stem}-robot")
+    except (OSError, MechanismError, EnclosureError) as exc:
+        print(f"note: the arm and board were not assembled: {exc}", file=sys.stderr)
+        return
+    print("Robot assembly (arm + board):")
+    for c in report.clauses:
+        print(f"  {'PASS' if c.passed else 'FAIL'} {c.name} "
+              f"margin={c.margin / 1e6:+.3f} {c.unit}: {c.detail}")
+    print(f"  wrote {path}")
+
+
+def _robot_main(argv: list[str]) -> int:
+    """``silkscreen robot`` -- the arm and its board as one checked assembly.
+
+    The arm is designed from a MECHANISM-SPEC JSON (``--arm-spec``, built and
+    judged by the mechanism kernel, no model call) or imported from a STEP
+    someone already has (``--arm-step``; checked where it stands, since STEP
+    carries no joints). The board is a routed ``.kicad_pcb`` (exported through
+    ``kicad-cli pcb export step``) or a board STEP. Exit 0 when every clause
+    passes, 1 when one fails or an input cannot be read, 2 without the CAD
+    kernel.
+    """
+    parser = argparse.ArgumentParser(
+        prog="silkscreen robot",
+        description="Assemble an arm with its electronics and check the "
+        "whole thing. Needs the CAD kernel: pip install -e '.[cad]'",
+    )
+    arm = parser.add_mutually_exclusive_group(required=True)
+    arm.add_argument("--arm-spec", metavar="JSON",
+                     help="a MECHANISM-SPEC v1 file to design the arm from")
+    arm.add_argument("--arm-step", metavar="STEP",
+                     help="an existing arm to import as drawn")
+    board = parser.add_mutually_exclusive_group()
+    board.add_argument("--board", metavar="PCB",
+                       help="the routed .kicad_pcb to mount beside the base "
+                            "(needs kicad-cli)")
+    board.add_argument("--board-step", metavar="STEP",
+                       help="a board STEP to mount instead")
+    parser.add_argument("-o", "--output", default="robot.step",
+                        help="the assembly STEP (default: %(default)s); a "
+                             "designed arm's printable STLs land beside it")
+    parser.add_argument("--json", action="store_true",
+                        help="print the reports as JSON")
+    args = parser.parse_args(argv)
+
+    import json as _json
+
+    from .enclosure.cad import KERNEL_MISSING, kernel_available
+    from .enclosure.errors import EnclosureError
+
+    if not kernel_available():
+        print(f"error: {KERNEL_MISSING}", file=sys.stderr)
+        return 2
+    from .mechanism.cad import build_mechanism, export_mechanism
+    from .mechanism.errors import MechanismError
+    from .mechanism.ir import parse_mechanism_spec
+    from .mechanism.kernel import verify_mechanism
+    from .mechanism.system import assemble_system, export_system, verify_system
+
+    output = Path(args.output)
+    arm_report = None
+    model = None
+    try:
+        if args.arm_spec:
+            spec = parse_mechanism_spec(Path(args.arm_spec).read_text())
+            model = build_mechanism(spec)
+            arm_report = verify_mechanism(model)
+            export_mechanism(model, output.parent, stem=f"{output.stem}-arm")
+        board_step = args.board_step
+        if args.board:
+            from .enclosure.assembly import export_board_step
+
+            board_step = export_board_step(
+                args.board, output.with_name(f"{output.stem}-board.step")
+            )
+        assembly = assemble_system(
+            arm=model, arm_step=args.arm_step, board_step=board_step
+        )
+        report = verify_system(assembly)
+        path = export_system(assembly, output.parent, stem=output.stem)
+    except (OSError, ValueError, MechanismError, EnclosureError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    passed = report.passed and (arm_report is None or arm_report.passed)
+    if args.json:
+        print(_json.dumps({
+            "passed": passed,
+            "step": str(path),
+            "arm": None if arm_report is None else arm_report.as_dict(),
+            "system": report.as_dict(),
+        }, indent=2))
+    else:
+        if arm_report is not None:
+            print("arm:")
+            print("  " + arm_report.text().replace("\n", "\n  "))
+        print("system:")
+        for c in report.clauses:
+            print(f"  {'PASS' if c.passed else 'FAIL'} {c.name} "
+                  f"margin={c.margin / 1e6:+.3f} {c.unit}: {c.detail}")
+        for w in report.warnings:
+            print(f"  WARN {w}")
+        print(f"wrote {path}")
+    return 0 if passed else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     # A tiny subcommand dispatch, kept out of argparse so the historical
     # ``silkscreen "an ldo board"`` form keeps working unchanged.
     if argv and argv[0] == "case":
         return _case_main(argv[1:])
+    if argv and argv[0] == "robot":
+        return _robot_main(argv[1:])
 
     parser = argparse.ArgumentParser(
         prog="silkscreen",
@@ -247,8 +432,12 @@ def main(argv: list[str] | None = None) -> int:
                         metavar="PART=URL",
                         help="a datasheet to read first; repeatable")
     parser.add_argument("--model", default=None,
-                        help=f"primary model id (default: ${MODEL_ENV_VAR}, "
-                             f"else {DEFAULT_MODEL})")
+                        help="primary model id; a claude-* id leads with "
+                             "Claude, any other id with Gemini (default: "
+                             "Claude's $SILKSCREEN_CLAUDE_MODEL when "
+                             "ANTHROPIC_API_KEY or a Vertex project is set, "
+                             f"then Gemini's ${MODEL_ENV_VAR}, else "
+                             f"{DEFAULT_MODEL})")
     parser.add_argument("--effort", choices=[e.value for e in Effort],
                         default=DEFAULT_EFFORT.value,
                         help="how hard to think (default: %(default)s). "
@@ -309,6 +498,14 @@ def main(argv: list[str] | None = None) -> int:
                              "parts; every fact printed with the file it came "
                              "from. GITHUB_TOKEN optional (unauthenticated is "
                              "rate-limited)")
+    parser.add_argument("--mechanism", "--arm", dest="mechanism", action="store_true",
+                        help="also design the 3D-printed mechanism the board "
+                             "drives -- a jointed robot arm from catalogue "
+                             "servos and bearings, built with the cad extra and "
+                             "judged by the mechanism kernel (torque, reach, "
+                             "self-collision, pockets, walls); writes "
+                             "mechanism.step and one STL per part beside the "
+                             "output")
     parser.add_argument("--simulate", action="store_true",
                         help="also verify the circuit in SPICE in the "
                              "background: the model writes a testbench and "
@@ -327,7 +524,10 @@ def main(argv: list[str] | None = None) -> int:
         datasheets[part.strip()] = url.strip()
 
     try:
-        model = GeminiModel(args.model)
+        # One failover ladder for the CLI and the service
+        # (resilience.default_chain): Claude then Gemini when both are
+        # configured, --model leading its own provider.
+        model = worker_model(args.model)
     except ModelError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -356,6 +556,8 @@ def main(argv: list[str] | None = None) -> int:
         opt_in_kwargs["simulate"] = True
     if args.prior_art:
         opt_in_kwargs["prior_art"] = True
+    if args.mechanism:
+        opt_in_kwargs["mechanism"] = True
 
     # Progress. Without this the CLI is silent for the whole run -- and the run
     # is dominated by the placement solver, which spends its entire
@@ -502,6 +704,12 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.prior_art:
         _print_prior_art(getattr(result, "prior_art", None))
+
+    # The arm, or the sentence saying why there is none: no cad extra,
+    # nothing buildable in the repair budget, or a kernel clause that failed.
+    if args.mechanism:
+        _print_mechanism(getattr(result, "mechanism", None))
+        _assemble_generated_robot(getattr(result, "mechanism", None), Path(args.output))
 
     # The BOM's counts, with the vocabulary kept honest: a part number here
     # is a proposal nobody has checked against a distributor, and only a

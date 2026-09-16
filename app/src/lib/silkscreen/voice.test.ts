@@ -12,6 +12,7 @@ vi.mock("@tauri-apps/plugin-http", () => ({ fetch: vi.fn() }));
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { SilkscreenError } from "./client";
 import {
+  setVoiceVocabulary,
   MAX_AUDIO_BYTES,
   blobToBase64,
   pickRecordingMime,
@@ -144,6 +145,20 @@ describe("transcribe", () => {
     expect(body.purpose).toBeUndefined();
     // The payload decodes back to the exact recorded bytes.
     expect(atob(body.audio_b64)).toBe("\x07".repeat(9));
+  });
+
+  it("carries the open run's vocabulary, and nothing once it is cleared", async () => {
+    mockFetch.mockImplementation(async () => jsonResponse(200, { text: "hi", model: "m" }));
+    setVoiceVocabulary(["ESP32-WROOM-32E", "x".repeat(65), "U1"]);
+    await transcribe("http://x", { blob: audioBlob(3), mimeType: "audio/webm" });
+    const first = JSON.parse(String((mockFetch.mock.calls[0] as [string, RequestInit])[1].body));
+    // Over-long names are dropped here rather than turned into a 400 there.
+    expect(first.vocabulary).toEqual(["ESP32-WROOM-32E", "U1"]);
+
+    setVoiceVocabulary([]);
+    await transcribe("http://x", { blob: audioBlob(3), mimeType: "audio/webm" });
+    const second = JSON.parse(String((mockFetch.mock.calls[1] as [string, RequestInit])[1].body));
+    expect("vocabulary" in second).toBe(false);
   });
 
   it("forwards purpose wake so the engine can spare the board-run pacer", async () => {

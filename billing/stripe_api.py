@@ -203,7 +203,7 @@ def charge_overage(
         "payment_method": payment_method,
         "off_session": True,
         "confirm": True,
-        "description": "Hardy compute overage",
+        "description": "Ada compute overage",
         "metadata": {"kaleo_account": str(account), "kaleo_kind": "overage"},
     }
     request = HttpRequest(

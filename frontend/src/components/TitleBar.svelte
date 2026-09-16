@@ -54,7 +54,7 @@
 <header class="bar" data-testid="title-bar" data-material="chrome">
   <div class="brand" data-testid="title-bar-brand">
     <Icon name="brand" size={17} />
-    <span class="wordmark">Hardy</span>
+    <span class="wordmark">Ada</span>
   </div>
   {#if intent}<span class="intent" data-testid="title-bar-intent">{intent}</span>{/if}
   <div class="spacer"></div>

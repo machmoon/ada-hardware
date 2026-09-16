@@ -1,4 +1,4 @@
-"""A Chromium tab that sits in a Google Meet call as a participant named Hardy.
+"""A Chromium tab that sits in a Google Meet call as a participant named Ada.
 
 This module owns the browser and the room: launch a persistent, signed-in
 Chromium profile, walk the pre-join lobby, knock or join, say in words whether
@@ -8,7 +8,7 @@ registers a ``getUserMedia`` override through :meth:`MeetSession.add_init_script
 and ``runner.py`` strings them together.
 
 It deliberately reverses ``meetings/``'s "no headless bot in the room"
-decision: the product now wants Hardy audible in the call, and nothing in
+decision: the product now wants Ada audible in the call, and nothing in
 Google's published APIs can put a speaking participant in a Meet.
 
 Prior art, read at source rather than remembered (both shallow-cloned
@@ -58,7 +58,7 @@ Deviations, each for a stated reason:
 
 * **The microphone is turned ON, not muted.** Both upstreams mute the mic
   because they only listen (Vexa ``join.ts:403-416``; attendance agent
-  ``:201-206`` with blind Ctrl+D). Hardy has to be heard, and Meet sends no
+  ``:201-206`` with blind Ctrl+D). Ada has to be heard, and Meet sends no
   audio from a muted participant whatever ``getUserMedia`` returns.
 * **No stealth plugin, no container flags.** Vexa layers
   ``puppeteer-extra-plugin-stealth`` and a WebGL spoof on top because it runs
@@ -72,7 +72,7 @@ Deviations, each for a stated reason:
   one. That is still Chromium.
 * **Removal copy is narrowed.** Vexa's list includes ``[role="alert"]`` and
   "Reconnecting" (``selectors.ts:255-268``); in a live call those are transient
-  toasts, and ending the session on one would walk Hardy out of a meeting that
+  toasts, and ending the session on one would walk Ada out of a meeting that
   is still going.
 * **Aloneness is by head count, not audio silence.** Vexa leaves after ten
   minutes of remote-audio silence (``services/bot/src/aloneness.ts:4``) because
@@ -116,7 +116,7 @@ CHROME_APP = Path("/Applications/Google Chrome.app")
 
 # wait_until_ended() reasons. One of these, always; ``end_detail`` says why.
 END_PAGE_CLOSED = "page_closed"  # the window was closed under us
-END_REMOVED = "removed"  # a host removed Hardy
+END_REMOVED = "removed"  # a host removed Ada
 END_CALL_ENDED = "call_ended"  # the host ended the call for everyone
 END_LEFT_ALONE = "left_alone"  # others were here, then everyone left
 END_STARTUP_ALONE = "startup_alone"  # nobody else ever joined
@@ -174,12 +174,12 @@ JOIN_CTA = (
     "button[jsname]:not([aria-label]):has(span)",
 )
 # Lobby device toggles -- Vexa selectors.ts:335-345. We turn the camera off
-# and the microphone ON (module docstring: Hardy must be heard).
+# and the microphone ON (module docstring: Ada must be heard).
 CAMERA_IS_ON = ('button[aria-label*="Turn off camera"]',)
 MIC_IS_OFF = ('button[aria-label*="Turn on microphone"]',)
 # First-visit device dialogs. NOT from either upstream (neither handles them;
 # Vexa launches with fake devices so Meet never asks). Copy is unverified --
-# confirm against a fresh profile. "Use microphone" first because Hardy needs
+# confirm against a fresh profile. "Use microphone" first because Ada needs
 # it; the rest only close the dialog.
 DEVICE_PROMPT_BUTTONS = (
     'button:has-text("Use microphone and camera")',
@@ -237,7 +237,7 @@ IN_CALL = (
 # The lobby's own join buttons, by label. Found live on 2026-09-13: the lobby
 # self-preview carries a participant tile and a self name, so right after
 # "Ask to join" (before the waiting-room copy renders) tiles alone read as
-# admitted. While one of these is on screen Hardy is not in the call.
+# admitted. While one of these is on screen Ada is not in the call.
 # (JOIN_CTA's last, structural selector also matches in-call buttons, so it
 # cannot be this guard.)
 LOBBY_CTA = JOIN_CTA[:3]
@@ -366,7 +366,7 @@ class MeetSession:
 
         self.init_scripts: list[str] = []
         self._applied_scripts = 0
-        self.display_name: str = "Hardy"
+        self.display_name: str = "Ada"
         self.joined_as_guest: bool | None = None
         self.receipt: JoinReceipt | None = None
         self.end_reason: str | None = None
@@ -580,7 +580,7 @@ class MeetSession:
 
     # -- join ---------------------------------------------------------------
 
-    async def join(self, meet_url: str, display_name: str = "Hardy") -> JoinReceipt:
+    async def join(self, meet_url: str, display_name: str = "Ada") -> JoinReceipt:
         """Walk the lobby and ask to join. Never a silent success.
 
         Waits up to ``admit_timeout_s`` for the host; if still in the lobby
@@ -672,7 +672,7 @@ class MeetSession:
         if await self._click_first(CAMERA_IS_ON):
             self.log("camera turned off")
         if await self._click_first(MIC_IS_OFF):
-            self.log("microphone turned on (Hardy speaks)")
+            self.log("microphone turned on (Ada speaks)")
 
     async def wait_for_admission(self, timeout_s: float) -> JoinReceipt:
         """Poll the admission oracle: denial, then refusal, then waiting, then in.
@@ -722,7 +722,7 @@ class MeetSession:
         if saw_waiting:
             return JoinReceipt(
                 WAITING_FOR_HOST,
-                f"asked to join; nobody let Hardy in within {timeout_s:.0f}s "
+                f"asked to join; nobody let Ada in within {timeout_s:.0f}s "
                 "(still knocking)",
             )
         return JoinReceipt(
@@ -743,10 +743,10 @@ class MeetSession:
     # -- in call ------------------------------------------------------------
 
     async def wait_until_ended(self) -> str:
-        """Block until the call is over for Hardy; return one of ``END_REASONS``.
+        """Block until the call is over for Ada; return one of ``END_REASONS``.
 
         ``end_detail`` carries the sentence. Head count: Meet renders a tile per
-        participant including Hardy, so one real tile means alone.
+        participant including Ada, so one real tile means alone.
         """
         if self._page is None:
             raise RuntimeError("MeetSession.start() has not been called")
@@ -780,12 +780,12 @@ class MeetSession:
         page = self._page
         if page.is_closed():
             if self._leaving or self._left:
-                return self._ended(END_LEFT, "Hardy left the call")
+                return self._ended(END_LEFT, "Ada left the call")
             return self._ended(END_PAGE_CLOSED, "the Meet window was closed")
         if self._leaving or self._left:
-            return self._ended(END_LEFT, "Hardy left the call")
+            return self._ended(END_LEFT, "Ada left the call")
         if hit := await self._first_visible(REMOVED):
-            return self._ended(END_REMOVED, f"a host removed Hardy ({hit})")
+            return self._ended(END_REMOVED, f"a host removed Ada ({hit})")
         if hit := await self._first_visible(CALL_ENDED):
             return self._ended(END_CALL_ENDED, f"the call ended ({hit})")
         return None
@@ -814,7 +814,7 @@ class MeetSession:
                 elif self.receipt is not None and self.receipt.admitted:
                     self.log(
                         "no leave button visible (the call may already be over); "
-                        "closing the window, which also drops Hardy from the call"
+                        "closing the window, which also drops Ada from the call"
                     )
         finally:
             self._left = True
@@ -855,7 +855,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m meetbot.session")
     sub = parser.add_subparsers(dest="command", required=True)
     p = sub.add_parser(
-        "sign-in", help="open a headed browser to sign Hardy's profile in"
+        "sign-in", help="open a headed browser to sign Ada's profile in"
     )
     p.add_argument("--profile", type=Path, default=DEFAULT_PROFILE_DIR)
     p.add_argument("--timeout", type=float, default=600.0)

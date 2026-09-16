@@ -7,6 +7,7 @@ an approved user value is an input, not evidence that the board satisfies it.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import math
 from dataclasses import dataclass, field
@@ -195,17 +196,37 @@ class NetClassConstraint:
         _reject_unknown(
             raw,
             {
-                "name", "kind", "nets", "allowed_layers",
-                "max_layer_transitions", "max_vias_per_net",
-                "signal_voltage_v", "pullup_voltage_v", "max_frequency_hz",
-                "pullups_required", "pullup_rail", "pullup_min_ohms",
-                "pullup_max_ohms", "bus_capacitance_pf", "max_rise_time_ns",
-                "controlled_impedance", "impedance_ohms",
-                "impedance_tolerance_percent", "pair_spacing_mm",
-                "reference_plane", "min_trace_width_mm", "max_length_mm",
-                "max_skew_mm", "max_stub_length_mm", "expected_current_a",
-                "copper_weight_oz", "max_voltage_drop_v", "min_separation_mm",
-                "min_thermal_separation_mm", "thermal_pairs", "guard_required",
+                "name",
+                "kind",
+                "nets",
+                "allowed_layers",
+                "max_layer_transitions",
+                "max_vias_per_net",
+                "signal_voltage_v",
+                "pullup_voltage_v",
+                "max_frequency_hz",
+                "pullups_required",
+                "pullup_rail",
+                "pullup_min_ohms",
+                "pullup_max_ohms",
+                "bus_capacitance_pf",
+                "max_rise_time_ns",
+                "controlled_impedance",
+                "impedance_ohms",
+                "impedance_tolerance_percent",
+                "pair_spacing_mm",
+                "reference_plane",
+                "min_trace_width_mm",
+                "max_length_mm",
+                "max_skew_mm",
+                "max_stub_length_mm",
+                "expected_current_a",
+                "copper_weight_oz",
+                "max_voltage_drop_v",
+                "min_separation_mm",
+                "min_thermal_separation_mm",
+                "thermal_pairs",
+                "guard_required",
                 "concerns",
             },
             "net-class",
@@ -502,8 +523,11 @@ class MechanicalConstraints:
         _reject_unknown(
             raw,
             {
-                "max_board_width_mm", "max_board_height_mm",
-                "max_component_height_mm", "mounting_hole_refs", "keepouts",
+                "max_board_width_mm",
+                "max_board_height_mm",
+                "max_component_height_mm",
+                "mounting_hole_refs",
+                "keepouts",
                 "fixed_placements",
             },
             "mechanical",
@@ -658,8 +682,12 @@ class ConstraintManifest:
         _reject_unknown(
             raw,
             {
-                "version", "approved", "board_layers", "net_classes",
-                "mechanical", "soft_preferences",
+                "version",
+                "approved",
+                "board_layers",
+                "net_classes",
+                "mechanical",
+                "soft_preferences",
             },
             "constraint-manifest",
             strict=strict,
@@ -856,13 +884,19 @@ def _verify_route_completion(
     route: RouteResult,
     tracks: dict[str, list[Track]],
 ) -> dict[str, Any]:
+    # A net carried by a copper pour (``RouteResult.filled``, the ground
+    # fill) has no tracks and is neither routed nor unrouted; it is accounted
+    # for by the zone KiCad fills, so it is left out of both checks here.
+    filled = set(getattr(route, "filled", ()) or ())
     failed = [net for net in constraint.nets if net in route.unrouted]
     missing = [
         net
         for net in constraint.nets
-        if net not in route.routed and net not in route.unrouted
+        if net not in route.routed and net not in route.unrouted and net not in filled
     ]
-    geometry_missing = _missing_track_geometry(constraint, tracks)
+    geometry_missing = [
+        net for net in _missing_track_geometry(constraint, tracks) if net not in filled
+    ]
     status = (
         "violated"
         if failed or missing
@@ -1163,19 +1197,47 @@ def _verify_routing(
 ) -> list[dict[str, Any]]:
     if route is None:
         return [_check("routing", "unresolved", "No routed copper was produced.")]
-    return [
-        _verify_route_completion(constraint, route, tracks),
-        _verify_layers(constraint, tracks),
-        _verify_vias(constraint, vias, tracks),
-        _verify_width(constraint, tracks),
-        _verify_length(constraint, lengths, tracks),
-        _verify_skew(constraint, lengths, tracks),
-        _verify_impedance(constraint),
-        _verify_stubs(constraint),
-        _verify_power_drop(constraint, lengths, tracks),
-        _verify_separation(constraint),
-        _verify_reference_plane(constraint),
+    # A net carried by a copper pour (the ground fill, ``RouteResult.filled``)
+    # has no tracks to measure: width, length, skew, layer and via checks
+    # apply to the nets that were routed as tracks, and the pour is reported
+    # as its own verified check rather than as missing geometry.
+    filled = [
+        n for n in constraint.nets if n in set(getattr(route, "filled", ()) or ())
     ]
+    tracked = dataclasses.replace(
+        constraint, nets=[n for n in constraint.nets if n not in filled]
+    )
+    checks = [_verify_route_completion(constraint, route, tracks)]
+    if filled:
+        checks.append(
+            _check(
+                "copper_pour",
+                "verified",
+                "Nets carried by a copper pour on every copper layer; track "
+                "geometry checks do not apply to them.",
+                filled=filled,
+            )
+        )
+    if tracked.nets:
+        checks.extend(
+            [
+                _verify_layers(tracked, tracks),
+                _verify_vias(tracked, vias, tracks),
+                _verify_width(tracked, tracks),
+                _verify_length(tracked, lengths, tracks),
+                _verify_skew(tracked, lengths, tracks),
+                _verify_power_drop(tracked, lengths, tracks),
+            ]
+        )
+    checks.extend(
+        [
+            _verify_impedance(constraint),
+            _verify_stubs(constraint),
+            _verify_separation(constraint),
+            _verify_reference_plane(constraint),
+        ]
+    )
+    return checks
 
 
 def _part_rect_mm(part: PlacedPart) -> tuple[float, float, float, float]:

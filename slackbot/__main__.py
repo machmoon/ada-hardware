@@ -1,7 +1,7 @@
 """``python -m slackbot`` — run the Slack bot.
 
 * ``python -m slackbot``        — the Events API server (needs a public URL).
-* ``python -m slackbot socket`` — the Socket Mode bridge to Hardy on this laptop
+* ``python -m slackbot socket`` — the Socket Mode bridge to Ada on this laptop
   (no public URL; see ``slackbot/bridge.py``).
 """
 

@@ -199,7 +199,7 @@ than one that is switched off, since it looks like it is working. A missing
    turns a finished call into requests.
 
 Mentions are stripped from an activity's text before it becomes a prompt
-(`<at>Kaleo</at>` and the display name go together), and the bot's own messages
+(`<at>Ada</at>` and the display name go together), and the bot's own messages
 are dropped by id, because two bots in one meeting chat would otherwise answer
 each other indefinitely.
 

@@ -1,4 +1,4 @@
-"""``silkscreen serve``: start the HTTP service and open the Hardy desktop app.
+"""``silkscreen serve``: start the HTTP service and open the Ada desktop app.
 
 Thin on purpose. The server itself is ``service.app`` -- this module only does
 the three things that stand between "the module exists" and "the app is open":
@@ -18,7 +18,7 @@ the three things that stand between "the module exists" and "the app is open":
   opens the browser SPA instead and ``--no-browser`` opens nothing. From a
   checkout with the Tauri toolchain the overlay is this tree's own build
   (``npm run tauri dev``, a child of this process that stops with it); without
-  one, an installed ``Hardy.app``; with neither, the browser, saying why.
+  one, an installed ``Ada.app``; with neither, the browser, saying why.
 """
 
 from __future__ import annotations
@@ -45,11 +45,11 @@ DEFAULT_PORT = 8081
 #: second one would fight it for the port.
 DESKTOP_DEV_PORT = 1420
 
-#: Where a release install of the overlay lives (``productName`` "Hardy").
-INSTALLED_APP = Path("/Applications/Hardy.app")
+#: Where a release install of the overlay lives (``productName`` "Ada").
+INSTALLED_APP = Path("/Applications/Ada.app")
 
-#: Releases built before the rename (v0.3.1 and earlier) install as ``Hardy.app``.
-LEGACY_INSTALLED_APP = Path("/Applications/Hardy.app")
+#: Releases built before the rename (v0.3.1 and earlier) install as ``Ada.app``.
+LEGACY_INSTALLED_APP = Path("/Applications/Ada.app")
 
 
 def _port_in_use(port: int) -> bool:
@@ -79,7 +79,7 @@ def _launch_desktop(root: Path) -> tuple[subprocess.Popen | None, str | None]:
         if _port_in_use(DESKTOP_DEV_PORT):
             print(f"desktop already running (something is on :{DESKTOP_DEV_PORT})")
             return None, None
-        print("desktop starting Hardy from app/ "
+        print("desktop starting Ada from app/ "
               "(npm run tauri dev; a first build takes minutes)")
         # Its own process group: npm spawns vite, cargo and the app binary,
         # and stopping serve must take all of them down, not just npm.
@@ -140,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="silkscreen serve",
         description=(
-            "Run the Silkscreen API and web UI, and open the Hardy desktop app."
+            "Run the Silkscreen API and web UI, and open the Ada desktop app."
         ),
     )
     parser.add_argument(

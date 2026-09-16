@@ -10,7 +10,7 @@ legal states.
 The two properties that matter most have a test each: no secret value ever
 appears in the serialised response, and the ``google`` entry agrees with
 ``GET /deliver/config`` -- the two routes read the same source, so a user can
-never be told two different stories about whether Hardy can send mail.
+never be told two different stories about whether Ada can send mail.
 """
 
 import json
@@ -139,6 +139,7 @@ def test_the_roster_is_complete_and_frozen():
         "mcp",
         "spice",
         "kicad",
+        "anthropic",
     )
     assert set(integrations._META) == set(integrations.INTEGRATION_IDS)
     assert set(integrations._PROBES) == set(integrations.INTEGRATION_IDS)
@@ -176,8 +177,16 @@ def test_the_report_is_json_serialisable(tmp_path):
 # ---------------------------------------------------------------- states
 
 
-def test_empty_environment_configures_nothing():
+def test_empty_environment_configures_nothing(monkeypatch, tmp_path):
     """Zero env, and every credentialed integration says so distinguishably."""
+    # Zero env is not zero machine: with no GOOGLEAPPS_TOKEN_PATH the Google
+    # entry falls back to the real ~/.config token, so on a developer's Mac
+    # that has signed in it read "partial". Point the fallback at nothing.
+    import googleapps.config
+
+    monkeypatch.setattr(
+        googleapps.config, "DEFAULT_TOKEN_PATH", tmp_path / "no-token.json"
+    )
     entries = by_id(integrations.integrations_report({}))
     for ident in ("google", "slack", "meet", "sourcing"):
         assert entries[ident]["state"] in ("unconfigured", "unavailable"), ident
@@ -430,3 +439,55 @@ def test_every_unverified_flag_matches_what_the_docs_claim():
     # unverified state to report.
     for ident in ("cad", "mcp", "spice", "kicad", "sourcing"):
         assert flags[ident] is False, f"{ident} is marked unverified"
+
+    # A provider nobody has recorded calling with a real key yet.
+    assert flags["anthropic"] is True
+
+
+# ---------------------------------------------------------------- anthropic
+
+
+def test_anthropic_is_unconfigured_with_nothing_set_and_names_both_backends():
+    entry = by_id(integrations.integrations_report({}))["anthropic"]
+    if entry["state"] == "unavailable":  # the extra is not installed here
+        assert "[anthropic]" in " ".join(entry["hints"])
+        return
+    assert entry["state"] == "unconfigured"
+    hints = " ".join(entry["hints"])
+    assert "ANTHROPIC_API_KEY" in hints and "ANTHROPIC_VERTEX_PROJECT_ID" in hints
+
+
+def test_anthropic_key_is_ready_leads_and_is_never_echoed():
+    pytest.importorskip("anthropic")
+    key = "sk-ant-api03-ANTHROPICSECRETVALUE"
+    report = integrations.integrations_report(
+        {"ANTHROPIC_API_KEY": key, "GOOGLE_API_KEY": "AIzaAPIKEYSECRETVALUE3333"}
+    )
+    entry = by_id(report)["anthropic"]
+    assert entry["state"] == "ready"
+    assert "leads, with Gemini as fallback" in entry["detail"]
+    assert "Anthropic API" in entry["detail"]
+    assert key not in json.dumps(report)
+    # With Claude configured a Google key is not what the sourcing card lacks.
+    only_claude = by_id(integrations.integrations_report({"ANTHROPIC_API_KEY": key}))
+    assert only_claude["sourcing"]["state"] == "ready"
+
+
+def test_anthropic_half_a_vertex_pair_is_partial_naming_the_other_half():
+    pytest.importorskip("anthropic")
+    entry = by_id(
+        integrations.integrations_report({"ANTHROPIC_VERTEX_PROJECT_ID": "my-proj"})
+    )["anthropic"]
+    assert entry["state"] == "partial"
+    assert "CLOUD_ML_REGION" in " ".join(entry["hints"])
+
+
+def test_anthropic_vertex_pair_is_ready_on_vertex():
+    pytest.importorskip("anthropic")
+    entry = by_id(
+        integrations.integrations_report(
+            {"ANTHROPIC_VERTEX_PROJECT_ID": "my-proj", "CLOUD_ML_REGION": "global"}
+        )
+    )["anthropic"]
+    assert entry["state"] == "ready"
+    assert "Vertex AI" in entry["detail"]

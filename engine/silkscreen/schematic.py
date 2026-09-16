@@ -57,6 +57,7 @@ that rotation is composed inside the same two functions.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import math
 import re
 from dataclasses import dataclass, field
@@ -193,6 +194,9 @@ class SymbolPin:
     y_nm: int
     angle: int
     stub_nm: int = _STUB_NM
+    #: KiCad electrical type. Generated symbols are all passive; a library
+    #: symbol's pins keep their real types (see :func:`_power_flags`).
+    electrical: str = "passive"
 
     @property
     def stub(self) -> tuple[int, int]:
@@ -223,6 +227,9 @@ class SymbolShape:
     #: Half-extents of the drawn symbol including its pins.
     extent_w_nm: int = 0
     extent_h_nm: int = 0
+    #: The KiCad library symbol this shape is (``kicadlib.symbol``), written
+    #: into ``lib_symbols`` verbatim instead of the generated body.
+    library_text: str | None = None
 
 
 @dataclass
@@ -241,6 +248,12 @@ class PlacedSymbol:
     rotation: int = 0
     #: ``{pin_number: net}``; a pin missing from this map is left unconnected.
     pin_nets: dict[str, str] = field(default_factory=dict)
+    #: Pin numbers the circuit *declared* open (``Device.no_connect``). Only
+    #: these get a no-connect flag; a pin that is neither wired nor declared
+    #: stays dangling so KiCad's ERC reports it. Drawing a flag on every
+    #: unwired pin, which this emitter did until 2026-09-15, told ERC that a
+    #: forgotten ground was intentional.
+    no_connect: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass
@@ -848,6 +861,49 @@ def _testpoint_shape(name: str, pins: dict[str, str]) -> SymbolShape:
     )
 
 
+def _library_shape(device) -> SymbolShape | None:
+    """KiCad's own symbol for a library-bound IC, or None to draw one here.
+
+    Only for a device ``kicadlib.resolve.apply_library`` bound to a symbol,
+    while the library is enabled, and only when ``kicadlib.symbol.load_symbol``
+    accepts it (single unit, no hidden pins). The sheet then shows the part as
+    KiCad's library draws it -- the regulator's real outline and pin names --
+    and its Footprint field agrees with the library footprint on the board.
+    """
+    from . import kicadlib
+    from .kicadlib.packages import PACKAGE_SYMBOLS, package_pads
+    from .kicadlib.symbol import load_symbol
+
+    package = getattr(device, "package", None) or ""
+    symbol = getattr(device, "symbol", None)
+    pads = None
+    if not symbol and package in PACKAGE_SYMBOLS:
+        symbol = PACKAGE_SYMBOLS[package]
+        pads = package_pads(package)
+    elif not symbol and package:
+        from .board import _connector_symbol
+
+        symbol = _connector_symbol(package, device)
+    if not symbol or not kicadlib.enabled():
+        return None
+    loaded = load_symbol(symbol, pads=pads)
+    if loaded is None:
+        return None
+    return SymbolShape(
+        lib_id=loaded.lib_id,
+        pins=[
+            SymbolPin(
+                p.number, p.name, p.x_nm, p.y_nm, p.angle, electrical=p.electrical
+            )
+            for p in loaded.pins
+        ],
+        graphics=[],
+        extent_w_nm=loaded.extent_w_nm,
+        extent_h_nm=loaded.extent_h_nm,
+        library_text=loaded.text,
+    )
+
+
 def _shape_for_device(device, nets_by_name: dict[str, str]) -> SymbolShape:
     """Pick the glyph for one device from its ``kind``.
 
@@ -865,6 +921,9 @@ def _shape_for_device(device, nets_by_name: dict[str, str]) -> SymbolShape:
     at least numbers every pin it draws.
     """
     kind = getattr(device, "kind", "ic")
+    library = _library_shape(device)
+    if library is not None:
+        return library
     if kind == "battery" and len(device.pins) == 2:
         return _battery_shape(device.name, device.pins)
     if kind == "switch" and len(device.pins) == 2:
@@ -960,6 +1019,11 @@ def build_schematic(
                 shape=_shape_for_device(device, pin_nets_by_name),
                 footprint=footprints.get(ref, ""),
                 pin_nets=by_number,
+                no_connect=frozenset(
+                    str(device.pins[pin_name])
+                    for pin_name in device.no_connect
+                    if pin_name in device.pins
+                ),
             )
         )
 
@@ -989,7 +1053,7 @@ def build_schematic(
             (sym.ref, pin.number, *_pin_on_sheet(sym, pin))
             for sym in shapes
             for pin in sym.shape.pins
-            if pin.number not in sym.pin_nets
+            if pin.number not in sym.pin_nets and pin.number in sym.no_connect
         ],
         paper=paper,
     )
@@ -1301,8 +1365,21 @@ def _power_flags(
     drawn beyond it, and the flag points away from the body.
     """
     by_ref = {sym.ref: sym for sym in symbols}
+    # A net already driven by a real power-output pin -- a library regulator's
+    # VO -- needs no flag, and gets none: KiCad's PWR_FLAG is itself a power
+    # output, and two on one net is an ERC pin_to_pin error (measured
+    # 2026-09-14 on the first schematic with a library AMS1117). The flag is
+    # for rails whose only drivers are passive, which every generated symbol is.
+    driven = {
+        sym.pin_nets[pin.number]
+        for sym in symbols
+        for pin in sym.shape.pins
+        if pin.electrical == "power_out" and pin.number in sym.pin_nets
+    }
     chosen: dict[str, tuple[tuple[int, int], PowerSymbol, int]] = {}
     for pwr in power:
+        if pwr.net in driven:
+            continue
         sym = by_ref[pwr.part_ref]
         pin = next(p for p in sym.shape.pins if p.number == pwr.pin_number)
         sideways = pin.angle in (0, 180)
@@ -1312,7 +1389,7 @@ def _power_flags(
         if pwr.net not in chosen or rank < chosen[pwr.net][0]:
             chosen[pwr.net] = (rank, pwr, rotation)
     out: list[PowerFlag] = []
-    for net in dict.fromkeys(p.net for p in power):
+    for net in dict.fromkeys(p.net for p in power if p.net not in driven):
         _, pwr, rotation = chosen[net]
         out.append(
             PowerFlag(
@@ -1366,6 +1443,8 @@ def _field_anchors(sym: PlacedSymbol) -> tuple[tuple[int, int], tuple[int, int],
 
 def _lib_symbol(shape: SymbolShape, *, ref_prefix: str) -> list[str]:
     """The ``lib_symbols`` entry for one generated symbol."""
+    if shape.library_text is not None:
+        return ["  " + line for line in shape.library_text.strip("\n").splitlines()]
     # KiCad keys a lib_symbols entry by the **full** ``Lib:Name`` and names the
     # unit sub-symbols after the bare name. Writing the bare name on the outer
     # entry leaves every instance's lib_id unresolved, which is exactly the
@@ -1664,7 +1743,9 @@ def emit_kicad_sch(
     return "\n".join(out) + "\n"
 
 
-def emit_kicad_pro(project_name: str = "silkscreen") -> str:
+def emit_kicad_pro(
+    project_name: str = "silkscreen", net_classes: list[dict] | None = None
+) -> str:
     """A minimal ``.kicad_pro`` so KiCad opens the pair as one project.
 
     Without it the schematic and the board are two loose files that KiCad will
@@ -1672,13 +1753,38 @@ def emit_kicad_pro(project_name: str = "silkscreen") -> str:
     the workflow this whole change exists to support -- does not work.
     """
     sheet_uuid = stable_uuid(f"sheet:{project_name}")
+    # Bus net classes (signals.net_classes), in KiCad's net_settings shape
+    # (template stm32f100-discovery-shield.kicad_pro): a class per differential
+    # pair plus netclass_patterns naming its nets. Only the diff-pair fields are
+    # set; clearance and track width are left to KiCad's defaults, which are
+    # the Default class's, so a class can never make DRC stricter. Measured
+    # 2026-09-14: an explicit 0.25 mm clearance flagged the USB-C footprint's
+    # own 0.20 mm pad gaps five times. The impedance target is in the class
+    # name because the width achieving it depends on a stackup not yet modelled.
+    classes: list[dict] = [{"name": "Default"}]
+    patterns: list[dict] = []
+    # The pair geometry is the coupled router's own (``diffpair.py``), so
+    # KiCad's interactive router and the generated copper agree.
+    from .diffpair import DIFF_PAIR_GAP_NM, DIFF_PAIR_WIDTH_NM
+
+    for cls in net_classes or ():
+        name = f"{cls['name']}_{cls['impedance_ohms']:.0f}R"
+        classes.append({
+            "name": name,
+            "diff_pair_width": DIFF_PAIR_WIDTH_NM / 1e6,
+            "diff_pair_gap": DIFF_PAIR_GAP_NM / 1e6,
+            "diff_pair_via_gap": DIFF_PAIR_GAP_NM / 1e6,
+            "priority": len(classes),
+        })
+        patterns += [{"netclass": name, "pattern": net} for net in cls["nets"]]
+    net_settings = json.dumps({"classes": classes, "netclass_patterns": patterns})
     return (
         "{\n"
         '  "board": {"design_settings": {"defaults": {}}},\n'
         '  "boards": [],\n'
         '  "libraries": {"pinned_footprint_libs": [], "pinned_symbol_libs": []},\n'
         f'  "meta": {{"filename": "{project_name}.kicad_pro", "version": 1}},\n'
-        '  "net_settings": {"classes": [{"name": "Default"}]},\n'
+        f'  "net_settings": {net_settings},\n'
         '  "pcbnew": {"page_layout_descr_file": ""},\n'
         '  "schematic": {"legacy_lib_dir": "", "legacy_lib_list": []},\n'
         f'  "sheets": [["{sheet_uuid}", "Root"]],\n'
@@ -1706,10 +1812,20 @@ def write_schematic(
     return path
 
 
-def write_project(path: str | Path, *, project_name: str | None = None) -> Path:
+def write_project(
+    path: str | Path,
+    *,
+    project_name: str | None = None,
+    spec: CircuitSpec | None = None,
+) -> Path:
     """Write the ``.kicad_pro`` beside the schematic and board."""
     path = Path(path)
     name = project_name or path.stem
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(emit_kicad_pro(name), encoding="utf-8")
+    classes = None
+    if spec is not None:
+        from .signals import net_classes
+
+        classes = net_classes(spec)
+    path.write_text(emit_kicad_pro(name, classes), encoding="utf-8")
     return path

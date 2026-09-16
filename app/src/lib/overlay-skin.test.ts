@@ -5,10 +5,10 @@ import {
   DEFAULT_SKIN,
   SKINS,
   getSkin,
-  getTerminalHardy,
+  getTerminalAda,
   isSkinId,
   setSkin,
-  setTerminalHardy,
+  setTerminalAda,
   skinInfo,
 } from "./overlay-skin";
 
@@ -54,16 +54,16 @@ describe("the stored choice", () => {
   });
 });
 
-describe("the terminal's Hardy switch", () => {
+describe("the terminal's Ada switch", () => {
   it("is on by default, because that is the point of the skin", () => {
-    expect(getTerminalHardy()).toBe(true);
+    expect(getTerminalAda()).toBe(true);
   });
 
   it("turns the skin into an ordinary shell when switched off", () => {
-    setTerminalHardy(false);
-    expect(getTerminalHardy()).toBe(false);
-    setTerminalHardy(true);
-    expect(getTerminalHardy()).toBe(true);
+    setTerminalAda(false);
+    expect(getTerminalAda()).toBe(false);
+    setTerminalAda(true);
+    expect(getTerminalAda()).toBe(true);
   });
 });
 

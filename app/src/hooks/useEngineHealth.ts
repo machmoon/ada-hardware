@@ -22,7 +22,7 @@ export interface EngineHealth {
 /**
  * Poll the engine's `/healthz` on a timer.
  *
- * The engine not running is an ORDINARY state for this app — Kaleo is a
+ * The engine not running is an ORDINARY state for this app — Ada is a
  * desktop app and the Python service is a separate process the user starts —
  * so this never throws and never surfaces as an error. `client.health()`
  * already returns its reason instead of raising; this hook only adds the

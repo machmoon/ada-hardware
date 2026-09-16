@@ -14,7 +14,7 @@ export type { NotifyOs };
 export interface NotifySettings {
   /** The on/off switch for native banners. */
   enabled: boolean;
-  /** When a banner may fire relative to Kaleo being the frontmost app. */
+  /** When a banner may fire relative to Ada being the frontmost app. */
   os: NotifyOs;
 }
 

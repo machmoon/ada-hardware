@@ -703,8 +703,8 @@ def incoming_from_activity(payload: dict[str, Any]) -> Incoming | None:
     )
 
 
-#: ``<at>Kaleo</at>`` — the mention markup Teams puts in an activity's text,
-#: display name and all. The name goes with the tag: leaving "Kaleo" in front
+#: ``<at>Ada</at>`` — the mention markup Teams puts in an activity's text,
+#: display name and all. The name goes with the tag: leaving "Ada" in front
 #: of the request would put the bot's own name into the prompt that becomes a
 #: circuit.
 _MENTION = re.compile(r"<at\b[^>]*>.*?</at>", re.IGNORECASE | re.DOTALL)

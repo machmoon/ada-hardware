@@ -5,7 +5,7 @@ Silkscreen ships three things: a **Python distribution** (sdist + wheel), a
 **container image** on GitHub Container Registry. All three come out of a single
 version tag; nothing is built by hand.
 
-The Hardy Tauri host is not a release artifact yet. It runs from a checkout with
+The Ada Tauri host is not a release artifact yet. It runs from a checkout with
 a local `.venv`; keep bundling disabled until the Python sidecar, signing, and
 notarization pipeline are complete.
 

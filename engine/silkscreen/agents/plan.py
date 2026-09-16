@@ -68,6 +68,7 @@ __all__ = [
     "PlanResult",
     "PlanValidationError",
     "PowerEntry",
+    "Question",
     "Rail",
     "package_vocabulary",
     "parse_plan_response",
@@ -103,6 +104,8 @@ BLOCK_MIN = 1
 BLOCK_MAX = 10
 CONNECTIVITY_MAX = 8
 ASSUMPTIONS_MAX = 8
+#: Requirement questions the plan may put to the engineer before propose.
+QUESTIONS_MAX = 4
 
 #: How much of the batched error list a give-up warning carries.
 _WARNING_CHARS = 400
@@ -247,6 +250,23 @@ class Connectivity:
 
 
 @dataclass(frozen=True)
+class Question:
+    """A requirement the request left open, and what gets assumed if unanswered.
+
+    gpt-engineer's clarify step (``gpt_engineer/tools/custom_steps.py``,
+    ``clarified_gen``) asks before generating and, when the person skips,
+    makes its assumptions explicit. The default rides the question so skipping
+    is one press and the assumption is visible either way.
+    """
+
+    ask: str
+    default: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {"ask": self.ask, "default": self.default}
+
+
+@dataclass(frozen=True)
 class BoardPlan:
     """A validated brief: what to build, powered how, out of what."""
 
@@ -259,6 +279,22 @@ class BoardPlan:
     #: Required to be non-empty when the power source is ``"unknown"``.
     assumptions: tuple[str, ...] = ()
     open_questions: tuple[str, ...] = ()
+    #: Scope-defining requirements to put to the engineer before propose.
+    questions: tuple[Question, ...] = ()
+    #: ``(ask, answer)`` for every question the engineer answered.
+    answers: tuple[tuple[str, str], ...] = ()
+
+    def with_answers(self, answers: dict[str, str]) -> BoardPlan:
+        """This plan with the engineer's answers, keyed by question index or
+        by the question's text; blank answers are left to the default."""
+        from dataclasses import replace
+
+        decided = []
+        for index, question in enumerate(self.questions):
+            answer = answers.get(str(index), answers.get(question.ask, ""))
+            if isinstance(answer, str) and answer.strip():
+                decided.append((question.ask, answer.strip()[:LINE_MAX_CHARS]))
+        return replace(self, answers=tuple(decided))
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -269,6 +305,8 @@ class BoardPlan:
             "connectivity": [c.as_dict() for c in self.connectivity],
             "assumptions": list(self.assumptions),
             "open_questions": list(self.open_questions),
+            "questions": [q.as_dict() for q in self.questions],
+            "answers": [{"ask": a, "answer": b} for a, b in self.answers],
         }
 
     def packages(self) -> tuple[str, ...]:
@@ -329,6 +367,16 @@ class BoardPlan:
         if self.assumptions:
             lines.append("Assumptions made because the request did not say:")
             lines.extend(f"  - {a}" for a in self.assumptions)
+        if self.questions:
+            answered = dict(self.answers)
+            lines.append(
+                "Requirements (the engineer's answer wins over everything above):"
+            )
+            for q in self.questions:
+                if q.ask in answered:
+                    lines.append(f"  - {q.ask} -> DECIDED: {answered[q.ask]}")
+                else:
+                    lines.append(f"  - {q.ask} -> not answered; assume {q.default}")
         if self.open_questions:
             lines.append("Open questions:")
             lines.extend(f"  - {q}" for q in self.open_questions)
@@ -392,7 +440,9 @@ HOW IT IS POWERED. Respond with ONE JSON object -- no prose, no code fence:
      "signals": ["<signal names on the connector>"]}}
   ],
   "assumptions": ["<what you assumed because the request did not say, and why>"],
-  "open_questions": ["<what a person still has to decide>"]
+  "open_questions": ["<what a person still has to decide>"],
+  "questions": [{{"ask": "<a requirement the request left open>",
+                 "default": "<what you will assume if nobody answers>"}}]
 }}
 
 Hard rules -- an answer breaking any of these is rejected automatically:
@@ -418,6 +468,13 @@ Hard rules -- an answer breaking any of these is rejected automatically:
    device's highest pin number: {packages}. Do not plan around a part that
    needs anything else.
 7. Every line is one line. Nothing over {line_max} characters.
+8. "questions": at most {questions_max}. Ask what a senior engineer would
+   insist on before drawing anything, and only what the request left open and
+   changes the design. A request for a SYSTEM (a robot arm, a drone, a
+   printer, a vehicle) is underspecified until it says its scale: ask for the
+   defining specs -- e.g. degrees of freedom, payload and reach, actuator
+   type, end effector, budget -- with a sensible default for each. A fully
+   specified request gets an empty list. Never ask what you can decide well.
 
 {vocabulary}
 """
@@ -434,13 +491,41 @@ def _vocabulary_block(vocab: PackageVocabulary) -> str:
             "advertise a list. Name no connector_package or battery_package "
             "you are not certain of; use \"unknown\" and an assumption."
         )
+    from ..kicadlib.connectors import families_text
+
     connectors = "\n".join(f"  - {name}" for name in vocab.connectors)
+    connectors += (
+        "\n  Real connector families from KiCad's library (write FAMILY_<N>P, "
+        "N = the part's pin count; prefer these for wire-to-board, power and "
+        "off-board signals over bare pin headers):\n" + families_text()
+    )
     batteries = "\n".join(f"  - {name}" for name in vocab.batteries)
     return (
         "Connector packages the builder can draw (use these names exactly):\n"
         f"{connectors or '  (none)'}\n\n"
         "Battery holder packages the builder can draw:\n"
         f"{batteries or '  (none)'}"
+    )
+
+
+def _library_note() -> str:
+    """Rule 6's exception when KiCad's libraries are enabled (kicadlib).
+
+    Without it the planner kept reasoning against the pin-count list alone --
+    measured 2026-09-14, a live plan justified an AMS1117-3.3 as fitting "the
+    3-pin limit" on a run whose board then used KiCad's real SOT-223 footprint.
+    """
+    from .. import kicadlib
+
+    index = kicadlib.library_index()
+    if index is None:
+        return ""
+    return (
+        f". IN ADDITION, any IC in KiCad's installed library ({len(index)} "
+        "parts) is drawn with its real footprint when it is named by its "
+        "exact manufacturer part number -- so plan the specific part in the "
+        "package the request asks for; the pin-count list applies only to "
+        "parts KiCad does not know"
     )
 
 
@@ -462,7 +547,8 @@ def plan_prompt(vocab: PackageVocabulary | None = None) -> str:
         connectivity_max=CONNECTIVITY_MAX,
         assumptions_max=ASSUMPTIONS_MAX,
         line_max=LINE_MAX_CHARS,
-        packages=supported_packages_text(),
+        questions_max=QUESTIONS_MAX,
+        packages=supported_packages_text() + _library_note(),
         vocabulary=_vocabulary_block(vocab),
     )
 
@@ -534,6 +620,12 @@ def _string_list(
     return tuple(dict.fromkeys(out))
 
 
+def _is_family(name: str) -> bool:
+    from ..kicadlib.connectors import is_connector_spec
+
+    return is_connector_spec(name)
+
+
 def _package(
     value: Any,
     where: str,
@@ -555,7 +647,7 @@ def _package(
         errors.append(f"{where} must be a {what} package name or null")
         return None
     name = value.strip()
-    if known and name not in allowed:
+    if known and name not in allowed and not (what == "connector" and _is_family(name)):
         errors.append(
             f"{where} is {name!r}, which the builder cannot draw; "
             f"allowed {what} packages: {list(allowed)}"
@@ -798,6 +890,26 @@ def parse_plan_response(
         data.get("open_questions"), "open_questions", errors, limit=ASSUMPTIONS_MAX
     )
 
+    parsed_questions: list[Question] = []
+    raw_questions = data.get("questions")
+    if raw_questions is not None and not isinstance(raw_questions, list):
+        errors.append("questions must be a list of {ask, default} objects")
+    elif raw_questions:
+        if len(raw_questions) > QUESTIONS_MAX:
+            errors.append(
+                f"questions has {len(raw_questions)} entries, more than {QUESTIONS_MAX}"
+            )
+        for index, entry in enumerate(raw_questions[:QUESTIONS_MAX]):
+            if not isinstance(entry, dict):
+                errors.append(
+                    f"questions[{index}] must be an object with ask and default"
+                )
+                continue
+            ask = _text(entry.get("ask"), f"questions[{index}].ask", errors)
+            default = _text(entry.get("default"), f"questions[{index}].default", errors)
+            if ask and default:
+                parsed_questions.append(Question(ask, default))
+
     # "I do not know" is allowed; "I do not know, and I will not say what I
     # would have assumed" is not. Without this the undecided answer is the
     # cheapest one for a model to give, and the stage stops deciding anything.
@@ -818,6 +930,7 @@ def parse_plan_response(
         connectivity=connectivity,
         assumptions=assumptions,
         open_questions=questions,
+        questions=tuple(parsed_questions),
     )
 
 

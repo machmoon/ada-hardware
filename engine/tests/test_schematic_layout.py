@@ -47,7 +47,11 @@ BLINKER = {
             "pins": {
                 "GND": "1", "TRIG": "2", "OUT": "3", "RESET": "4",
                 "CTRL": "5", "THR": "6", "DIS": "7", "VCC": "8",
-            }
+            },
+            # Declared open: the sheet draws the no-connect flag for this pin
+            # and only this pin. An undeclared open pin stays dangling so ERC
+            # can report it (test_an_undeclared_open_pin_gets_no_flag).
+            "no_connect": ["CTRL"],
         },
     },
     "passives": {
@@ -444,8 +448,32 @@ def test_reference_sits_above_value_and_neither_is_rotated(blinker):
         assert ref.effects.font.height == val.effects.font.height == 1.27
 
 
+def test_an_undeclared_open_pin_gets_no_flag(tmp_path):
+    """A pin on no net and not under ``no_connect`` is left dangling.
+
+    That is the whole point of the field (2026-09-15): a flag on every unwired
+    pin told KiCad's ERC that a forgotten ground was intentional. The regulator
+    below has its GND on no net and does not declare it; the sheet must carry
+    no no-connect at all, so ERC's ``pin_not_connected`` can fire.
+    """
+    circuit = {
+        "devices": {"AMS1117-3.3": {"pins": {"GND": "1", "VOUT": "2", "VIN": "3"}}},
+        "passives": {
+            "c_in": {"type": "capacitor", "value": "10uF"},
+            "c_out": {"type": "capacitor", "value": "22uF"},
+        },
+        "nets": {
+            "VIN": ["AMS1117-3.3.VIN", "c_in.1"],
+            "GND": ["c_in.2", "c_out.2"],
+            "+3V3": ["AMS1117-3.3.VOUT", "c_out.1"],
+        },
+    }
+    _, _, reparsed = _emit(circuit, tmp_path)
+    assert reparsed.noConnects == []
+
+
 def test_an_unconnected_ic_pin_is_marked_no_connect(blinker):
-    """NE555 CTRL is left open by the spec; the sheet must say so, not hide it."""
+    """NE555 CTRL is declared open by the spec; the sheet must say so, not hide it."""
     spec, sheet, reparsed = blinker
     assert len(reparsed.noConnects) == 1
     nc = reparsed.noConnects[0]

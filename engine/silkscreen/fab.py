@@ -40,8 +40,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .board import BoardResult, PlacedPart
-from .footprints import silk_segments
+from .board import BoardResult, PlacedPart, part_silk_segments
 from .packing import Layer
 from .units import NM_PER_MM, mm
 
@@ -427,12 +426,11 @@ def gerber_silkscreen(board: BoardResult, *, bottom: bool = False) -> str:
     for part in board.parts:
         if _is_bottom(part) != bottom:
             continue
-        fp = part.footprint
         # The outline comes pre-clipped clear of the pads (see
-        # footprints.silk_segments) and each endpoint goes through the same
-        # rotation as the pads, so ink and copper cannot disagree about where
-        # the pads are.
-        segments = silk_segments(fp)
+        # footprints.silk_segments, via board.part_silk_segments) and each
+        # endpoint goes through the same rotation as the pads, so ink and
+        # copper cannot disagree about where the pads are.
+        segments = part_silk_segments(part)
         if not segments:
             continue
         anchor_x, anchor_y = _anchor_nm(part)

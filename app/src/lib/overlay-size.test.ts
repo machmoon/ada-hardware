@@ -45,7 +45,7 @@ describe("OVERLAY_SIZES", () => {
       bar: { width: 600, height: 58 },
       "desk-caption": { width: 600, height: 108 },
       "engine-down": { width: 600, height: 110 },
-      "hardy-caption": { width: 600, height: 134 },
+      "ada-caption": { width: 600, height: 134 },
       running: { width: 600, height: 293 },
       "running-feed": { width: 600, height: 461 },
       result: { width: 600, height: 300 },

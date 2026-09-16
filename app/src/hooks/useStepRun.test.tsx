@@ -210,6 +210,36 @@ describe("useStepRun", () => {
     expect(mockStatus).not.toHaveBeenCalled();
   });
 
+  it("a timed-out start is asked for again under the same key, not reported dead", async () => {
+    // The engine finishes a start this client stopped waiting for and replays
+    // it to the next request under the Idempotency-Key. Measured 2026-09-16:
+    // 870 s server-side, "cancelled" on screen, board lost.
+    const hook = render();
+    mockStart
+      .mockRejectedValueOnce(new SilkscreenError("timeout", "ceiling"))
+      .mockResolvedValueOnce(step({ step: "plan", stage: "planned", next: ["propose"] }));
+    act(() => hook.result.current.start({ intent: "a toy car" }));
+    await waitFor(() => expect(mockStart).toHaveBeenCalledTimes(2));
+    const keys = mockStart.mock.calls.map((call) => call[4]);
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
+    await waitFor(() => expect(hook.result.current.status).toBe("waiting"));
+    expect(hook.result.current.error).toBeNull();
+    expect(hook.result.current.history.map((r) => r.step)).toEqual(["plan"]);
+  });
+
+  it("a timed-out later step falls back to the engine's status rather than an error", async () => {
+    const hook = render();
+    await proposed(hook);
+    const crank = armAdvance();
+    mockStatus.mockResolvedValueOnce(statusOf({ done: ["propose", "place"], next: ["route"] }));
+    act(() => hook.result.current.approve("place"));
+    act(() => crank.reject(new SilkscreenError("timeout", "ceiling")));
+    await waitFor(() => expect(mockStatus).toHaveBeenCalled());
+    expect(hook.result.current.status).not.toBe("error");
+    expect(hook.result.current.error).toBeNull();
+  });
+
   it("keeps `available` from the last good response when a step fails", async () => {
     const hook = render();
     await proposed(hook);

@@ -54,7 +54,7 @@ export const VoiceSettings = ({ className }: { className?: string }) => {
     <div id="voice-settings" className={cn("space-y-3", className)}>
       <Header
         title="Voice"
-        description="When a run finishes, Hardy reads the review's headline findings aloud"
+        description="When a run finishes, Ada reads the review's headline findings aloud"
         isMainTitle
       />
 

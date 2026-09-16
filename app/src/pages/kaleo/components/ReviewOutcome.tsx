@@ -43,6 +43,27 @@ export const TONE_CLASS: Record<BadgeTone, string> = {
  * wears `kv-settle` (motion.css §3) and slides the last 4 px into place
  * instead of popping; `kv-settle-group` staggers its rows for the same reason.
  */
+/**
+ * The envelope's warnings, in the engine's words. Rendered on every review
+ * card, because the sentence "the spec-review agenda could not be prepared:
+ * …" is the only thing that separates a failed agenda from an engine with
+ * nothing to propose (both arrive as `spec_review: null`).
+ */
+const ReviewWarnings = ({ warnings }: { warnings: string[] }) =>
+  warnings.length ? (
+    <>
+      {warnings.map((warning) => (
+        <p
+          key={warning}
+          className="text-[10px] text-amber-600 dark:text-amber-400"
+          data-testid="review-warning"
+        >
+          {warning}
+        </p>
+      ))}
+    </>
+  ) : null;
+
 export const ReviewOutcome = ({ details }: { details: ReviewDetails }) => {
   const { findings, blockers, status } = details;
   const measured = findings.filter((f) => findingProvenance(f).measured).length;
@@ -77,6 +98,7 @@ export const ReviewOutcome = ({ details }: { details: ReviewDetails }) => {
             {details.note}
           </p>
         ) : null}
+        <ReviewWarnings warnings={details.warnings} />
       </div>
     );
   }
@@ -179,6 +201,7 @@ export const ReviewOutcome = ({ details }: { details: ReviewDetails }) => {
           </div>
         );
       })}
+      <ReviewWarnings warnings={details.warnings} />
     </div>
   );
 };

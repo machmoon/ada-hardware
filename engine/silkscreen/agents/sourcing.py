@@ -261,8 +261,15 @@ def propose_sourcing(
     verify: Verify | None = None,
     max_repairs: int = 1,
     on_event: Callable[[dict[str, Any]], None] | None = None,
+    context: str | None = None,
 ) -> SourcingResult:
     """Ask the model to source ``rows``; return every row with its statuses.
+
+    ``context``, when given, is shown after the parts table: the part facts
+    web research cited (:func:`~silkscreen.agents.stages.
+    research_sourcing_context`), each with its page. It informs a proposal
+    and verifies nothing -- a part number named there is still ``proposed``
+    until a distributor says otherwise.
 
     One model call, plus at most ``max_repairs`` more when the answer fails
     :func:`~silkscreen.sourcing.parse_sourcing_response` -- the batched
@@ -304,7 +311,8 @@ def propose_sourcing(
         verify = from_env()
     refs = [row.ref for row in rows]
     table = _rows_block(rows)
-    prompt = f"{SOURCING_PROMPT}\nParts on the board:\n{table}\n"
+    extra = f"\n{context}\n" if context else ""
+    prompt = f"{SOURCING_PROMPT}\nParts on the board:\n{table}\n{extra}"
 
     proposals: dict[str, dict[str, str | None]] | None = None
     last_errors: list[str] = []
@@ -331,7 +339,7 @@ def propose_sourcing(
             break
         problems = "\n".join(f"  - {e}" for e in last_errors)
         prompt = (
-            f"{SOURCING_PROMPT}\nParts on the board:\n{table}\n\n"
+            f"{SOURCING_PROMPT}\nParts on the board:\n{table}\n{extra}\n"
             f"Your previous answer was rejected. Fix ALL of these and return "
             f"the corrected JSON object:\n{problems}\n\n"
             f"Your previous answer was:\n{raw}\n"

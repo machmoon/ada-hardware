@@ -46,19 +46,19 @@ describe("the overlay skin picker", () => {
     expect(checked[0].id).toBe("orb");
   });
 
-  it("shows the Hardy switch only for the skin that has a shell", () => {
+  it("shows the Ada switch only for the skin that has a shell", () => {
     mount();
-    expect(screen.queryByTestId("terminal-hardy-switch")).toBeNull();
+    expect(screen.queryByTestId("terminal-ada-switch")).toBeNull();
     fireEvent.click(card("terminal"));
-    expect(screen.getByTestId("terminal-hardy-switch")).toBeTruthy();
+    expect(screen.getByTestId("terminal-ada-switch")).toBeTruthy();
   });
 
-  it("defaults Hardy routing on, and stores the off state explicitly", () => {
+  it("defaults Ada routing on, and stores the off state explicitly", () => {
     // Absent means on, so turning it off has to write "0" rather than
     // removing the key — otherwise the switch springs back on next launch.
     mount();
     fireEvent.click(card("terminal"));
-    const toggle = screen.getByTestId("terminal-hardy-switch");
+    const toggle = screen.getByTestId("terminal-ada-switch");
     expect(toggle.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(toggle);
     expect(localStorage.getItem(KALEO_STORAGE_KEYS.TERMINAL_ADA)).toBe("0");

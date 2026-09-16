@@ -28,7 +28,7 @@ const line = (frame: Record<string, unknown>) => `${JSON.stringify(frame)}\n`;
 
 beforeEach(() => fetchMock.mockReset());
 
-describe("asking Hardy from the terminal", () => {
+describe("asking Ada from the terminal", () => {
   it("returns her reply", async () => {
     fetchMock.mockResolvedValue(
       stream([line({ event: "chat.done", assistant: "Because U3 has no footprint." })]),
@@ -114,7 +114,7 @@ describe("asking Hardy from the terminal", () => {
     // Something happened on the engine; claiming success would hide it and
     // returning empty would invite a silent retry of a paid turn.
     fetchMock.mockResolvedValue(stream([line({ event: "chat.accepted" })]));
-    await expect(ask("Hi", { baseUrl: "http://x" })).rejects.toThrow(/before Hardy answered/);
+    await expect(ask("Hi", { baseUrl: "http://x" })).rejects.toThrow(/before Ada answered/);
   });
 
   it("refuses an empty question without touching the network", async () => {
@@ -128,5 +128,36 @@ describe("asking Hardy from the terminal", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, { body: string }];
     expect(url).toBe("http://127.0.0.1:8081/chat/stream");
     expect(JSON.parse(init.body)).toMatchObject({ intent: "Why?", session_id: "term-abc" });
+  });
+});
+
+describe("the approval gate", () => {
+  it("asks the engine to propose rather than build, and returns the proposal", async () => {
+    fetchMock.mockResolvedValue(
+      stream([
+        line({
+          event: "chat.done",
+          assistant: "Want me to build a 3.3 V LDO board?",
+          proposal: " A 3.3 V LDO board ",
+          result: null,
+        }),
+      ]),
+    );
+    const outcome = await ask("make an LDO board", {
+      baseUrl: "http://x",
+      confirmBeforeBuild: true,
+    });
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect(body.confirm_before_build).toBe(true);
+    expect(outcome.proposal).toBe("A 3.3 V LDO board");
+    expect(outcome.ranBoard).toBe(false);
+  });
+
+  it("leaves the gate off, and the proposal null, unless asked", async () => {
+    fetchMock.mockResolvedValue(stream([line({ event: "chat.done", assistant: "Hi." })]));
+    const outcome = await ask("hello", { baseUrl: "http://x" });
+    const body = JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body));
+    expect("confirm_before_build" in body).toBe(false);
+    expect(outcome.proposal).toBeNull();
   });
 });

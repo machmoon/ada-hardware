@@ -120,14 +120,24 @@ def test_the_advertised_packages_are_exactly_the_ones_that_build():
     import re
 
     from silkscreen.board import (
+        _NAMED_CHIPS,
         UnsupportedPackage,
         _footprint_for_device,
         supported_packages_text,
     )
 
     text = supported_packages_text()
+    # Only the pin-count clause advertises generic IC sizes. The named-chip
+    # clause after it ("TPS5430 ... 9 pins") builds only under a key holding
+    # the part number, so reading its numbers as generic sizes -- as this
+    # test did once that clause existed -- reports a drift that is not there.
+    generic = text.split("and the named modules", 1)[0]
     # Whole numbers only: a substring check reads the "2" inside "32/".
-    advertised = {int(n) for n in re.findall(r"\b\d+\b", text)}
+    advertised = {int(n) for n in re.findall(r"\b\d+\b", generic)}
+    # And every named chip really builds under its own key at its own count.
+    for key, chip in _NAMED_CHIPS.items():
+        _footprint_for_device(f"U_{key}", chip.pin_count, {})
+        assert f"{chip.pin_count} pins" in text, key
     for pin_count in range(2, 40):
         try:
             _footprint_for_device("U_X", pin_count, {})

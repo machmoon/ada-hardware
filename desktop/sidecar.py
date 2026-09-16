@@ -1,4 +1,4 @@
-"""Run Hardy's local HTTP service as a parent-owned desktop sidecar.
+"""Run Ada's local HTTP service as a parent-owned desktop sidecar.
 
 The process writes one JSON readiness record to stdout, then remains alive
 until its parent closes stdin.  Tying lifetime to the pipe prevents a crashed
@@ -68,7 +68,7 @@ def run(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Run Hardy's desktop API sidecar")
+    parser = argparse.ArgumentParser(description="Run Ada's desktop API sidecar")
     parser.add_argument(
         "--port",
         type=int,

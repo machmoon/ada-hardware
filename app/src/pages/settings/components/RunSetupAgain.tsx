@@ -5,7 +5,7 @@ import { Button, Header } from "@/components";
 import { setSetting } from "@/lib/settings/store";
 
 /**
- * Re-run the Setup Assistant from the appearance step.
+ * Re-run the Setup Assistant from its first screen.
  *
  * `setup_restart` puts the shell back in setup mode (Regular activation
  * policy, dashboard focused; the strip stays visible). The store's
@@ -19,13 +19,17 @@ export const RunSetupAgain = () => {
   const run = async () => {
     setNote("");
     await setSetting("setup.completed", false);
+    // From Hello, not from where the last run stopped: `setup.step` is the
+    // resume point and an existing user's reads `done`.
+    await setSetting("setup.step", "hello");
+    await setSetting("setup.remaining", []);
     try {
       await invoke("setup_restart");
     } catch (error) {
       // Outside the shell there is nothing to restart; the wizard still runs.
       setNote(`The shell did not answer setup_restart (${(error as Error)?.message ?? "no shell"}); opening setup anyway.`);
     }
-    navigate("/welcome?jump=appearance");
+    navigate("/welcome");
   };
 
   return (

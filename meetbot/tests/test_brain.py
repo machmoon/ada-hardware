@@ -1,4 +1,4 @@
-"""Hardy's in-call judgement, offline: scripted model, fake clock, fake voice."""
+"""Ada's in-call judgement, offline: scripted model, fake clock, fake voice."""
 
 from __future__ import annotations
 
@@ -73,9 +73,9 @@ REPLY = '{"reply": "Fair, I\'ll try it and send you a first pass after the call.
 
 
 def test_addressed_matches_the_name_and_caption_misspellings():
-    assert addressed("Hardy, what do you think?")
-    assert addressed("ok harty can you take that")
-    assert addressed("Hardie?")
+    assert addressed("Ada, what do you think?")
+    assert addressed("ok aida can you take that")
+    assert addressed("Ayda?")
 
 
 def test_addressed_ignores_words_that_only_look_like_the_name():
@@ -99,7 +99,7 @@ def test_voices_doubt_on_typeset_apostrophes_and_ideas():
 
 def test_clean_reply_speaks_whole_sentences_only():
     assert clean_reply(REPLY).startswith("Fair, I'll try it")
-    assert clean_reply('Hardy: "Sure thing."') == "Sure thing."
+    assert clean_reply('Ada: "Sure thing."') == "Sure thing."
     assert clean_reply("One. Two. Three.") == "One. Two."
     assert clean_reply('{"reply": ""}') == ""
     assert clean_reply('```json\n{"reply": "On it."}\n```') == "On it."
@@ -108,9 +108,9 @@ def test_clean_reply_speaks_whole_sentences_only():
 
 
 def test_transcript_text_leaves_hardy_out_by_default():
-    lines = [_u("we need a 3.3 volt board"), _u("I'll try it", "Hardy", True)]
+    lines = [_u("we need a 3.3 volt board"), _u("I'll try it", "Ada", True)]
     assert transcript_text(lines) == "Pat: we need a 3.3 volt board"
-    assert "Hardy: I'll try it" in transcript_text(lines, include_self=True)
+    assert "Ada: I'll try it" in transcript_text(lines, include_self=True)
 
 
 # -- the brain -------------------------------------------------------------
@@ -141,8 +141,8 @@ def test_never_answers_itself():
         clock, voice = Clock(), Voice()
         model = ScriptedModel(by_marker={REPLY_MARKER: REPLY})
         brain = _brain(model, voice, clock)
-        await brain.hear(_u("Hardy, I don't think this will work", "Hardy", True))
-        await brain.hear(_u("Hardy here, I don't think that will work", "You"))
+        await brain.hear(_u("Ada, I don't think this will work", "Ada", True))
+        await brain.hear(_u("Ada here, I don't think that will work", "You"))
         await brain.settle(timeout_s=5)
         return brain, voice, model
 
@@ -156,10 +156,10 @@ def test_cooldown_skips_a_second_trigger_without_a_model_call():
         clock, voice = Clock(), Voice()
         model = ScriptedModel(by_marker={REPLY_MARKER: REPLY})
         brain = _brain(model, voice, clock, cooldown_s=30)
-        await brain.hear(_u("Hardy, can you own the power stage?"))
+        await brain.hear(_u("Ada, can you own the power stage?"))
         await brain.settle(timeout_s=5)
         clock.t += 5
-        await brain.hear(_u("Hardy, and the connector too?"))
+        await brain.hear(_u("Ada, and the connector too?"))
         await brain.settle(timeout_s=5)
         return brain, voice, model
 
@@ -177,7 +177,7 @@ def test_does_not_talk_over_someone_who_keeps_talking():
         async def keeps_talking():
             await brain.hear(_u("and another thing about the enclosure"))
 
-        await brain.hear(_u("Hardy, I don't think this will work"))
+        await brain.hear(_u("Ada, I don't think this will work"))
         clock.on_sleep = keeps_talking
         await brain.settle(timeout_s=5)
         return brain, voice, model
@@ -199,7 +199,7 @@ def test_waits_for_a_pause_then_answers():
                 remaining[0] -= 1
                 await brain.hear(_u("...because the battery is tiny"))
 
-        await brain.hear(_u("Hardy, I don't think this will work"))
+        await brain.hear(_u("Ada, I don't think this will work"))
         clock.on_sleep = trailing_words
         await brain.settle(timeout_s=5)
         return brain, voice
@@ -212,7 +212,7 @@ def test_model_silence_and_model_failure_are_recorded_not_spoken():
     async def go(model):
         clock, voice = Clock(), Voice()
         brain = _brain(model, voice, clock)
-        await brain.hear(_u("Hardy, thoughts?"))
+        await brain.hear(_u("Ada, thoughts?"))
         await brain.settle(timeout_s=5)
         return brain, voice
 
@@ -236,7 +236,7 @@ def test_a_reply_that_did_not_reach_the_room_says_so():
     async def go():
         clock, voice = Clock(), Voice(spoken=False)
         brain = _brain(ScriptedModel(by_marker={REPLY_MARKER: REPLY}), voice, clock)
-        await brain.hear(_u("Hardy, can you take this?"))
+        await brain.hear(_u("Ada, can you take this?"))
         await brain.settle(timeout_s=5)
         return brain
 
@@ -255,7 +255,7 @@ def test_the_call_ending_cancels_a_reply_still_waiting():
             await asyncio.sleep(3600)
 
         clock.on_sleep = block
-        await brain.hear(_u("Hardy, one more thing"))
+        await brain.hear(_u("Ada, one more thing"))
         await asyncio.sleep(0)
         await brain.settle()
         return brain, voice
@@ -277,9 +277,9 @@ def test_reply_cap_and_caption_refinements():
         )
         await brain.hear(_u("we need a"))
         await brain.hear(_u("we need a small LDO board"))
-        await brain.hear(_u("Hardy, got it?"))
+        await brain.hear(_u("Ada, got it?"))
         await brain.settle(timeout_s=5)
-        await brain.hear(_u("Hardy, and again?"))
+        await brain.hear(_u("Ada, and again?"))
         return brain, voice
 
     brain, voice = asyncio.run(go())

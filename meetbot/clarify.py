@@ -290,7 +290,7 @@ def wait_for_answer(
 
     Bounded by ``timeout_s``; ``None`` means nobody answered in time (or the
     poll kept failing, which is appended to ``warnings`` in words). Bot
-    messages -- Hardy's own and the build follower's -- never count.
+    messages -- Ada's own and the build follower's -- never count.
     """
     if timeout_s <= 0:
         return None

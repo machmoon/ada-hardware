@@ -20,6 +20,16 @@ What an engineer sees, stage by stage:
 * ``routing`` -- every track and via in the routed ``.kicad_pcb`` is created
   in that *open* board through KiCad's IPC API, so copper appears in the
   window the engineer is already looking at instead of a second file opening.
+* ``stream`` -- the same, but **while the router runs**: the service feeds
+  this process one JSON line per net on stdin as the router commits it
+  (``{"action": "committed", "net": ..., "segments": [...], "vias": [...]}``)
+  or lifts it in a rip-up (``{"action": "lifted", "net": ...}``), and the
+  copper is created -- or removed -- in the open board as each line lands.
+  ``{"action": "end"}`` closes the show. Coordinates arrive in KiCad's own
+  frame in millimetres, already flipped once by ``silkscreen.board.live_copper``;
+  nothing here flips anything. A lifted net's items are removed, because a
+  watcher who kept them would be looking at copper the final file does not
+  contain.
 * ``3d`` -- the routed ``.kicad_pcb`` is opened in the board editor and
   **KiCad's own 3D viewer** is opened on it. "Show me the board in 3D" means
   the viewer the engineer already trusts, reading the same file KiCad reads,
@@ -38,6 +48,7 @@ unsaved, because saving it is the engineer's decision, not the tool's.
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import time
@@ -257,6 +268,22 @@ def push_copper(board, routed_pcb: Path) -> dict[str, int]:
     Items already present (same endpoints, layer and net) are skipped, so
     running twice does not double the copper. Returns what was created.
     """
+    segments, vias = _copper_from_file(routed_pcb)
+    created, skipped = push_items(board, segments, vias, message="silkscreen: routing")
+    return {"created": len(created), "skipped": skipped}
+
+
+def push_items(board, segments, vias, *, message: str) -> tuple[list, int]:
+    """Create ``segments`` and ``vias`` in the open board, in one commit.
+
+    ``segments`` are ``(layer_name, x0, y0, x1, y1, width, net)`` and ``vias``
+    ``(x, y, size, drill, net)``, millimetres in KiCad's frame -- the shape
+    :func:`_copper_from_file` reads out of a file and the stream mode reads
+    off stdin, so the two doors share one writer. Items already present
+    (same endpoints and layer) are skipped. Returns the created items (the
+    stream keeps them, so a lifted net can be taken off the board again)
+    and how many were skipped.
+    """
     from kipy.board_types import BoardLayer, Track, Via
     from kipy.geometry import Vector2
     from kipy.proto.board.board_types_pb2 import ViaType
@@ -269,7 +296,6 @@ def push_copper(board, routed_pcb: Path) -> dict[str, int]:
     }
     have_vias = {(v.position.x, v.position.y) for v in board.get_vias()}
 
-    segments, vias = _copper_from_file(routed_pcb)
     items = []
     skipped = 0
     for layer_name, x0, y0, x1, y1, width, net in segments:
@@ -302,13 +328,79 @@ def push_copper(board, routed_pcb: Path) -> dict[str, int]:
             v.net = nets[net]
         items.append(v)
 
-    created = 0
+    created: list = []
     if items:
         commit = board.begin_commit()
-        board.create_items(items)
-        board.push_commit(commit, "silkscreen: routing")
-        created = len(items)
-    return {"created": created, "skipped": skipped}
+        created = list(board.create_items(items) or [])
+        board.push_commit(commit, message)
+    return created, skipped
+
+
+def stream_copper(stem: str, lines, *, timeout_s: float = 60.0) -> dict[str, int]:
+    """Draw copper into the open board as the router lays it.
+
+    ``lines`` yields the JSON lines the service writes (see the module
+    docstring). A ``committed`` net replaces whatever this stream created for
+    that net before (a re-routed net after a rip-up arrives as a second
+    commit); ``lifted`` removes it; ``end`` stops. Anything unparseable is
+    reported and skipped rather than ending the show, since one bad line
+    must not blank the copper of every net after it.
+    """
+    _kicad, board = connect_board(stem, timeout_s)
+    mine: dict[str, list] = {}
+    created = removed = nets = bad = 0
+
+    def drop(net: str) -> None:
+        nonlocal removed
+        items = mine.pop(net, [])
+        if items:
+            commit = board.begin_commit()
+            board.remove_items(items)
+            board.push_commit(commit, f"silkscreen: lift {net}")
+            removed += len(items)
+
+    for raw in lines:
+        raw = raw.strip()
+        if not raw:
+            continue
+        try:
+            msg = json.loads(raw)
+            action = msg["action"]
+        except (ValueError, KeyError, TypeError) as exc:
+            bad += 1
+            print(
+                f"stream: skipped a line ({type(exc).__name__}: {exc})", file=sys.stderr
+            )
+            continue
+        if action == "end":
+            break
+        net = str(msg.get("net", ""))
+        if action == "lifted":
+            drop(net)
+            continue
+        if action != "committed":
+            bad += 1
+            print(f"stream: unknown action {action!r}", file=sys.stderr)
+            continue
+        drop(net)
+        segments = [
+            (
+                s["layer"], s["x0_mm"], s["y0_mm"], s["x1_mm"], s["y1_mm"],
+                s["width_mm"], s["net"],
+            )
+            for s in msg.get("segments", [])
+        ]
+        vias = [
+            (v["x_mm"], v["y_mm"], v["size_mm"], v["drill_mm"], v["net"])
+            for v in msg.get("vias", [])
+        ]
+        items, _skipped = push_items(
+            board, segments, vias, message=f"silkscreen: {net}"
+        )
+        mine[net] = items
+        created += len(items)
+        nets += 1
+    return {"created": created, "removed": removed, "nets": nets, "bad": bad}
 
 
 def show_routing(routed_pcb: Path, *, timeout_s: float = 60.0) -> dict[str, int]:
@@ -535,8 +627,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("pcb", type=Path, help="the run's <stem>.kicad_pcb")
     ap.add_argument(
         "stage",
-        choices=["schematic", "placement", "routing", "3d", "replay"],
-        help="which stage to show; 'replay' walks them all with a pause between",
+        choices=[
+            "schematic", "placement", "routing", "stream", "3d", "3d-open", "replay"
+        ],
+        help=(
+            "which stage to show; 'replay' walks them all with a pause between; "
+            "'stream' draws copper net by net from JSON lines on stdin; "
+            "'3d-open' opens the viewer on the board already open (after routing)"
+        ),
     )
     ap.add_argument(
         "--pause", type=float, default=4.0, help="replay: seconds between stages"
@@ -545,6 +643,22 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     files = _project_files(args.pcb)
+    if args.stage == "stream":
+        try:
+            result = stream_copper(
+                args.pcb.name.split(".")[0], sys.stdin, timeout_s=args.timeout
+            )
+        except BridgeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except Exception as exc:  # noqa: BLE001 - one relayable line
+            print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"stream: {result['nets']} net(s), {result['created']} items created, "
+            f"{result['removed']} removed"
+        )
+        return 0
     order = (
         ["schematic", "placement", "routing", "3d"]
         if args.stage == "replay"
@@ -552,14 +666,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         for i, stage in enumerate(order):
-            if stage == "3d":
-                # In a replay the editor is already on this run's board with
+            if stage in ("3d", "3d-open"):
+                # In a replay, and in the rider that follows routing
+                # (`3d-open`), the editor is already on this run's board with
                 # the copper pushed into it, so the viewer is asked for on
                 # what is open rather than reopening the file underneath it.
-                # Asked for on its own, the board is named, because "show me
-                # the board in 3D" means *this* board and the editor might be
-                # showing another run, or nothing at all.
-                board = None if args.stage == "replay" else files["routing"]
+                # Reopening it is what made the viewer vanish on 2026-09-14:
+                # `open -a` returns at once, the viewer opened on the placed
+                # board, and then pcbnew swapped in the routed file and took
+                # the viewer's board -- and the viewer -- away with it.
+                # Asked for on its own (`3d`), the board is named, because
+                # "show me the board in 3D" means *this* board and the editor
+                # might be showing another run, or nothing at all.
+                on_open = args.stage in ("replay", "3d-open")
+                board = None if on_open else files["routing"]
                 print(f"3d: opened KiCad's 3D viewer via {show_3d(board)}")
                 continue
             path = files[stage]

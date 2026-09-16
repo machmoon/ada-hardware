@@ -91,7 +91,7 @@
     show("lobby", false); show("waiting", false);
     // The lobby's effects phantom tile goes away with the lobby.
     show("call", true);
-    tile(state.name || "Pat Liu (Hardy account)", true);
+    tile(state.name || "Pat Liu (Ada account)", true);
     for (let i = 0; i < others; i++) tile("Other " + (i + 1), false);
   }
   $("cta").onclick = () => {
@@ -105,8 +105,8 @@
       // after the click; the button label flips to the knock state.
       const pre = document.createElement("div");
       pre.setAttribute("data-participant-id", "spaces/x/devices/self-preview");
-      pre.setAttribute("data-self-name", "Hardy");
-      pre.textContent = "Hardy";
+      pre.setAttribute("data-self-name", "Ada");
+      pre.textContent = "Ada";
       $("lobby").appendChild(pre);
       $("cta-label").textContent = "Ask to join";
       return setTimeout(() => { show("lobby", false); show("waiting", true); }, lag);

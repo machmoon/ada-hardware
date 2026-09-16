@@ -48,16 +48,16 @@ pub fn parse_ready_line(line: &str) -> Result<Url, String> {
 struct SidecarProcess(Mutex<Option<Child>>);
 
 fn repository_root() -> anyhow::Result<PathBuf> {
-    let candidate = env::var_os("HARDY_REPO_ROOT")
+    let candidate = env::var_os("ADA_REPO_ROOT")
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
     let root = candidate
         .canonicalize()
-        .map_err(|error| anyhow::anyhow!("could not resolve Hardy repository root: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("could not resolve Ada repository root: {error}"))?;
     if !root.join("desktop/sidecar.py").is_file() {
         anyhow::bail!(
-            "{} is not an Hardy checkout (desktop/sidecar.py is missing)",
+            "{} is not an Ada checkout (desktop/sidecar.py is missing)",
             root.display()
         );
     }
@@ -65,7 +65,7 @@ fn repository_root() -> anyhow::Result<PathBuf> {
 }
 
 fn python_interpreter(root: &Path) -> anyhow::Result<OsString> {
-    if let Some(value) = env::var_os("HARDY_PYTHON").filter(|value| !value.is_empty()) {
+    if let Some(value) = env::var_os("ADA_PYTHON").filter(|value| !value.is_empty()) {
         return Ok(value);
     }
     for relative in [".venv/bin/python", ".venv/Scripts/python.exe"] {
@@ -74,7 +74,7 @@ fn python_interpreter(root: &Path) -> anyhow::Result<OsString> {
             return Ok(candidate.into_os_string());
         }
     }
-    anyhow::bail!("Hardy's Python environment is missing; run ./scripts/install.sh or set HARDY_PYTHON")
+    anyhow::bail!("Ada's Python environment is missing; run ./scripts/install.sh or set ADA_PYTHON")
 }
 
 fn spawn_sidecar(root: &Path) -> anyhow::Result<(Child, Url)> {
@@ -86,7 +86,7 @@ fn spawn_sidecar(root: &Path) -> anyhow::Result<(Child, Url)> {
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|error| anyhow::anyhow!("could not start Hardy's Python sidecar: {error}"))?;
+        .map_err(|error| anyhow::anyhow!("could not start Ada's Python sidecar: {error}"))?;
 
     let stdout = child
         .stdout
@@ -104,7 +104,7 @@ fn spawn_sidecar(root: &Path) -> anyhow::Result<(Child, Url)> {
     // pipe and block the service. Readiness is the only protocol record.
     thread::spawn(move || {
         for line in reader.lines().map_while(Result::ok) {
-            eprintln!("[hardy-sidecar] {line}");
+            eprintln!("[ada-sidecar] {line}");
         }
     });
     Ok((child, url))
@@ -165,7 +165,7 @@ pub fn run() {
         .setup(|app| {
             let root = repository_root()?;
             let (child, base_url) = spawn_sidecar(&root)?;
-            eprintln!("Hardy desktop service ready on {base_url}");
+            eprintln!("Ada desktop service ready on {base_url}");
             app.manage(SidecarProcess(Mutex::new(Some(child))));
 
             let encoded_url = serde_json::to_string(base_url.as_str())?;
@@ -173,7 +173,7 @@ pub fn run() {
                 "Object.defineProperty(globalThis, '__SILKSCREEN_BASE__', {{ value: {encoded_url}, writable: false, configurable: false }});"
             );
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("Hardy")
+                .title("Ada")
                 .inner_size(1440.0, 900.0)
                 .min_inner_size(960.0, 640.0)
                 .content_protected(false)
@@ -191,7 +191,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("failed to build Hardy desktop application");
+        .expect("failed to build Ada desktop application");
 
     app.run(|app_handle, event| {
         if matches!(event, RunEvent::ExitRequested { .. }) {

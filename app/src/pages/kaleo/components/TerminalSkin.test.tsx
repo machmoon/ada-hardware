@@ -12,39 +12,39 @@ import { describe, expect, it, vi } from "vitest";
 import { route } from "@/lib/terminal-sigil";
 
 /** The exact decision `onData` makes on Enter, in isolation. */
-function onEnter(draft: string, buffer: "normal" | "alternate", hardyEnabled = true) {
-  const routed = route(draft, { buffer, hardyEnabled });
+function onEnter(draft: string, buffer: "normal" | "alternate", adaEnabled = true) {
+  const routed = route(draft, { buffer, adaEnabled });
   return routed.destination === "shell"
-    ? { toShell: draft + "\r", toHardy: null }
-    : { toShell: "\x15", toHardy: routed.text };
+    ? { toShell: draft + "\r", toAda: null }
+    : { toShell: "\x15", toAda: routed.text };
 }
 
 describe("what Enter does", () => {
   it("sends a command to the shell verbatim", () => {
-    expect(onEnter("git status", "normal")).toEqual({ toShell: "git status\r", toHardy: null });
+    expect(onEnter("git status", "normal")).toEqual({ toShell: "git status\r", toAda: null });
   });
 
   it("never lets a question reach the shell as a command", () => {
     // The failure this guards: the question sits at the prompt and the shell
     // tries to run `Why` as a program the moment anything sends a newline.
     const result = onEnter("Why did that fail?", "normal");
-    expect(result.toHardy).toBe("Why did that fail?");
+    expect(result.toAda).toBe("Why did that fail?");
     expect(result.toShell).toBe("\x15"); // Ctrl-U kills the echoed line
     expect(result.toShell).not.toContain("\r");
   });
 
   it("kills the echoed line before answering, so the prompt is clean", () => {
     expect(onEnter("!fix U3", "normal").toShell).toBe("\x15");
-    expect(onEnter("!fix U3", "normal").toHardy).toBe("fix U3");
+    expect(onEnter("!fix U3", "normal").toAda).toBe("fix U3");
   });
 
   it("passes everything to the shell inside a full-screen program", () => {
-    expect(onEnter(":wq", "alternate")).toEqual({ toShell: ":wq\r", toHardy: null });
-    expect(onEnter("Quit", "alternate").toHardy).toBeNull();
+    expect(onEnter(":wq", "alternate")).toEqual({ toShell: ":wq\r", toAda: null });
+    expect(onEnter("Quit", "alternate").toAda).toBeNull();
   });
 
-  it("is an ordinary terminal when Hardy routing is off", () => {
-    expect(onEnter("Why?", "normal", false).toHardy).toBeNull();
+  it("is an ordinary terminal when Ada routing is off", () => {
+    expect(onEnter("Why?", "normal", false).toAda).toBeNull();
   });
 });
 
@@ -52,7 +52,7 @@ describe("the hint shown while typing", () => {
   it("changes destination on the very first character", () => {
     // The property a classifier cannot have: the answer is known before the
     // second keystroke, so it can be shown rather than discovered.
-    expect(route("W").destination).toBe("hardy");
+    expect(route("W").destination).toBe("ada");
     expect(route("w").destination).toBe("shell");
     expect(route("!").destination).toBe("shell");
     expect(route("!x").destination).toBe("agent");

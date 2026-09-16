@@ -21,12 +21,12 @@ the reference for telling them apart.
 >   (`ci.yml:41`: `engine service scripts desktop googleapps zoombot teamsbot`).
 > - `testpaths` is **eight** directories, not two (`pyproject.toml:59-68`).
 > - The live tree has grown several top-level packages this table does not name:
->   `app/` (the Hardy desktop overlay, and the live one), `slackbot/`,
+>   `app/` (the Ada desktop overlay, and the live one), `slackbot/`,
 >   `meetings/`, `googleapps/`, `zoombot/`, `teamsbot/`, `billing/`.
 > - `desktop/` is **not** uniformly retired: `desktop/kicad_live.py` is live and
 >   spawned by path from `service/steps.py:252`, while `desktop/launcher.py`,
 >   `desktop/sidecar.py`, `desktop/src-tauri/` and `desktop/silkscreen-app` are
->   the pre-Kaleo shell.
+>   the pre-Ada shell.
 > - The guided cursor is no longer unbuilt in the way this file says: the
 >   in-webview pointer ships (`frontend/src/lib/guide.js`,
 >   `GuidePointer.svelte`); only the OS-level overlay is absent.

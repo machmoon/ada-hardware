@@ -70,7 +70,7 @@ The install leaves these console commands in the venv, alongside `python -m silk
 |---|---|
 | `silkscreen "<what to build>"` | Generate a board — the same entry point as `python -m silkscreen` |
 | `silkscreen setup` | Report what is installed and what is missing, ask once for the API key, and write `.env`. It never prints the key back |
-| `silkscreen serve` | Load `.env`, start the service, and open the Hardy desktop app (`--web` for the browser, `--no-browser` for neither; `--port`, or `PORT`) |
+| `silkscreen serve` | Load `.env`, start the service, and open the Ada desktop app (`--web` for the browser, `--no-browser` for neither; `--port`, or `PORT`) |
 | `silkscreen-mcp` | The MCP server, JSON-RPC 2.0 over stdio |
 | `silkscreen-review <board.kicad_pcb>` | Review an existing board |
 

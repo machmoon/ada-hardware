@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -376,12 +377,22 @@ class ScriptedModel:
 
     ``responses`` are returned in order; ``by_marker`` matches a substring of the
     prompt, which is how a test drives several different agents through one
-    model object. Records every call so a test can assert on what was asked.
+    model object. A marker's value is one answer, given every time, or a list
+    of answers given in turn with the last one repeating -- so a test can
+    script "wrong, then right" for one lane without touching the others.
+    Records every call so a test can assert on what was asked.
+
+    Thread-safe: the background lanes (:class:`~.stages.Lane`) call one
+    model from several threads, and the call log and both queues are only
+    ever touched under ``_lock``.
     """
 
     responses: list[str] = field(default_factory=list)
-    by_marker: dict[str, str] = field(default_factory=dict)
+    by_marker: dict[str, str | list[str]] = field(default_factory=dict)
     calls: list[dict[str, Any]] = field(default_factory=list)
+    _lock: threading.Lock = field(
+        default_factory=threading.Lock, init=False, repr=False, compare=False
+    )
 
     def generate(
         self,
@@ -392,21 +403,38 @@ class ScriptedModel:
         temperature: float = 0.0,
         max_output_tokens: int = 8192,
     ) -> str:
-        self.calls.append(
-            {
-                "prompt": prompt,
-                "documents": list(documents or []),
-                "system": system,
-            }
-        )
-        for marker, response in self.by_marker.items():
-            if marker in prompt:
-                return response
-        if self.responses:
-            return self.responses.pop(0)
+        with self._lock:
+            self.calls.append(
+                {
+                    "prompt": prompt,
+                    "documents": list(documents or []),
+                    "system": system,
+                }
+            )
+            for marker, response in self.by_marker.items():
+                if marker not in prompt:
+                    continue
+                if isinstance(response, str):
+                    return response
+                if not response:
+                    raise ModelError(f"ScriptedModel has no answer for {marker!r}")
+                return response.pop(0) if len(response) > 1 else response[0]
+            if self.responses:
+                return self.responses.pop(0)
         raise ModelError("ScriptedModel ran out of responses")
 
 
 def default_model(**kwargs: Any) -> Model:
-    """A live Gemini model. Raises :class:`ModelError` without a key."""
-    return GeminiModel(**kwargs)
+    """The live worker model for the configured providers.
+
+    With no arguments this follows :func:`silkscreen.agents.providers.
+    provider_order` -- Claude then Gemini, each when configured -- so a
+    machine with only ``GOOGLE_API_KEY`` still gets a bare :class:`GeminiModel`.
+    Keyword arguments are :class:`GeminiModel`'s and keep their old meaning.
+    Raises :class:`ModelError` naming what to set when nothing is configured.
+    """
+    if kwargs:
+        return GeminiModel(**kwargs)
+    from .providers import worker_model
+
+    return worker_model()

@@ -615,6 +615,64 @@ def test_build_enclosure_lip_lid_with_holes_and_usb_cutout_passes(tmp_path: Path
 
 
 @needs_build123d
+def test_a_labelled_lid_passes_min_wall_since_the_deboss_is_not_a_wall(tmp_path: Path):
+    """TODO.txt feature 28: every labelled lid failed ``min_wall`` at 1.400 mm
+    against the 1.950 mm spec wall, because the plate under a 0.6 mm deboss
+    is ``wall - depth`` by design and the clause demanded the whole wall.
+    The clause now scores that plate against ``wall - depth`` (never below
+    the printable minimum) and names it."""
+    from silkscreen.enclosure.kernel import _Context, _wall_samples
+
+    envelope = _real_board(tmp_path / "label.kicad_pcb")
+    spec = _real_spec(label="HARDY", cutouts=())
+    model = build_enclosure(spec, envelope)
+    report = verify_model(model, spec, envelope)
+    wall = _clause(report, "min_wall")
+    assert wall.passed, wall.detail
+    assert wall.margin_nm >= 0
+    # The branch actually fired: at least one lid sample was scored as the
+    # plate under the letters, 1.4 mm thick against 1.4 mm required (the spec
+    # wall less the deboss), not against the whole wall.
+    ctx = _Context(model, spec, envelope)
+    lid_samples = _wall_samples(ctx, "lid", model.lid, z_only=True)
+    under = [s for s in lid_samples if "label deboss" in s.where]
+    assert under, "no sample was scored as the plate under the label"
+    assert all(abs(s.thickness - 1.4) < 0.01 for s in under)
+    assert all(s.margin >= 0 for s in under)
+    # Without the label the same lid is 2.0 mm everywhere: the rule is not
+    # a blanket discount, it applies only where the letters are.
+    plain = _real_spec(label=None, cutouts=())
+    plain_ctx = _Context(build_enclosure(plain, envelope), plain, envelope)
+    assert not [s for s in _wall_samples(plain_ctx, "lid", plain_ctx.lid, z_only=True)
+                if "label deboss" in s.where]
+
+
+@needs_build123d
+def test_a_cutout_on_the_wrong_wall_fails_admits_plug_by_the_reach(tmp_path: Path):
+    """TODO.txt feature 28: with the build gate bypassed, a cutout declared on
+    a wall 41 mm from its connector read "admitted", because the plug prism
+    ran through empty cavity and never had to reach the part. The clause now
+    measures how far the plug stops short of its receptacle and fails past
+    the same EDGE_NEAR_NM the build gate uses, so it gates on its own."""
+    from silkscreen.enclosure.cad import EDGE_NEAR_NM
+
+    envelope = _real_board(tmp_path / "wrong_wall.kicad_pcb")
+    built_for = _real_spec()  # J1 on the left wall, where it is
+    model = build_enclosure(built_for, envelope)
+    # The same model verified against a spec that puts the cutout on the
+    # right: the build gate never saw this spec, which is the bypass.
+    claimed = _real_spec(
+        cutouts=(Cutout(id="usb", ref="J1", face="right", margin_nm=mm(0.5)),)
+    )
+    plug = _clause(verify_model(model, claimed, envelope), "cutout_admits_plug")
+    assert not plug.passed
+    assert "short of its receptacle" in plug.detail
+    # J1 spans x 0..9 on a 50 mm board: the plug entering the right wall stops
+    # 41 mm short, 38 mm past the 3 mm allowance.
+    assert abs(plug.margin_nm - (-(mm(41.0) - EDGE_NEAR_NM))) <= 10_000, plug.detail
+
+
+@needs_build123d
 def test_build_enclosure_lid_none_passes(tmp_path: Path):
     envelope = _real_board(tmp_path / "holes.kicad_pcb")
     spec = _real_spec(lid="none", cutouts=())

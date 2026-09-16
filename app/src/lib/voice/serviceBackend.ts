@@ -1,4 +1,4 @@
-// Hardy's voice, synthesized by the engine service instead of by the webview.
+// Ada's voice, synthesized by the engine service instead of by the webview.
 //
 // This is one more backend behind the existing `SpeechBackend` interface in
 // `../speech/backends.ts` — deliberately a NEW file in a NEW directory rather
@@ -6,7 +6,7 @@
 // is already in. Wiring it up is three small edits, listed at the bottom of
 // this comment.
 //
-// WHY IT EXISTS. Every word Hardy speaks today is `speechSynthesis`, which on
+// WHY IT EXISTS. Every word Ada speaks today is `speechSynthesis`, which on
 // macOS resolves to a *Compact* system voice — the robot the complaint is
 // about — and the webview cannot do better, because it can only speak with
 // voices the OS installed. `POST /speak` can run a real neural model

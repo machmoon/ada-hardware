@@ -90,6 +90,19 @@ export interface TranscribeOptions {
   peak?: number;
 }
 
+/**
+ * Names the next clip may contain, in priority order (`recognitionVocabulary`
+ * in `@/lib/speech/vocabulary`). Module-level rather than an option because
+ * both callers — the wake clip and push-to-talk — should bias on the same open
+ * run, and the page is the one place that knows which run that is. The engine
+ * budgets the list; an empty list sends nothing.
+ */
+let vocabulary: readonly string[] = [];
+
+export function setVoiceVocabulary(names: readonly string[]): void {
+  vocabulary = [...names];
+}
+
 export interface Transcription {
   text: string;
   model: string;
@@ -141,7 +154,14 @@ export async function transcribe(
   }
 
   const audio_b64 = await blobToBase64(blob);
-  const payload: Record<string, string | number> = { audio_b64, mime_type: mimeType };
+  const payload: Record<string, string | number | string[]> = {
+    audio_b64,
+    mime_type: mimeType,
+  };
+  // The engine accepts at most 64 names of 64 characters and budgets the
+  // prompt itself; this only keeps an oversized list from becoming a 400.
+  const names = vocabulary.filter((n) => n.length <= 64).slice(0, 64);
+  if (names.length) payload.vocabulary = names;
   const trimmedLanguage = (language ?? "").trim();
   if (trimmedLanguage) payload.language = trimmedLanguage;
   if (purpose === "wake" || purpose === "dictate") payload.purpose = purpose;

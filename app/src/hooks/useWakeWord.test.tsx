@@ -112,7 +112,7 @@ describe("useWakeWord", () => {
   it("asks for microphone permission and turns off when it is refused", async () => {
     mockEnsureMic.mockRejectedValue(
       new Error(
-        "Microphone access is off for Hardy. Enable it in System Settings → Privacy & Security → Microphone, then click the ear again."
+        "Microphone access is off for Ada. Enable it in System Settings → Privacy & Security → Microphone, then click the ear again."
       )
     );
     const { result } = renderHook(() => useWakeWord({ ...options, onWake: vi.fn(), create }));
@@ -156,6 +156,24 @@ describe("useWakeWord", () => {
     expect(result.current.enabled).toBe(true);
     expect(FakeListener.instances.length).toBeGreaterThanOrEqual(2);
     expect(stored().wakeWord?.isEnabled).toBe(true);
+  });
+
+  it("says on the tooltip when the browser refuses to store the switch", async () => {
+    const refuse = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { result } = renderHook(() => useWakeWord({ ...options, onWake: vi.fn(), create }));
+      act(() => result.current.setEnabled(true));
+      await waitFor(() => expect(result.current.listening).toBe(true));
+      // The click still holds for this session; what it lost is said in words.
+      expect(result.current.enabled).toBe(true);
+      expect(result.current.unsaved).toBe(true);
+    } finally {
+      refuse.mockRestore();
+      quiet.mockRestore();
+    }
   });
 
   it("after the cap, a click arms a fresh listener again", async () => {
@@ -272,7 +290,7 @@ describe("useWakeWord", () => {
     };
     const { result } = renderHook(() => useWakeWord({ ...options, onWake: vi.fn(), create: spy }));
     await waitFor(() => expect(FakeListener.instances).toHaveLength(1));
-    // Nothing has been said yet: "Hardy" is required.
+    // Nothing has been said yet: "Ada" is required.
     expect(seen[0]()).toBe(false);
 
     // The name alone, from a gated window: the rest is still coming.
@@ -286,7 +304,7 @@ describe("useWakeWord", () => {
       await vi.advanceTimersByTimeAsync(CONTINUATION_MS + 10);
     });
     expect(seen[1]()).toBe(false);
-    expect(result.current.detail).toMatch(/Hey Hardy/);
+    expect(result.current.detail).toMatch(/Hey Ada/);
     vi.useRealTimers();
   });
 
@@ -502,7 +520,7 @@ describe("useWakeWord", () => {
     expect(result.current.enabled).toBe(true);
 
     // The same transcript from a window no gate could confirm is exactly what
-    // silence produces against the Hardy-primed prompt: spend nothing more.
+    // silence produces against the Ada-primed prompt: spend nothing more.
     act(() => FakeListener.instances[1].hear("", false));
     await waitFor(() => expect(result.current.enabled).toBe(false));
     expect(FakeListener.instances).toHaveLength(2);

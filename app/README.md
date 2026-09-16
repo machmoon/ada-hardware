@@ -1,29 +1,29 @@
-# Hardy
+# Ada
 
-Hardy is [silkscreen](../README.md)'s desktop app — an AI hardware engineer
+Ada is [silkscreen](../README.md)'s desktop app — an AI hardware engineer
 on your desktop, and a completely reimagined UI for the board-generation
 engine, built as a floating always-on-top overlay plus a review workbench.
 You describe a board in a sentence; the engine designs the PCB — schematic,
-placement, routing — and Hardy walks it through review toward ordering,
+placement, routing — and Ada walks it through review toward ordering,
 the way a colleague would slide a board across the bench.
 
 About the name: it is deliberately a human-feeling name rather than a product
 name. The app is supposed to feel like a colleague at the bench, not a tool,
 and a tool name would have worked against that from the first menu entry.
 
-**Kaleo** and then **Hardy** were this app's earlier names. Kaleo survives only as
+**Kaleo** and then **Ada** were this app's earlier names. Kaleo survives only as
 internal identifiers that are expensive to change and invisible to users — the
 Tauri bundle id `com.silkscreen.kaleo` (which owns the on-disk settings
 directory), the npm package and Rust crate names, `KALEO_*` environment
-variables, `~/.kaleo/`, and the `kaleo.*` storage keys. Hardy survives as the
-spoken wake word ("hey Hardy", `WAKE_WORD` in `src/lib/wake-word.ts` and the
-trained `resources/wake/hey_hardy.onnx` model), as `HARDY_REPO_ROOT`/`HARDY_PYTHON`,
-and in internal identifiers such as the terminal's `hardy` destination. Nothing
-else a user reads should say Kaleo or Hardy; if you find one that does, it is a bug.
+variables, `~/.kaleo/`, and the `kaleo.*` storage keys. Ada survives as the
+spoken wake word ("hey Ada", `WAKE_WORD` in `src/lib/wake-word.ts` and the
+trained `resources/wake/hey_ada.onnx` model), as `ADA_REPO_ROOT`/`ADA_PYTHON`,
+and in internal identifiers such as the terminal's `ada` destination. Nothing
+else a user reads should say Ada or Ada; if you find one that does, it is a bug.
 
 ## Lineage and licence
 
-Hardy is a hard fork of [Pluely](https://github.com/iamsrikanthnani/pluely)
+Ada is a hard fork of [Pluely](https://github.com/iamsrikanthnani/pluely)
 by Srikanth Nani (Tauri 2 + React 19 + TypeScript + Tailwind v4 + shadcn/ui),
 forked at v1.0.0. Full attribution, the fork point, and a dated log of every
 change from upstream live in [NOTICE.md](./NOTICE.md); upstream's own README
@@ -32,7 +32,7 @@ is preserved unmodified as [UPSTREAM-README.md](./UPSTREAM-README.md).
 The licence boundary matters more than usual here. Pluely is GPL-3.0, so this
 directory — and any binary built from it — is GPL-3.0, inside a repository
 that is otherwise MIT. What keeps the Python engine MIT is process
-separation: Hardy talks to the engine only over HTTP (`/healthz`,
+separation: Ada talks to the engine only over HTTP (`/healthz`,
 `/generate`, `/generate/stream`), exactly as the web UI does — two programs
 that communicate, not one program in two languages. Never copy code across
 the boundary in either direction; if the app needs something the API does not
@@ -41,7 +41,7 @@ if this paragraph and it ever disagree.
 
 ## Running it
 
-Hardy is a client. Start the engine first, from the repository root:
+Ada is a client. Start the engine first, from the repository root:
 
 ```bash
 # one-time setup
@@ -74,14 +74,14 @@ but no Tauri binary has been built or run. Treat the first successful
 
 ## Menu bar
 
-Hardy also sits in the macOS menu bar (the system tray on Windows and Linux)
+Ada also sits in the macOS menu bar (the system tray on Windows and Linux)
 beside the other status icons. The glyph is the mic state: an outline ring
-while Hardy is muted, a filled orb while the microphone is open. Left click
+while Ada is muted, a filled orb while the microphone is open. Left click
 shows or hides the overlay — the same toggle as the global shortcut. Right
-click opens the quick actions: **Show/Hide Hardy**, **Hardy listening** (the
+click opens the quick actions: **Show/Hide Ada**, **Ada listening** (the
 bar's mic switch; the check mark follows the real microphone, so it moves
 only once the ear has actually opened or closed), **Open dashboard**, **About
-Hardy** (the version) and **Quit Hardy**. The labels are constants in
+Ada** (the version) and **Quit Ada**. The labels are constants in
 `src-tauri/src/tray.rs`, pinned by its unit tests.
 On macOS the icon is a template
 image, so it takes the menu bar's light or dark tint like its neighbours.
@@ -92,9 +92,9 @@ Source: `src-tauri/src/tray.rs`; glyphs and the script that drew them in
 
 The mechanics of the Gemini key live in
 [docs/install.md](../docs/install.md#google_api_key-what-it-is-for); this
-section is what is specific to Hardy and to sharing a checkout with teammates.
+section is what is specific to Ada and to sharing a checkout with teammates.
 
-**Hardy never sees the Gemini key.** The key belongs to the Python engine's
+**Ada never sees the Gemini key.** The key belongs to the Python engine's
 process environment on each machine — the app is an HTTP client on loopback
 and has nowhere to put a key by design. Each teammate puts `GOOGLE_API_KEY`
 in their own repo-root `.env` (gitignored) and starts the engine as above. A
@@ -110,12 +110,12 @@ engine's `Model` protocol, and the hackathon rules require Gemini via the
 Gemini API or Vertex — a Cerebras/OpenAI/etc. key has nothing to plug into.
 The custom-AI-provider screens still visible under the dashboard are
 leftover Pluely chat plumbing scheduled for removal, not a supported path;
-keys entered there configure a chat feature Hardy does not use.
+keys entered there configure a chat feature Ada does not use.
 
 **A deployed team engine** (Cloud Run, one shared instance) is gated by a
 shared access token rather than per-person Google keys — the service holds
 the Gemini key server-side and refuses requests without the token (service
-PR #21). Hardy's Engine page takes an optional access token alongside the
+PR #21). Ada's Engine page takes an optional access token alongside the
 address; the URL validator accepts remote engines over HTTPS only, so the
 token never travels unencrypted, while plain-http stays loopback-only.
 As of 2026-09-06 the Tauri capability (`src-tauri/capabilities/default.json`)

@@ -17,6 +17,7 @@ import {
   STEP_ORDER,
   MAX_ENCLOSURE_STYLE_CHARS,
   caseDetails,
+  envelopeWarnings,
   casePayload,
   distributorLink,
   formatClock,
@@ -160,6 +161,31 @@ const StageReceipt = ({ response }: { response: StepResponse }) => {
       {engine ? ` · ${engine.label}` : ""}
       {` · ${formatClock(response.duration_s)}`}
     </p>
+  );
+};
+
+/**
+ * The step envelope's warnings that no card below already shows
+ * (`envelopeWarnings` is empty for the steps whose card does). One line per
+ * warning, the engine's words, in the warning tone: a datasheet cache that
+ * failed on `propose`, a case FreeCAD could not show, a distributor that did
+ * not answer. Before this existed those sentences were sent and never read.
+ */
+const EnvelopeWarnings = ({ response }: { response: StepResponse }) => {
+  const warnings = envelopeWarnings(response);
+  if (!warnings.length) return null;
+  return (
+    <div className="flex flex-col gap-0.5" data-testid="envelope-warnings" data-step={response.step}>
+      {warnings.map((warning) => (
+        <p
+          key={warning}
+          className="text-[11px] leading-tight text-amber-600 dark:text-amber-400"
+          data-testid="envelope-warning"
+        >
+          {warning}
+        </p>
+      ))}
+    </div>
   );
 };
 
@@ -878,9 +904,16 @@ export const StepPanel = ({
   // and the hook has no business remembering a half-typed style.
   const [caseStyle, setCaseStyle] = useState("");
   const [caseRigorous, setCaseRigorous] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const planBlock = latest?.step === "plan" ? latest.plan : null;
+  const questions = planBlock?.plan?.questions ?? [];
   const caseOffered = run.available.includes("case");
   const caseAfresh = caseStyle.trim().length > 0 || caseRigorous;
   const payloadFor = (step: StepName): Record<string, unknown> | undefined => {
+    if (step === "propose") {
+      const given = Object.fromEntries(Object.entries(answers).filter(([, v]) => v.trim()));
+      return Object.keys(given).length ? { answers: given } : undefined;
+    }
     if (step !== "case") return undefined;
     const payload = casePayload(caseStyle, caseRigorous);
     return Object.keys(payload).length ? payload : undefined;
@@ -925,6 +958,10 @@ export const StepPanel = ({
   // redesign dropped it when the review step was a count of findings, and it
   // now carries each finding's provenance, its citation and the spec-review
   // agenda, which are decisions the engineer makes rather than a number.
+  // A step with nothing to show but a warning still opens the box: the
+  // warning is the engine's one sentence about what went wrong, and a box that
+  // opens only for good news would swallow it (the envelope-warnings rule).
+  const warned = latest ? envelopeWarnings(latest).length > 0 : false;
   const stageReceipt: StepResponse | undefined =
     latest && (review || caseOutcome || order || sourcing || route || place) ? latest : undefined;
 
@@ -1057,6 +1094,40 @@ export const StepPanel = ({
         </div>
       ) : null}
 
+      {planBlock && (run.status === "waiting" || run.status === "error") ? (
+        // The brief before anything is drawn: what Ada thinks is being built
+        // and the requirements it wants settled. A blank answer means the
+        // default shown as the placeholder, and Propose says which it used.
+        <div className="flex flex-col gap-1 rounded-md border border-input/40 p-2" data-testid="plan-brief">
+          <p className="text-[11px] font-medium">{planBlock.plan?.building ?? "The plan could not be made."}</p>
+          {planBlock.warnings.map((warning) => (
+            <p key={warning} className="text-[10.5px] text-muted-foreground">{warning}</p>
+          ))}
+          {questions.map((question, index) => (
+            <div key={question.ask} className="flex flex-col gap-0.5" data-testid="plan-question">
+              <Label htmlFor={`ada-plan-q${index}`} className="text-[11px]">
+                {question.ask}
+              </Label>
+              <Input
+                id={`ada-plan-q${index}`}
+                className="h-7 text-[11px]"
+                placeholder={`Default: ${question.default}`}
+                value={answers[String(index)] ?? ""}
+                onChange={(event) =>
+                  setAnswers((previous) => ({ ...previous, [String(index)]: event.target.value }))
+                }
+                data-testid="plan-answer"
+              />
+            </div>
+          ))}
+          {questions.length ? (
+            <p className="text-[10px] text-muted-foreground">
+              Blank answers use the default. Propose circuit designs against these.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {caseOffered && (run.status === "waiting" || run.status === "error") ? (
         // The case step's inputs, shown only while it can be pressed. With
         // neither set, pressing collects the design the engine already
@@ -1173,7 +1244,7 @@ export const StepPanel = ({
         </div>
       ) : null}
 
-      {review || caseOutcome || order || sourcing || route || place || priorArt ? (
+      {review || caseOutcome || order || sourcing || route || place || priorArt || warned ? (
         // The receipts scroll inside their own box: the window stops growing
         // at OVERLAY_MAX_HEIGHT, and a BOM below that edge was simply gone,
         // with nothing to say so. The buttons above stay put.
@@ -1191,6 +1262,7 @@ export const StepPanel = ({
                 them. Findings first -- a blocker is a decision to make and a
                 table of parts is not. */}
             {stageReceipt ? <StageReceipt response={stageReceipt} /> : null}
+            {latest ? <EnvelopeWarnings response={latest} /> : null}
             {priorArt ? <PriorArtOutcome details={priorArt} /> : null}
             {place ? <PlaceOutcome details={place} /> : null}
             {route ? <RouteOutcome details={route} /> : null}

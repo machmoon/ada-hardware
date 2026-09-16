@@ -399,7 +399,7 @@ pub fn setup_window_mode<R: Runtime>(app: AppHandle<R>, mode: String) -> Result<
     apply_window_mode(&window, mode)
 }
 
-/// Whether Kaleo is frontmost: either window focused. The strip is a
+/// Whether Ada is frontmost: either window focused. The strip is a
 /// non-activating panel, so `document.hasFocus()` inside it never means the
 /// app is in front; the notification gate asks this instead.
 #[tauri::command]

@@ -21,6 +21,7 @@ import type { StepName, StepResponse } from "@/lib/silkscreen/types";
 
 /** The stages, named for the ear rather than for the rail's badge. */
 const SPOKEN_STAGE: Record<StepName, string> = {
+  plan: "the plan",
   propose: "the schematic",
   place: "the placement",
   route: "the copper",
@@ -32,6 +33,7 @@ const SPOKEN_STAGE: Record<StepName, string> = {
 
 /** What approving each stage does, as the sentence that asks for it. */
 const SPOKEN_ACTION: Record<StepName, string> = {
+  plan: "plan the design",
   propose: "draft the schematic",
   place: "place the parts",
   route: "route the copper",
@@ -43,6 +45,7 @@ const SPOKEN_ACTION: Record<StepName, string> = {
 
 /** One word that selects each stage out loud, from the command vocabulary. */
 const SPOKEN_WORD: Record<StepName, string> = {
+  plan: "plan",
   propose: "schematic",
   place: "place it",
   route: "route it",
@@ -74,10 +77,19 @@ export function shorten(text: string, max = 180): string {
  * done, and where it is — "in KiCad" is the whole reason to look up. Where
  * the bridge failed the sentence says so rather than sending them to an
  * application that has nothing new in it.
+ *
+ * Tapered: the words that approve the next stage are taught once per run
+ * (`teach`), and every later stage says only what is done and where. The
+ * full sentence at all seven stages was the "please, I don't want to hear
+ * you right now" of the 2026-09-14 demo — the phrase had been learned by the
+ * second stage, and the strip already shows what comes next. Tapering is
+ * voice-interface design guidance (shorten a prompt once the person knows
+ * it), not a pattern lifted from an open-source codebase.
  */
 export function stageReadyLine(
   latest: StepResponse,
-  available: readonly StepName[]
+  available: readonly StepName[],
+  teach = true
 ): string {
   if (available.length === 0) {
     return "Every stage has run. Nothing was ordered.";
@@ -94,6 +106,7 @@ export function stageReadyLine(
           ? " It is open in KiCad."
           : " I could not open it in KiCad; it is on disk.";
   const next = available[0];
+  if (!teach) return `${head} is done.${where}`;
   return `${head} is done.${where} Say “${SPOKEN_WORD[next]}” when you have looked, and I will ask you to confirm.`;
 }
 

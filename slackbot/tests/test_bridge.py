@@ -1,4 +1,4 @@
-"""The Slack -> Hardy bridge: filing an idea, and following it in the thread.
+"""The Slack -> Ada bridge: filing an idea, and following it in the thread.
 
 Two seams, both offline. Slack is :class:`RecordingTransport`. The engine is
 either a scripted transport (for the long-running follow loop, where the test
@@ -245,7 +245,7 @@ def test_the_thread_hears_pickup_each_step_and_each_wait_once():
     bridge, slack, _ = make_bridge(engine)
     bridge.watch("idea_1", channel="C1", thread_ts="100.1")
     assert said(slack) == [
-        "Hardy picked it up on the laptop and is starting the design.",
+        "Ada picked it up on the laptop and is starting the design.",
         "Design started on the laptop. You approve each step there; "
         "I'll post progress here.",
         "Done: propose.",
@@ -264,7 +264,7 @@ def test_nobody_picking_it_up_is_said_once_and_expiry_ends_the_thread():
             200,
             {
                 "state": "expired",
-                "detail": "no Hardy desktop accepted it within 30 minutes",
+                "detail": "no Ada desktop accepted it within 30 minutes",
             },
         )
     ]
@@ -274,7 +274,7 @@ def test_nobody_picking_it_up_is_said_once_and_expiry_ends_the_thread():
     assert sum("Still waiting" in t for t in texts) == 1
     assert (
         texts[-1]
-        == "Hardy didn't start this: no Hardy desktop accepted it within 30 minutes."
+        == "Ada didn't start this: no Ada desktop accepted it within 30 minutes."
     )
 
 

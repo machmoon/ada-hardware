@@ -241,3 +241,30 @@ def test_model_failure_is_a_502(server):
         Handler.transcribe_model_factory = previous
     assert status == 502
     assert "error" in resp
+
+
+def test_vocabulary_is_forwarded_to_the_prompt(server, monkeypatch):
+    seen = {}
+    import service.app as app_module
+
+    real = app_module.transcribe_audio
+
+    def spy(model, audio, mime_type, **kwargs):
+        seen.update(kwargs)
+        return real(model, audio, mime_type, **kwargs)
+
+    monkeypatch.setattr(app_module, "transcribe_audio", spy)
+    payload = body()
+    payload["vocabulary"] = ["ESP32-WROOM-32E", "U1"]
+    status, _ = post(server, payload)
+    assert status == 200
+    assert seen["vocabulary"] == ["ESP32-WROOM-32E", "U1"]
+
+
+def test_a_malformed_vocabulary_is_a_400_naming_the_field(server):
+    for bad in ("ESP32", [1], ["x" * 65], ["n"] * 65):
+        payload = body()
+        payload["vocabulary"] = bad
+        status, resp = post(server, payload)
+        assert status == 400, bad
+        assert "vocabulary" in resp["error"]

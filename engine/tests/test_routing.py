@@ -77,12 +77,59 @@ def routed():
 
 
 def _on_segment(px, py, ax, ay, bx, by) -> bool:
-    """Is (px,py) on the axis-aligned segment a-b, endpoints included?"""
-    if abs(ax - bx) < EPS:  # vertical
-        return abs(px - ax) < EPS and min(ay, by) - EPS <= py <= max(ay, by) + EPS
-    if abs(ay - by) < EPS:  # horizontal
-        return abs(py - ay) < EPS and min(ax, bx) - EPS <= px <= max(ax, bx) + EPS
-    return False
+    """Is (px,py) on the segment a-b, endpoints included?
+
+    Any angle: the router emits 45-degree runs as well as axis-aligned ones.
+    Collinear (cross product zero, to EPS scaled by the segment length) and
+    within the segment's bounding box. Independent of ``routing.py``.
+    """
+    vx, vy = bx - ax, by - ay
+    cross = vx * (py - ay) - vy * (px - ax)
+    if abs(cross) > EPS * max(1.0, math.hypot(vx, vy)):
+        return False
+    return (
+        min(ax, bx) - EPS <= px <= max(ax, bx) + EPS
+        and min(ay, by) - EPS <= py <= max(ay, by) + EPS
+    )
+
+
+def _along(tr, step_nm: int):
+    """Points down a track's centreline every ``step_nm`` of *its own* length,
+    endpoints included -- parametric, so a 45-degree track is sampled along
+    itself and not, as a Manhattan walk would, 41 percent past its end."""
+    dx, dy = tr.end_x_nm - tr.start_x_nm, tr.end_y_nm - tr.start_y_nm
+    n = max(1, math.ceil(math.hypot(dx, dy) / step_nm))
+    for k in range(n + 1):
+        yield tr.start_x_nm + dx * k / n, tr.start_y_nm + dy * k / n
+
+
+def _seg_seg_distance(a, b) -> float:
+    """Centreline-to-centreline distance between two tracks, in nm, at any
+    angle. The same closed form as ``audit/geometry.py:seg_seg_distance_nm``,
+    written out here rather than imported so the check shares no code with
+    anything under test."""
+    def pt_seg(px, py, ax, ay, bx, by):
+        vx, vy = bx - ax, by - ay
+        ll = vx * vx + vy * vy
+        t = 0.0 if ll == 0 else ((px - ax) * vx + (py - ay) * vy) / ll
+        t = max(0.0, min(1.0, t))
+        return math.hypot(px - (ax + t * vx), py - (ay + t * vy))
+
+    a0, a1 = (a.start_x_nm, a.start_y_nm), (a.end_x_nm, a.end_y_nm)
+    b0, b1 = (b.start_x_nm, b.start_y_nm), (b.end_x_nm, b.end_y_nm)
+    d1 = (a1[0] - a0[0], a1[1] - a0[1])
+    d2 = (b1[0] - b0[0], b1[1] - b0[1])
+    # Proper crossing: distance zero.
+    def orient(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    if (orient(a0, a1, b0) * orient(a0, a1, b1) < 0
+            and orient(b0, b1, a0) * orient(b0, b1, a1) < 0):
+        return 0.0
+    del d1, d2
+    return min(
+        pt_seg(*a0, *b0, *b1), pt_seg(*a1, *b0, *b1),
+        pt_seg(*b0, *a0, *a1), pt_seg(*b1, *a0, *a1),
+    )
 
 
 class _Union:
@@ -247,8 +294,13 @@ def test_the_emitted_copper_actually_joins_each_net(routed):
     """The claim the router makes, checked against the file it produced."""
     board, result = routed
     components = connected_nets(emit_kicad_pcb(board))
-    assert set(components) == set(result.routed)
+    # A filled net's pads are joined by the copper pour KiCad fills, not by
+    # tracks in this file, so it appears here and is checked in
+    # test_ground_fill.py against KiCad's own DRC instead.
+    assert set(components) == set(result.routed) | set(result.filled)
     for net, groups in components.items():
+        if net in result.filled:
+            continue
         assert len(groups) == 1, (
             f"net {net} is in {len(groups)} disconnected pieces: {groups}"
         )
@@ -277,10 +329,26 @@ def test_routing_is_deterministic():
     assert outputs[0] == outputs[1]
 
 
-def test_every_track_is_axis_aligned(routed):
+def test_every_track_is_axis_aligned_or_exactly_forty_five(routed):
+    """Octilinear copper: every track is horizontal, vertical, or a true
+    45-degree diagonal (|dx| == |dy|). Stubs are the one exception the
+    router owns up to -- an escape starts on a pad's exact centre, which is
+    off the lattice by design -- so a stub leg is checked as *some* straight
+    segment and its angle is not asserted."""
     board, _ = routed
-    for t in board.tracks:
-        assert t.start_x_nm == t.end_x_nm or t.start_y_nm == t.end_y_nm, t
+    lattice = {t for t in board.tracks if _on_lattice(t)}
+    assert lattice, "no lattice-aligned track at all"
+    for t in lattice:
+        dx, dy = abs(t.end_x_nm - t.start_x_nm), abs(t.end_y_nm - t.start_y_nm)
+        assert dx == 0 or dy == 0 or dx == dy, t
+
+
+def _on_lattice(t, grid_nm: int = mm(0.25)) -> bool:
+    """Both endpoints on the 0.25 mm lattice (a stub leg has one that is not)."""
+    return all(
+        v % grid_nm == 0
+        for v in (t.start_x_nm, t.start_y_nm, t.end_x_nm, t.end_y_nm)
+    )
 
 
 def test_no_copper_leaves_the_board_outline(routed):
@@ -324,7 +392,9 @@ VIA_BOARD = {
 @pytest.fixture(scope="module")
 def via_routed():
     board = build_board(parse_circuit_spec(VIA_BOARD), time_limit_s=10.0)
-    result = route_board(board)
+    # No ground fill here on purpose: this fixture exists to exercise vias and
+    # inter-net clearance, and with GND poured the board needs no via at all.
+    result = route_board(board, ground_fill=False)
     assert result.vias, "fixture is meant to exercise vias and produced none"
     return board, result
 
@@ -341,13 +411,8 @@ def _copper_discs(board):
     out = []
     for tr in board.tracks:
         r = tr.width_nm / 2
-        dx = (tr.end_x_nm > tr.start_x_nm) - (tr.end_x_nm < tr.start_x_nm)
-        dy = (tr.end_y_nm > tr.start_y_nm) - (tr.end_y_nm < tr.start_y_nm)
-        length = abs(tr.end_x_nm - tr.start_x_nm) + abs(tr.end_y_nm - tr.start_y_nm)
-        for k in range(0, length + 1, step):
-            out.append(
-                (tr.net, tr.layer, tr.start_x_nm + dx * k, tr.start_y_nm + dy * k, r)
-            )
+        for x, y in _along(tr, step):
+            out.append((tr.net, tr.layer, x, y, r))
     for via in board.vias:
         # A barrel pierces both layers, so it is copper on each of them.
         for layer in (Layer.TOP, Layer.BOTTOM):
@@ -667,14 +732,8 @@ def _samples(result, net: str):
     for tr in result.tracks:
         if tr.net != net:
             continue
-        dx = (tr.end_x_nm > tr.start_x_nm) - (tr.end_x_nm < tr.start_x_nm)
-        dy = (tr.end_y_nm > tr.start_y_nm) - (tr.end_y_nm < tr.start_y_nm)
-        length = abs(tr.end_x_nm - tr.start_x_nm) + abs(tr.end_y_nm - tr.start_y_nm)
-        for k in range(0, length + 1, step):
-            yield (
-                tr.layer, tr.start_x_nm + dx * k, tr.start_y_nm + dy * k,
-                tr.width_nm // 2,
-            )
+        for x, y in _along(tr, step):
+            yield tr.layer, x, y, tr.width_nm // 2
     for via in result.vias:
         if via.net == net:
             for layer in (Layer.TOP, Layer.BOTTOM):
@@ -1190,12 +1249,7 @@ def test_the_fine_pitch_escape_does_not_buy_completion_with_a_short():
     bad = []
     for tr in result.tracks:
         r = tr.width_nm / 2
-        dx = (tr.end_x_nm > tr.start_x_nm) - (tr.end_x_nm < tr.start_x_nm)
-        dy = (tr.end_y_nm > tr.start_y_nm) - (tr.end_y_nm < tr.start_y_nm)
-        length = abs(tr.end_x_nm - tr.start_x_nm) + abs(tr.end_y_nm - tr.start_y_nm)
-        for k in range(0, length + 1, step):
-            x = tr.start_x_nm + dx * k
-            y = tr.start_y_nm + dy * k
+        for x, y in _along(tr, step):
             for pad in pads:
                 if pad.net == tr.net:
                     continue
@@ -1267,14 +1321,9 @@ def test_a_pad_smaller_than_the_lattice_still_blocks_copper():
     step = mm(0.05)
     worst = None
     for tr in result.tracks:
-        dx = (tr.end_x_nm > tr.start_x_nm) - (tr.end_x_nm < tr.start_x_nm)
-        dy = (tr.end_y_nm > tr.start_y_nm) - (tr.end_y_nm < tr.start_y_nm)
-        length = abs(tr.end_x_nm - tr.start_x_nm) + abs(tr.end_y_nm - tr.start_y_nm)
-        for k in range(0, length + 1, step):
-            ex = max(0.0, abs(tr.start_x_nm + dx * k - blocker.x_nm)
-                     - blocker.w_nm / 2)
-            ey = max(0.0, abs(tr.start_y_nm + dy * k - blocker.y_nm)
-                     - blocker.h_nm / 2)
+        for x, y in _along(tr, step):
+            ex = max(0.0, abs(x - blocker.x_nm) - blocker.w_nm / 2)
+            ey = max(0.0, abs(y - blocker.y_nm) - blocker.h_nm / 2)
             gap = math.hypot(ex, ey) - tr.width_nm / 2
             worst = gap if worst is None else min(worst, gap)
     assert worst is None or worst >= required - 1, (
@@ -1421,12 +1470,7 @@ def _foreign_pad_gaps(pads: list[RoutePad], tracks) -> list[tuple]:
     bad = []
     for tr in tracks:
         r = tr.width_nm / 2
-        length = abs(tr.end_x_nm - tr.start_x_nm) + abs(tr.end_y_nm - tr.start_y_nm)
-        dx = (tr.end_x_nm > tr.start_x_nm) - (tr.end_x_nm < tr.start_x_nm)
-        dy = (tr.end_y_nm > tr.start_y_nm) - (tr.end_y_nm < tr.start_y_nm)
-        for k in range(0, length + 1, step):
-            x = tr.start_x_nm + dx * k
-            y = tr.start_y_nm + dy * k
+        for x, y in _along(tr, step):
             for pad in pads:
                 if pad.net == tr.net:
                     continue
@@ -1584,17 +1628,10 @@ def test_a_later_net_may_not_run_over_an_escape():
     worst = None
     for a in (t for t in result.tracks if t.net == "Z"):
         for b in theirs:
-            ex = max(
-                0,
-                min(b.start_x_nm, b.end_x_nm) - max(a.start_x_nm, a.end_x_nm),
-                min(a.start_x_nm, a.end_x_nm) - max(b.start_x_nm, b.end_x_nm),
-            )
-            ey = max(
-                0,
-                min(b.start_y_nm, b.end_y_nm) - max(a.start_y_nm, a.end_y_nm),
-                min(a.start_y_nm, a.end_y_nm) - max(b.start_y_nm, b.end_y_nm),
-            )
-            gap = math.hypot(ex, ey) - a.width_nm / 2 - b.width_nm / 2
+            # Segment to segment at any angle: a bounding-box overhang was
+            # right for axis-aligned copper and wrong for a diagonal, whose
+            # box is far larger than its copper.
+            gap = _seg_seg_distance(a, b) - a.width_nm / 2 - b.width_nm / 2
             worst = gap if worst is None else min(worst, gap)
     assert worst is None or worst >= required - 1, (
         f"two nets' copper come {worst / 1e6:.3f} mm apart, under the "
@@ -1886,3 +1923,348 @@ def test_the_edge_rule_keeps_routing_deterministic():
     assert first.tracks == second.tracks
     assert first.vias == second.vias
     assert first.unrouted == second.unrouted
+
+
+# --------------------------------------------------------------------------
+# Octilinear routing (2026-09-13): 45-degree traces.
+#
+# The move set grew four diagonal steps priced at 17 against 12 for an
+# orthogonal one (routing.py `_MOVES`), so A* takes the diagonal across every
+# corner whose inside node is free. Three things are pinned here, each with
+# numbers measured on the orthogonal router before the change so the claim is
+# "better than what shipped", not "good":
+#   * completion never regresses (a board with 45-degree copper and more
+#     ratsnest is worse, not better);
+#   * a right-angle corner survives on lattice copper only where the inside
+#     node is blocked -- on these fixtures, nowhere; the L-shaped pad escapes
+#     are off-lattice copper the search does not own and are excluded;
+#   * the copper is shorter (Euclidean length now, so the number is honest).
+# --------------------------------------------------------------------------
+
+#: Measured with the orthogonal move set, same fixtures, same seeds:
+#: (nets unrouted, right-angle corners on lattice copper, copper mm).
+_ORTHOGONAL_BASELINE = {
+    "regulator": (0, 8, 46.5),
+    "via_board": (0, 13, 85.5),
+    "header": (1, 5, 26.5),  # the one unrouted net has a single pad
+    "off_phase": (0, 34, 65.6),
+}
+
+
+def _corner_angles(tracks, *, lattice_only: bool, where: bool = False):
+    """Interior angle at every point where exactly two tracks of one net meet
+    on one layer, in degrees, computed from the endpoints alone."""
+    ends: dict[tuple, list] = {}
+    for t in tracks:
+        if lattice_only and not _on_lattice(t):
+            continue
+        for p in ((t.start_x_nm, t.start_y_nm), (t.end_x_nm, t.end_y_nm)):
+            ends.setdefault((t.net, t.layer, p), []).append(t)
+    angles = []
+    for (_, _, p), pair in ends.items():
+        if len(pair) != 2:
+            continue
+
+        def away(t, at=p):
+            o = (
+                (t.end_x_nm, t.end_y_nm)
+                if (t.start_x_nm, t.start_y_nm) == at
+                else (t.start_x_nm, t.start_y_nm)
+            )
+            return o[0] - at[0], o[1] - at[1]
+
+        (ax, ay), (bx, by) = away(pair[0]), away(pair[1])
+        na, nb = math.hypot(ax, ay), math.hypot(bx, by)
+        if na == 0 or nb == 0:
+            continue
+        cos = max(-1.0, min(1.0, (ax * bx + ay * by) / (na * nb)))
+        angle = math.degrees(math.acos(cos))
+        located = (angle, pair[0].net, p, ((ax, ay), (bx, by)))
+        angles.append(located if where else angle)
+    return angles
+
+
+def _fixture_results():
+    from silkscreen.board import board_pads
+
+    reg = build_board(parse_circuit_spec(REGULATOR), time_limit_s=5.0)
+    yield "regulator", route_board(reg), board_pads(reg)
+    via = build_board(parse_circuit_spec(VIA_BOARD), time_limit_s=10.0)
+    yield "via_board", route_board(via), board_pads(via)
+    hdr = _header_board()
+    yield "header", route_board(hdr), board_pads(hdr)
+    pads = _off_phase_row()
+    yield "off_phase", route(pads, **_OFF_PHASE_AREA), pads
+
+
+def _inside_own_pad(net, p, pads) -> bool:
+    """Is point ``p`` (nm) within a pad of ``net``? A track may turn a right
+    angle *on its pad* -- that node is the pad's, not a free lattice node --
+    and the chamfer claim is about copper the search owned."""
+    return any(
+        pad.net == net
+        and abs(p[0] - pad.x_nm) <= pad.w_nm / 2 + 1
+        and abs(p[1] - pad.y_nm) <= pad.h_nm / 2 + 1
+        for pad in pads
+    )
+
+
+def _corner_is_blocked(net, p, legs, pads) -> bool:
+    """Would the diagonal across this right angle have run through a node a
+    foreign pad's clearance owns? The inside node of the corner is one grid
+    step along both legs; if a pad of another net comes within half a track
+    plus the clearance of it, the corner rule rightly refused the chamfer and
+    the right angle is the honest answer. Independent geometry: rectangle to
+    point, the same distance every clearance test here uses."""
+    (ax, ay), (bx, by) = legs
+    g = mm(0.25)
+    sx = (ax > 0) - (ax < 0) + (bx > 0) - (bx < 0)
+    sy = (ay > 0) - (ay < 0) + (by > 0) - (by < 0)
+    node = (p[0] + sx * g, p[1] + sy * g)
+    # A pad's keep-out is its rectangle grown per axis by clearance plus half
+    # a track, node centre strictly inside (KiCad's own hull rule, quoted in
+    # routing.py `span`), so that is the shape measured here.
+    keep = DEFAULT_TRACK_WIDTH_NM // 2 + DEFAULT_ROUTE_CLEARANCE_NM
+    for pad in pads:
+        if pad.net == net:
+            continue
+        if (abs(node[0] - pad.x_nm) < pad.w_nm / 2 + keep
+                and abs(node[1] - pad.y_nm) < pad.h_nm / 2 + keep):
+            return True
+    return False
+
+
+def test_octilinear_copper_never_loses_a_net_and_drops_every_free_corner():
+    for name, result, pads in _fixture_results():
+        unrouted, corners_before, copper_before = _ORTHOGONAL_BASELINE[name]
+        assert len(result.unrouted) <= unrouted, (name, result.unrouted)
+        right = [
+            (a, net, p)
+            for a, net, p, legs in _corner_angles(
+                result.tracks, lattice_only=True, where=True
+            )
+            if abs(a - 90) < 1
+            and not _inside_own_pad(net, p, pads)
+            and not _corner_is_blocked(net, p, legs, pads)
+        ]
+        acute = [a for a in _corner_angles(result.tracks, lattice_only=True) if a < 89]
+        assert not right, (
+            f"{name}: {len(right)} right-angle corner(s) on free lattice copper "
+            f"{right}, was {corners_before}"
+        )
+        assert not acute, f"{name}: acute corner(s) {acute}"
+        assert result.routed_length_nm / 1e6 < copper_before, (
+            f"{name}: {result.routed_length_nm / 1e6:.1f} mm of copper, "
+            f"was {copper_before}"
+        )
+
+
+def test_every_lattice_corner_is_a_forty_five_degree_chamfer(routed):
+    """Two tracks meeting on lattice copper meet at 135 degrees (an
+    orthogonal run into a diagonal) and never at 90 or sharper.
+
+    Two exemptions, the ones the octilinear baseline test already makes: a
+    right angle on the net's own pad or against copper that blocks the
+    chamfer node. A straight 180 is a run split where a branch joins it."""
+    from silkscreen.board import board_pads
+
+    board, result = routed
+    pads = board_pads(board)
+    angles = [
+        a
+        for a, net, p, legs in _corner_angles(
+            result.tracks, lattice_only=True, where=True
+        )
+        if abs(a - 180) >= 1
+        and not _inside_own_pad(net, p, pads)
+        and not _corner_is_blocked(net, p, legs, pads)
+    ]
+    assert angles, "no corner at all"
+    assert all(abs(a - 135) < 1 for a in angles), sorted(angles)
+
+
+def test_two_nets_diagonals_never_cross_one_cell():
+    """Nets A and B want to cross each other diagonally on one layer. The
+    corner rule forbids B's diagonal through A's committed corner nodes, so
+    either B detours or B is left unrouted -- never two diagonals through
+    the same cell, which no node check would have seen."""
+    area = dict(min_x_nm=0, min_y_nm=0, max_x_nm=mm(6.0), max_y_nm=mm(6.0))
+
+    def pad(net, x, y, ref):
+        return RoutePad(net=net, x_nm=mm(x), y_nm=mm(y), w_nm=mm(0.4),
+                        h_nm=mm(0.4), layer=Layer.TOP, ref=ref, number="1")
+
+    pads = [pad("A", 1.5, 1.5, "A1"), pad("A", 4.5, 4.5, "A2"),
+            pad("B", 1.5, 4.5, "B1"), pad("B", 4.5, 1.5, "B2")]
+    result = route(pads, two_layer=False, **area)
+    required = DEFAULT_ROUTE_CLEARANCE_NM
+    for a in result.tracks:
+        for b in result.tracks:
+            if a.net == b.net:
+                continue
+            gap = _seg_seg_distance(a, b) - a.width_nm / 2 - b.width_nm / 2
+            assert gap >= required - 1, (a, b, gap)
+    # And the outcome is stated: one of the two is routed, the other is
+    # either routed round the first or named as unrouted -- not silent.
+    assert set(result.routed) | set(result.unrouted) == {"A", "B"}
+
+
+@pytest.mark.parametrize(
+    "grid_mm, width_mm, clearance_mm",
+    [
+        (0.25, 0.2, 0.2), (0.5, 0.2, 0.2), (0.25, 0.3, 0.3),
+        (0.1, 0.2, 0.2), (0.25, 0.15, 0.15),
+    ],
+)
+def test_a_diagonal_steps_copper_is_kept_clear_by_the_discs_and_the_corner_rule(
+    grid_mm, width_mm, clearance_mm
+):
+    """Independent geometry for the rule routing.py states in `_astar`.
+
+    A diagonal step's copper runs between two nodes. The router keeps
+    foreign copper off the *nodes* strictly inside ``width + clearance`` of
+    each endpoint (its discs) and off the two corner nodes (the no-corner-
+    cutting rule). The claim: every lattice node a foreign net may still
+    occupy is at least ``width + clearance`` from the diagonal's centreline,
+    so the copper between the nodes is as protected as the nodes are. This
+    computes it from scratch at several grids and clearances -- the default
+    alone would prove nothing about the others.
+    """
+    g, r = grid_mm, width_mm + clearance_mm
+    a, b = (0.0, 0.0), (g, g)
+    corners = {(g, 0.0), (0.0, g)}
+    reach = int(math.ceil(2 * r / g)) + 2
+
+    def seg_dist(px, py):
+        t = max(0.0, min(1.0, ((px - a[0]) * g + (py - a[1]) * g) / (2 * g * g)))
+        return math.hypot(px - (a[0] + t * g), py - (a[1] + t * g))
+
+    worst = None
+    for i in range(-reach, reach + 1):
+        for j in range(-reach, reach + 1):
+            p = (i * g, j * g)
+            if math.hypot(p[0] - a[0], p[1] - a[1]) < r - 1e-9:
+                continue  # inside a's disc: never foreign
+            if math.hypot(p[0] - b[0], p[1] - b[1]) < r - 1e-9:
+                continue  # inside b's disc
+            if p in corners:
+                continue  # the corner rule
+            d = seg_dist(*p)
+            worst = d if worst is None else min(worst, d)
+    assert worst is not None
+    assert worst >= r - 1e-9, (
+        f"a foreign node may sit {worst:.3f} mm from a diagonal that needs {r:.3f}"
+    )
+
+
+def test_the_audit_finds_no_acid_trap_on_octilinear_copper(routed, tmp_path):
+    """The visual review's ``acute-angles`` rule (audit/rules.py) reads the
+    emitted file with its own geometry, not the router's. With diagonals
+    in the move set and the no-acute-turn rule, a routed board must give it
+    nothing to report -- an outcome the router now enforces, not luck (the
+    rule's threshold is 45 degrees exactly and a chamfer meets at 135)."""
+    from silkscreen.audit import load_audit_board
+    from silkscreen.audit.effort import profile_for
+    from silkscreen.audit.rules import _acute_angles
+
+    board, _ = routed
+    path = tmp_path / "octilinear.kicad_pcb"
+    path.write_text(emit_kicad_pcb(board), encoding="utf-8")
+    findings = _acute_angles(load_audit_board(path), profile_for("standard"))
+    assert findings == [], [f.title for f in findings]
+
+
+# --------------------------------------------------------------------------
+# Live narration (2026-09-13): ``on_net`` for showing copper as it is laid.
+# --------------------------------------------------------------------------
+
+
+def test_on_net_announces_each_committed_net_with_the_copper_the_result_carries():
+    """One ``committed`` per routed net, in commit order, carrying exactly
+    the tracks and vias the result ends up with for that net -- so a watcher
+    drawing them into an editor draws the file, not an approximation."""
+    seen: list[tuple[str, str, list, list]] = []
+    board = build_board(parse_circuit_spec(REGULATOR), time_limit_s=5.0)
+    result = route_board(board, on_net=lambda *a: seen.append(a))
+    assert [a for a, *_ in seen] == ["committed"] * len(result.routed)
+    assert [n for _, n, *_ in seen] == result.routed
+    for _, net, tracks, vias in seen:
+        assert tracks == [t for t in result.tracks if t.net == net]
+        assert vias == [v for v in result.vias if v.net == net]
+    # Nothing is announced when nobody asked: the default is a no-op.
+    assert route_board(
+        build_board(parse_circuit_spec(REGULATOR), time_limit_s=5.0)
+    ).routed == result.routed
+
+
+def test_on_net_says_lifted_when_rip_up_takes_a_net_off_the_board():
+    """The order trap: A is committed, then lifted to free B's channel, then
+    committed again the long way. A watcher that only heard ``committed``
+    would keep A's first copper on screen -- copper the file does not have."""
+    seen: list[tuple[str, str]] = []
+    result = route(
+        _order_trap(escape=True), **_TRAP_AREA, two_layer=False,
+        on_net=lambda action, net, *_: seen.append((action, net)),
+    )
+    assert sorted(result.routed) == ["A", "B"]
+    assert seen[0] == ("committed", "A")
+    assert ("lifted", "A") in seen
+    lifted = seen.index(("lifted", "A"))
+    assert ("committed", "B") in seen[lifted:]
+    assert ("committed", "A") in seen[lifted:]
+    # Each net's last announcement is a commit, matching the routed list.
+    last = {net: action for action, net in seen}
+    assert last == {"A": "committed", "B": "committed"}
+
+
+# --------------------------------------------------- cleanup: dangling copper
+
+
+def _t(x0, y0, x1, y1, layer=None, net="N"):
+    from silkscreen.packing import Layer
+    from silkscreen.routing import Track
+
+    return Track(x0, y0, x1, y1, layer or Layer.TOP, net, 250_000)
+
+
+def test_a_branch_meeting_a_run_mid_segment_is_split_not_pruned():
+    """KiCad joins tracks only at shared endpoints; copper that meets a run
+    mid-segment is connected, and must be given the endpoint KiCad needs."""
+    from silkscreen.packing import Layer
+    from silkscreen.routing import RoutePad, prune_dangling, split_at_junctions
+
+    run = _t(0, 0, 4_000_000, 4_000_000)  # a diagonal
+    branch = _t(2_000_000, 2_000_000, 2_000_000, 5_000_000)  # ends on its middle
+    pads = [
+        RoutePad("N", 0, 0, 600_000, 600_000),
+        RoutePad("N", 4_000_000, 4_000_000, 600_000, 600_000),
+        RoutePad("N", 2_000_000, 5_000_000, 600_000, 600_000),
+    ]
+    layers = (Layer.TOP, Layer.BOTTOM)
+    kept, _ = prune_dangling([run, branch], [], pads, layers)
+    assert len(kept) == 2  # nothing about this is dangling
+    split = split_at_junctions(kept)
+    ends = {(t.start_x_nm, t.start_y_nm) for t in split} | {
+        (t.end_x_nm, t.end_y_nm) for t in split
+    }
+    assert len(split) == 3 and (2_000_000, 2_000_000) in ends
+
+
+def test_a_dead_branch_is_pruned_and_a_via_in_pad_is_kept():
+    from silkscreen.packing import Layer
+    from silkscreen.routing import RoutePad, Via, prune_dangling
+
+    layers = (Layer.TOP, Layer.BOTTOM)
+    pads = [
+        RoutePad("N", 0, 0, 600_000, 600_000),
+        RoutePad("N", 5_000_000, 0, 600_000, 600_000),
+    ]
+    live = _t(0, 0, 0, 1_000_000, Layer.BOTTOM)  # from a via in pad 1 ...
+    back = _t(0, 1_000_000, 5_000_000, 1_000_000, Layer.BOTTOM)
+    down = _t(5_000_000, 1_000_000, 5_000_000, 0, Layer.BOTTOM)  # ... to a via in pad 2
+    dead = _t(2_000_000, 1_000_000, 2_000_000, 3_000_000, Layer.BOTTOM)  # leads nowhere
+    vias = [Via(0, 0, "N", 600_000, 300_000), Via(5_000_000, 0, "N", 600_000, 300_000)]
+    tracks, kept_vias = prune_dangling([live, back, down, dead], vias, pads, layers)
+    assert dead not in tracks and {live, back, down} <= set(tracks)
+    # Each via joins the bottom-layer track to the SMD pad it sits in on top.
+    assert len(kept_vias) == 2

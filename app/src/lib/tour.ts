@@ -55,7 +55,7 @@ export const TOUR_STOPS: readonly TourStop[] = [
     route: "/workbench",
     title: "Steps land in KiCad",
     body:
-      "Each step Hardy finishes — place, route, review — is written into the open KiCad project. Press a step in the strip and look at KiCad, not here.",
+      "Each step Ada finishes — place, route, review — is written into the open KiCad project. Press a step in the strip and look at KiCad, not here.",
   },
   {
     id: "integrations",

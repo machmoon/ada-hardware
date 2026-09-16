@@ -105,7 +105,7 @@ from typing import Any
 
 from . import rules
 from .board_shape import BoardEnvelope, Layer, MountingHole
-from .cad import EnclosureModel, require_kernel
+from .cad import EDGE_NEAR_NM, EnclosureModel, require_kernel
 from .errors import KernelFitError
 from .ir import MIN_WALL_NM, EnclosureSpec
 
@@ -707,6 +707,30 @@ def _plug_prisms(ctx: _Context) -> list[tuple[str, Any]]:
     return out
 
 
+def _plug_reach_gap_mm(ctx: _Context, cutout_id: str) -> float | None:
+    """How far the plug prism for ``cutout_id`` stops short of its
+    receptacle, in mm along the plug's axis: the distance from the board's
+    edge on the declared face to the part's nearest edge. Zero for a part at
+    that edge; ``None`` for an unknown cutout or ref, or a top cutout."""
+    cutout = next((c for c in ctx.spec.cutouts if c.id == cutout_id), None)
+    if cutout is None or cutout.face == "top":
+        return None
+    part = next((p for p in ctx.envelope.parts if p.ref == cutout.ref), None)
+    if part is None:
+        return None
+    x0, y0, x1, y1 = ctx.part_rect_mm(part)
+    bb = ctx.board_bb
+    if cutout.face == "left":
+        gap = x0 - bb.min.X
+    elif cutout.face == "right":
+        gap = bb.max.X - x1
+    elif cutout.face == "front":
+        gap = y0 - bb.min.Y
+    else:
+        gap = bb.max.Y - y1
+    return max(0.0, float(gap))
+
+
 def _cutout_admits_plug(ctx: _Context) -> Clause:
     plugs = _plug_prisms(ctx)
     if not plugs:
@@ -725,6 +749,24 @@ def _cutout_admits_plug(ctx: _Context) -> Clause:
             words.append(f"{cid}: plug prism has no volume")
             failed = True
             margins.append(-1.0)
+            continue
+        # The plug enters the declared wall and stops at the board's edge.
+        # It has to *reach the receptacle* there: a cutout declared on a wall
+        # the part is nowhere near admits a plug into empty cavity with the
+        # connector sealed behind plastic on another wall, and the volume
+        # test below cannot see that (the cavity is void). The same
+        # EDGE_NEAR_NM rule cad.py applies at build time is measured here on
+        # the model, so the clause gates on its own rather than trusting the
+        # build gate it was written to stand behind (TODO.txt feature 28).
+        short = _plug_reach_gap_mm(ctx, cid)
+        if short is not None and short > _mm(EDGE_NEAR_NM):
+            words.append(
+                f"{cid}: the plug entering the declared wall stops {short:.3f} mm "
+                f"short of its receptacle (limit {_mm(EDGE_NEAR_NM):.1f} mm); "
+                "the part is not at that wall"
+            )
+            failed = True
+            margins.append(-(short - _mm(EDGE_NEAR_NM)))
             continue
         remaining = prism.cut(ctx.base)
         if ctx.lid_assembled is not None:
@@ -908,6 +950,16 @@ def _wall_samples(
         [(_mm(x), _mm(y)) for _, x, y in ctx.model.standoffs] if name == "base" else []
     )
     bed_z = _bbox(shape).min.Z
+    # The lid's label is a deboss of LABEL_DEPTH_NM into the outer (bed)
+    # face, so the plate under the letters is ``wall - depth`` by design.
+    # A ray from the inner face that leaves the part at that height, into a
+    # pocket open to the bed, crossed exactly that plate: it needs
+    # ``wall - depth`` (never less than the printable minimum), not the
+    # whole spec wall. Read from the exit point rather than assumed, so a
+    # shallower cut (cad.py keeps MIN_WALL_NM under the letters) is scored
+    # by what was actually cut.
+    labelled = name == "lid" and bool(ctx.spec.label)
+    label_depth = _mm(rules.LABEL_DEPTH_NM) if labelled else 0.0
     out = []
     for face in faces:
         for p in _face_samples(face):
@@ -927,7 +979,14 @@ def _wall_samples(
             # A ray that exits into a void narrower than a boss and re-enters
             # crossed a boss wall or a rib around a bore, not the case wall.
             narrow_void = len(hits) >= 2 and hits[1][0] - t < 2 * boss_r
-            if narrow_void:
+            pocket = hits[0][1].Z - bed_z if n.Z > 0.9 and len(hits) == 1 else 0.0
+            under_label = (
+                label_depth > 0 and _BED_Z_MM < pocket <= label_depth + _WALL_TOL_MM
+            )
+            if under_label:
+                required = max(printable, wall - pocket)
+                where = f"{name} plate under the label deboss ({pocket:.3f} mm deep)"
+            elif narrow_void:
                 required, where = printable, f"{name} wall around a bore"
             elif abs(n.Z) > 0.9 and any(
                 math.hypot(p.X - bx, p.Y - by) <= boss_r for bx, by in bosses

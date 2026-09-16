@@ -337,7 +337,7 @@ network calls; Gemini and the opt-in placement providers sit behind policy adapt
 - Pure-integer nanometre arithmetic end to end, because unit confusion between
   millimetres, mils, and KiCad's internal nanometres is a silent, board-destroying class
   of bug
-- 3356 tests that run with no network, no API key, and no KiCad installed
+- 3807 tests that run with no network, no API key, and no KiCad installed
 
 Splitting it this way is the point. The parts that must be *correct* are testable
 offline. The parts that must be *smart* are the ones talking to a model.
@@ -395,7 +395,7 @@ valuable engineering artifact we produced was an honest list of what was actuall
 What we're proud of in the new one:
 
 - **The deterministic kernel has no network calls.** Every correctness-critical path is tested offline.
-- **3356 tests, and the interesting ones are regressions** — each pins down a specific bug
+- **3807 tests, and the interesting ones are regressions** — each pins down a specific bug
   that shipped in the previous version and can never ship again.
 - **A validation layer whose job is to say no.** The IR makes a floating capacitor and a
   hallucinated pin unrepresentable rather than merely unlikely.
@@ -436,7 +436,7 @@ resolve — and none of its code: upstream is Windows-only Electron by its autho
 statement, and the in-window pointer we shipped (feature 8) is a fresh Svelte
 implementation. The OS-level overlay that would most resemble MudrikNow is still unbuilt.
 Nothing in `engine/`, `service/`, or `scripts/` imports from it, it is
-excluded from lint and tests, and it contributes nothing to the 3356 tests or to
+excluded from lint and tests, and it contributes nothing to the 3807 tests or to
 any figure quoted in this document.
 
 `vendor/openwhispr/` is not our code either. It is
@@ -447,7 +447,7 @@ voice input that **is** built (feature 6b) lives in `frontend/src/lib/voice.js`
 and uses the browser's own Web Speech API, importing nothing from here. Same
 standing as above: excluded from lint and tests, contributing to no quoted figure.
 
-**Hardy's voice** is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), which is
+**Ada's voice** is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), which is
 **Apache-2.0 for its code *and* its weights** — unusually, and that is exactly why it was
 chosen over better-sounding alternatives. It is not vendored: the weights are downloaded by
 an operator to `~/.kaleo/voices/kokoro/` and the service says so in words when they are

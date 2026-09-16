@@ -19,6 +19,7 @@ import {
   readSummaryMode,
   specReviewFrom,
   specReviewOffer,
+  agendaFailure,
   summaryFields,
   writeSummaryMode,
 } from "./deliver";
@@ -202,7 +203,7 @@ describe("needsGoogleSignIn", () => {
         oauth_client: true,
         signed_in: false,
         token: "missing",
-        hints: ["sign in with Google from Hardy's Send panel"],
+        hints: ["sign in with Google from Ada's Send panel"],
       })
     ).toBe(true);
     // Older engines: no oauth_client flag, only the CLI hint.
@@ -236,12 +237,12 @@ describe("hintFor", () => {
       token: "missing",
       hints: [
         "Google Chat: set GOOGLEAPPS_CHAT_WEBHOOK in the service's environment (the service does not read .env)",
-        "Gmail and Calendar: sign in with Google from Hardy's Send panel (or run `python -m googleapps auth`; token at /x)",
+        "Gmail and Calendar: sign in with Google from Ada's Send panel (or run `python -m googleapps auth`; token at /x)",
       ],
     };
     expect(hintFor(config, "chat")).toContain("GOOGLEAPPS_CHAT_WEBHOOK");
     expect(hintFor(config, "chat")).not.toContain("googleapps auth");
-    expect(hintFor(config, "email")).toContain("Hardy's Send panel");
+    expect(hintFor(config, "email")).toContain("Ada's Send panel");
     expect(hintFor(config, "calendar")).toContain("python -m googleapps auth");
   });
 
@@ -367,6 +368,30 @@ describe("spec review", () => {
     expect(offer.note).toBe("No blockers — nothing needs a meeting.");
     expect(blockingItems(AGENDA).map((i) => i.topic)).toEqual(["Input transient rating"]);
     expect(specReviewOffer([step({ step: "review", stage: "routed", spec_review: AGENDA })]).note).toBe("");
+  });
+
+  it("names an agenda the engine could not prepare instead of calling it 'no agenda'", () => {
+    const failedAgenda = step({
+      step: "review",
+      stage: "routed",
+      findings: [],
+      blockers: [],
+      spec_review: null,
+      warnings: ["the spec-review agenda could not be prepared: ModelError: 503"],
+    });
+    expect(agendaFailure([failedAgenda])).toBe(
+      "the spec-review agenda could not be prepared: ModelError: 503"
+    );
+    const offer = specReviewOffer([...ROUTED_PAIR, failedAgenda]);
+    expect(offer.review).toBeNull();
+    expect(offer.refused).toBe(false);
+    expect(offer.note).toBe(
+      "The spec-review agenda could not be prepared: ModelError: 503, so there is no agenda to book."
+    );
+    // A null with no such warning is still the engine's real "nothing to propose".
+    const nothing = step({ step: "review", stage: "routed", blockers: [], spec_review: null, warnings: ["other"] });
+    expect(agendaFailure([nothing])).toBeNull();
+    expect(specReviewOffer([nothing]).note).toContain("proposed no agenda");
   });
 
   it("refuses to offer a booking over a failed review, even one the engine drafted an agenda for", () => {

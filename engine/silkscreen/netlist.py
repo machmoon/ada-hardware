@@ -29,6 +29,8 @@ from .footprints import (
     SWITCH_PACKAGES,
     TESTPOINT_PACKAGES,
 )
+from .kicadlib.connectors import FAMILIES as CONNECTOR_FAMILIES
+from .kicadlib.connectors import is_connector_spec
 
 __all__ = [
     "PassiveType",
@@ -158,6 +160,16 @@ class Device:
     #: The named land pattern, required for a connector or a battery and an
     #: error on an IC (an IC's package follows from its pin count).
     package: str | None = None
+    #: Pin *names* the design deliberately leaves unconnected -- KiCad's
+    #: no-connect flag, stated in the IR. Before this field existed every pin
+    #: absent from the nets was drawn as a no-connect, so a forgotten ground
+    #: pin and a deliberately open one were the same picture and KiCad's ERC
+    #: could not tell them apart (measured 2026-09-15: a regulator with its
+    #: GND on no net passed ERC with zero violations). Now a pin is wired,
+    #: declared here, or reported -- the same three-way honesty as
+    #: ``SourcePort.do_not_connect`` in tscircuit's circuit-json
+    #: (``tscircuit/checks lib/util/should-check-chip-power-ground-pins.ts``).
+    no_connect: tuple[str, ...] = ()
 
     def pin_names(self) -> set[str]:
         return set(self.pins)
@@ -222,10 +234,18 @@ def _kind_errors(devices: list[Device]) -> list[str]:
                     f"pattern cannot be guessed from the pin count. "
                     f"Choose one of: {sorted(known)}"
                 )
-            elif dev.package not in known:
+            elif dev.package not in known and not (
+                dev.kind == "connector" and is_connector_spec(dev.package)
+            ):
                 errors.append(
                     f"{dev.kind} {dev.name!r} has unsupported package "
                     f"{dev.package!r}; supported: {sorted(known)}"
+                    + (
+                        ", or a connector family written FAMILY_<N>P from: "
+                        + ", ".join(CONNECTOR_FAMILIES)
+                        if dev.kind == "connector"
+                        else ""
+                    )
                 )
         elif dev.package is not None:
             # An IC's land pattern comes from its pin count, so a package here
@@ -353,6 +373,26 @@ class CircuitSpec:
                     )
 
         errors.extend(_kind_errors(self.devices))
+
+        # A no-connect names a declared pin, and a pin is either wired or
+        # declared open, never both: "NC" on a pin that also sits on GND is a
+        # contradiction the schematic would resolve silently one way and the
+        # board the other.
+        wired = {ep for conn in self.connections for ep in conn.endpoints}
+        for dev in self.devices:
+            for pin_name in dev.no_connect:
+                if pin_name not in dev.pins:
+                    errors.append(
+                        f"device {dev.name!r} lists {pin_name!r} under 'no_connect' "
+                        f"but has no pin of that name (known: "
+                        f"{sorted(dev.pins)[:8]}...)"
+                    )
+                elif f"{dev.name}.{pin_name}" in wired:
+                    errors.append(
+                        f"device {dev.name!r} pin {pin_name!r} is both wired to a "
+                        f"net and listed under 'no_connect'; a pin is one or the "
+                        f"other"
+                    )
 
         # A passive wired on only one leg is almost always a model error, and
         # the original silently emitted these as floating parts.
@@ -487,6 +527,14 @@ def parse_circuit_spec(raw: str | dict) -> CircuitSpec:
         # ``validate`` rather than here, so a bad one joins the batch that
         # includes the net and pin errors instead of being raised alone.
         package = spec.get("package")
+        no_connect = spec.get("no_connect", [])
+        if not isinstance(no_connect, list) or not all(
+            isinstance(p, str) for p in no_connect
+        ):
+            errors.append(
+                f"device {name!r}: 'no_connect' must be a list of pin names"
+            )
+            no_connect = []
         devices.append(
             Device(
                 name=name,
@@ -494,6 +542,7 @@ def parse_circuit_spec(raw: str | dict) -> CircuitSpec:
                 symbol=spec.get("symbol"),
                 kind=str(spec.get("kind", "ic")),
                 package=None if package is None else str(package),
+                no_connect=tuple(no_connect),
             )
         )
 

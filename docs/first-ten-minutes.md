@@ -1,6 +1,6 @@
 # The first ten minutes
 
-Someone installs Hardy and opens it. This is a walk of that path in code, what
+Someone installs Ada and opens it. This is a walk of that path in code, what
 it says that is not true, and two proposals where the right fix is a decision
 rather than a bug.
 
@@ -19,7 +19,7 @@ Nothing here imports from it.
 
 `HelloStep.tsx:12` opens with
 
-> "Hardy is a junior hardware engineer who works beside KiCad."
+> "Ada is a junior hardware engineer who works beside KiCad."
 
 and then no screen asked whether KiCad exists. The machine already knew:
 `app/src-tauri/src/cli.rs:314-316` resolves `kicad-cli`
@@ -32,11 +32,11 @@ reason to open. So the way you learned the canvas was missing was to run the
 
 **Fixed** by putting a KiCad row on the engine step, with three rules:
 
-* it does **not** block Continue. Hardy designs boards without KiCad; what stops
+* it does **not** block Continue. Ada designs boards without KiCad; what stops
   working is showing a stage in KiCad, ERC/DRC, and the order step's 3D
   export, and the row says exactly that;
 * finding the binary is reported as *found*, never as *works* — "Found on this
-  Mac. Hardy did not run it, so the version is not known." `/integrations`'
+  Mac. Ada did not run it, so the version is not known." `/integrations`'
   rule about `ready` being a claim about configuration only, applied to a
   filesystem probe;
 * a machine that could not be asked (a browser tab, a build with no CLI
@@ -76,7 +76,7 @@ shown, and its own copy says what it is for:
 
 Ordering fabrication is not a first-ten-minutes act. It is not even a
 first-session act — it needs a finished, reviewed, routed board. Asking for a
-restricted API key on screen four, before the user has seen Hardy place a single
+restricted API key on screen four, before the user has seen Ada place a single
 part, is the classic way to lose someone: the wizard's cost is paid up front
 and its value is all downstream. `ACCOUNTS_SUBTITLE` already says "Each one is
 optional", which is true, but the layout does not behave as if it were —
@@ -176,7 +176,7 @@ Reasons, in order:
    to be designed — ends on "Skipped: Billing", which frames the correct
    choice as an omission.
 3. **It is the one card that is not about doing the work.** Google delivers
-   results, Microsoft is an input path, notifications and the mic are how Hardy
+   results, Microsoft is an input path, notifications and the mic are how Ada
    talks to you. Stripe is a payment method for a thing that has not been
    designed yet.
 
@@ -215,7 +215,7 @@ at `:24`, `:231`, `:304` and `:424` — but every one of them is a *correction*:
 this as new work", "**It is gone** … plan the overlay as new work", and "cited
 in earlier revisions, was deleted in `376ee57`; read it in git history, not in
 the tree." It also states that `xcap` is absent from `Cargo.toml`, which is
-true. `376ee57` is "Remove the legacy Pluely product from Kaleo" (2026-08-31)
+true. `376ee57` is "Remove the legacy Pluely product from Ada" (2026-08-31)
 and `git log --diff-filter=D` confirms it is the commit that deleted the file.
 No capture path was built, and none should be on the strength of that doc.
 **CLAUDE.md's summary of this doc is the thing that is stale**, not the doc.

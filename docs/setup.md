@@ -15,7 +15,7 @@ half is `service/envfiles.py`; the shell half is `app/src-tauri/src/setup.rs`.
 Status, stated plainly, and **re-checked 2026-09-08**. This paragraph used to
 say the Rust half existed only as a patch at `~/Desktop/Coding/kaleo-shell-setup.patch`
 and had never been compiled. That is no longer true, and the patch file is
-gone: `app/src-tauri/src/setup.rs` was committed in `d9cad3d` ("Hardy desktop
+gone: `app/src-tauri/src/setup.rs` was committed in `d9cad3d` ("Ada desktop
 app: the strip, the Setup Assistant, wake and desk", 2026-09-07), it is in the
 module tree (`mod setup;` at `app/src-tauri/src/lib.rs:4`), its five commands
 are registered (`lib.rs:96-100`: `setup_status`, `setup_finish`,
@@ -76,7 +76,7 @@ What "connected" means per provider, in the words the UI uses:
 - Microsoft: "Token issued", never "Verified". Entra issued an app token for the registration; that proves the ids and the secret. It does not prove Graph permissions are consented or that `python -m teamsbot` is running. The `unverified` flag from `/integrations` is copied through.
 - Stripe: "Key verified with Stripe. Webhook secret and price are not proven until a payment." Demo: "Demo billing. No key stored, no charge possible."
 - Engine: "Answered /healthz at {url}", plus the `GOOGLE_API_KEY` row from `/config/status`.
-- KiCad: "KiCad is here" only when `list_cli_tools` resolved the binary, with the caveat that Hardy did not run it and the version is not known. "No KiCad on this Mac" names what stops working (showing a stage in KiCad, ERC/DRC, the order step's 3D export) and the `KICAD_CLI` fix, and does **not** block Continue — Hardy designs boards without it. A machine that could not be asked (a browser tab, a build with no CLI allowlist) reads "KiCad: not asked", never "install KiCad".
+- KiCad: "KiCad is here" only when `list_cli_tools` resolved the binary, with the caveat that Ada did not run it and the version is not known. "No KiCad on this Mac" names what stops working (showing a stage in KiCad, ERC/DRC, the order step's 3D export) and the `KICAD_CLI` fix, and does **not** block Continue — Ada designs boards without it. A machine that could not be asked (a browser tab, a build with no CLI allowlist) reads "KiCad: not asked", never "install KiCad".
 
 The KiCad row also decides whether this screen auto-advances. A healthy,
 keyed engine moves the wizard on after 600 ms; a missing canvas cancels that,

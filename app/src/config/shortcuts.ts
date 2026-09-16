@@ -29,7 +29,7 @@ export const DEFAULT_SHORTCUT_ACTIONS: ShortcutAction[] = [
   {
     id: "focus_input",
     name: "Refocus Input Box",
-    description: "Bring Hardy forward and focus the input",
+    description: "Bring Ada forward and focus the input",
     defaultKey: {
       macos: "cmd+shift+i",
       windows: "ctrl+shift+i",

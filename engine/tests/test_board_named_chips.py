@@ -153,3 +153,148 @@ def test_an_electrolytic_the_right_way_round_passes():
 
 def test_a_ceramic_has_no_polarity_to_refuse():
     assert package_errors(_cap_board("GND", "+5V", "10uF")) == []
+
+
+# ------------------------------------------------------------ tied contacts
+
+
+def test_a_partly_wired_usb2_receptacle_is_completed_not_refused():
+    """The 2026-09-14 demo board: one GND and one VBUS land wired, the other
+    lands shipped with no net. KiCad's own USB-C symbol gives each group one
+    pin name, so wiring one contact wires the group."""
+    from silkscreen.board import tie_package_pins
+
+    spec = _usb_board(
+        {"VBUS": "A4", "GND": "A1", "DP": "A6", "DN": "A7"},
+        "USB_C_Receptacle_USB2.0_16P",
+    )
+    tied, notes = tie_package_pins(spec)
+
+    assert package_errors(tied) == []
+    j = next(d for d in tied.devices if d.name == "j_usb")
+    assert set(j.pins.values()) >= {
+        "A1", "A12", "B1", "B12", "A4", "A9", "B4", "B9", "A6", "B6", "A7", "B7"
+    }
+    nets = {c.net: set(c.endpoints) for c in tied.connections}
+    by_number = {number: name for name, number in j.pins.items()}
+    for net, numbers in {
+        "GND": ("A1", "A12", "B1", "B12"),
+        "VBUS": ("A4", "A9", "B4", "B9"),
+        "USB_DP": ("A6", "B6"),
+        "USB_DM": ("A7", "B7"),
+    }.items():
+        for number in numbers:
+            assert f"j_usb.{by_number[number]}" in nets[net], (net, number)
+    # Every tie is reported: 3 GND + 3 VBUS + 1 D+ + 1 D- pads.
+    assert len(notes) == 8 and all("tied to" in n for n in notes)
+
+
+def test_a_group_already_on_two_nets_is_left_for_the_short_check():
+    from silkscreen.board import tie_package_pins
+
+    devices = {
+        "CH340C": {"pins": {"GND": "1", "RXD": "2", "VCC": "16"}},
+        "j_usb": {
+            "kind": "connector",
+            "package": "USB_C_Receptacle_Power",
+            "pins": {"GND_A": "A12", "GND_B": "B12", "V": "A9"},
+        },
+    }
+    nets = {
+        "GND": ["CH340C.GND", "j_usb.GND_A"],
+        "OOPS": ["CH340C.RXD", "j_usb.GND_B"],
+        "VBUS": ["j_usb.V", "CH340C.VCC"],
+    }
+    spec = _spec(devices, nets)
+    tied, notes = tie_package_pins(spec)
+    j = next(d for d in tied.devices if d.name == "j_usb")
+    # The GND group disagrees, so nothing is guessed there...
+    assert not any("A12" in n or "B12" in n for n in notes)
+    # ...while the VBUS group, wired once, is completed.
+    assert "B9" in set(j.pins.values())
+
+
+def test_a_part_with_no_tied_groups_is_returned_unchanged():
+    from silkscreen.board import tie_package_pins
+
+    spec = _spec(
+        {
+            "CH340C": {"pins": {"GND": "1", "VCC": "16"}},
+            "j_pwr": {
+                "kind": "connector",
+                "package": "TerminalBlock_2P_5.08mm",
+                "pins": {"V": "1", "G": "2"},
+            },
+        },
+        {"VCC": ["CH340C.VCC", "j_pwr.V"], "GND": ["CH340C.GND", "j_pwr.G"]},
+    )
+    tied, notes = tie_package_pins(spec)
+    assert notes == [] and tied is spec
+
+
+def test_kicad_names_a_no_connect_pin_the_way_eeschema_does():
+    """eeschema/sch_pin.cpp::GetDefaultNetName and CTX_NETNAME escaping."""
+    from silkscreen.board import kicad_unconnected_net
+
+    assert kicad_unconnected_net("J1", "D+1", "A6") == "unconnected-(J1-D+1-PadA6)"
+    assert kicad_unconnected_net("R1", "1", "1") == "unconnected-(R1-Pad1)"
+    assert kicad_unconnected_net("U1", "A/B", "3") == "unconnected-(U1-A{slash}B-Pad3)"
+
+
+def test_the_written_board_carries_ties_and_no_connects_but_routes_neither(tmp_path):
+    """Read back with kiutils, independently of the emitter's own tables."""
+    from kiutils.board import Board
+    from silkscreen.board import (
+        build_board,
+        emit_kicad_pcb,
+        route_board,
+        tie_package_pins,
+    )
+
+    spec = _usb_board(
+        {"VBUS": "A4", "GND": "A1", "DP": "A6", "DN": "A7", "CC": "A5"},
+        "USB_C_Receptacle_USB2.0_16P",
+    )
+    spec, _ = tie_package_pins(spec)
+    board = build_board(spec, time_limit_s=5)
+    result = route_board(board)
+    assert not any(net.startswith("unconnected-(") for net in result.unrouted)
+
+    path = tmp_path / "b.kicad_pcb"
+    path.write_text(emit_kicad_pcb(board))
+    nets = {}
+    for fp in Board().from_file(str(path)).footprints:
+        for pad in fp.pads:
+            nets[(fp.properties.get("Reference"), pad.number)] = (
+                pad.net.name if pad.net else None
+            )
+    j = next(ref for ref, number in nets if number == "A6")
+    # The tied lands are on the group's net...
+    assert {nets[(j, n)] for n in ("A1", "A12", "B1", "B12")} == {"GND"}
+    assert {nets[(j, n)] for n in ("A4", "A9", "B4", "B9")} == {"VBUS"}
+    # ...the declared-but-unwired pin carries KiCad's no-connect name...
+    assert nets[(j, "A5")] == f"unconnected-({j}-CC-PadA5)"
+    # ...and a pad the part has but the circuit never declared stays netless.
+    assert nets[(j, "A8")] is None
+
+
+def test_an_esp32_wired_by_its_used_pins_ties_the_stacked_ground():
+    # Measured 2026-09-14 (scripts/board_eval.py esp32_devboard): a correct
+    # dev board naming only the pins it uses was refused as "declares 35 pins".
+    # KiCad's symbol stacks GND on pads 1/15/38/39, so wiring GND wires all four.
+    from silkscreen.board import tie_package_pins
+
+    spec = _spec(
+        {"ESP32-WROOM-32E": {"pins": {"GND": "1", "VDD": "2", "EN": "3", "TXD0": "35"}},
+         "AMS1117-3.3": {"pins": {"GND": "1", "VOUT": "2", "VIN": "3"}}},
+        {"GND": ["ESP32-WROOM-32E.GND", "AMS1117-3.3.GND"],
+         "+3V3": ["ESP32-WROOM-32E.VDD", "AMS1117-3.3.VOUT"],
+         "EN": ["ESP32-WROOM-32E.EN", "ESP32-WROOM-32E.TXD0"]},
+    )
+    tied, notes = tie_package_pins(spec)
+    esp = next(d for d in tied.devices if d.name == "ESP32-WROOM-32E")
+    assert {"1", "15", "38", "39"} <= set(esp.pins.values())
+    gnd = next(c for c in tied.connections if c.net == "GND")
+    assert {e for e in gnd.endpoints if e.startswith("ESP32")} == {
+        f"ESP32-WROOM-32E.{name}" for name, n in esp.pins.items() if n in ("1", "15", "38", "39")}
+    assert len(notes) == 3 and package_errors(tied) == []

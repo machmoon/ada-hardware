@@ -12,7 +12,7 @@ Routes (all behind the bearer gate, all ``Cache-Control: no-store``)::
 
     GET  /setup                          the whole report
     GET  /setup/google|microsoft|stripe  one provider, non-blocking
-    GET  /setup/voice                    which voice Hardy has, and the one
+    GET  /setup/voice                    which voice Ada has, and the one
                                          command that provisions it if none
     POST /setup/google/connect           202 {auth_url, job}; the client opens it
     POST /setup/google/disconnect        delete the token here (not at Google)
@@ -376,7 +376,7 @@ def engine_status() -> dict[str, Any]:
 
 
 def voice_status() -> dict[str, Any]:
-    """Which voice Hardy has, in the wizard's four-state vocabulary.
+    """Which voice Ada has, in the wizard's four-state vocabulary.
 
     This exists because of a provisioning cliff with teeth. Kokoro needs
     ~340 MB of weights that nothing downloads automatically -- a deliberate
@@ -384,7 +384,7 @@ def voice_status() -> dict[str, Any]:
     silently pulls a third of a gigabyte is a surprise on a metered connection
     and a hang on a hot path. The cost of that refusal used to be paid
     invisibly: with no weights the client fell through to the webview's own
-    ``speechSynthesis``, and the macOS Compact voice became what Hardy sounded
+    ``speechSynthesis``, and the macOS Compact voice became what Ada sounded
     like, with nothing anywhere saying it was a fallback.
 
     The client no longer falls through -- an unprovisioned engine now means
@@ -430,7 +430,7 @@ def voice_status() -> dict[str, Any]:
     return {
         "state": "unconfigured",
         "detail": (
-            "no voice is provisioned, so Hardy will stay silent rather than "
+            "no voice is provisioned, so Ada will stay silent rather than "
             "fall back to the platform's robot voice"
         ),
         "selected": None,
@@ -967,7 +967,7 @@ def _invalid_page() -> str:
     return _page(
         "This link is not valid",
         "<p>The demo consent link is missing, already used, or older than ten "
-        "minutes. Go back to Hardy and press Connect again.</p>",
+        "minutes. Go back to Ada and press Connect again.</p>",
     )
 
 
@@ -983,7 +983,7 @@ def demo_consent_page(query: Mapping[str, str]) -> tuple[int, str]:
     if not ok:
         return 404, _invalid_page()
     form = (
-        f'<p>Hardy is asking to connect a <strong>demo</strong> Google account. '
+        f'<p>Ada is asking to connect a <strong>demo</strong> Google account. '
         f"No real Google account is involved and nothing leaves this Mac.</p>"
         f'<form method="post" action="{CONSENT_ROUTE}">'
         f'<input type="hidden" name="provider" value="{html.escape(provider)}">'

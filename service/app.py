@@ -23,6 +23,7 @@ import hmac
 import json
 import math
 import os
+import re
 import sys
 import time
 import traceback
@@ -35,7 +36,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from service import auth as _auth
 from service import billing_routes as _billing
+from service import logs as _logs
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "engine"))
 
@@ -165,7 +168,7 @@ TRANSCRIBE_AUDIO_TYPES = frozenset(
 #: app/src/lib/wake-word.ts. A client that measured a quieter window than this
 #: recorded no speech, and transcribing it is a paid call whose likeliest
 #: answer is the wake name the prompt primes -- four seconds of near-silence
-#: was measured coming back as "Hardy". The field is optional: a caller that
+#: was measured coming back as "Ada". The field is optional: a caller that
 #: cannot measure loudness sends none and keeps the previous behaviour.
 TRANSCRIBE_PEAK_THRESHOLD = 8.0
 TRANSCRIBE_PEAK_MAX = 128.0
@@ -623,6 +626,32 @@ def transcribe_request(
     return audio, base_type, language, peak
 
 
+#: Most names one /transcribe may carry; the prompt budget
+#: (``transcribe.VOCABULARY_MAX_CHARS``) decides how many are actually used.
+MAX_VOCABULARY_NAMES = 64
+MAX_VOCABULARY_NAME_CHARS = 64
+
+
+def transcribe_vocabulary(payload: dict[str, Any]) -> list[str] | None:
+    """The optional ``vocabulary`` list: names that may be spoken in the clip."""
+    raw = payload.get("vocabulary")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or len(raw) > MAX_VOCABULARY_NAMES:
+        raise RequestError(
+            f"'vocabulary' must be a list of at most {MAX_VOCABULARY_NAMES} strings"
+        )
+    names: list[str] = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, str) or len(item) > MAX_VOCABULARY_NAME_CHARS:
+            raise RequestError(
+                f"'vocabulary[{index}]' must be a string of at most "
+                f"{MAX_VOCABULARY_NAME_CHARS} characters"
+            )
+        names.append(item)
+    return names
+
+
 def _desk_number(payload: dict[str, Any], name: str) -> float:
     value = payload.get(name)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -895,7 +924,13 @@ def _error_response(exc: BaseException) -> tuple[int, dict[str, Any]]:
     # joinable when someone reports a failure.
     error_id = uuid.uuid4().hex[:12]
     trace = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-    sys.stderr.write(f"error {error_id}: {type(exc).__name__}: {exc}\n{trace}\n")
+    _logs.emit(
+        "error",
+        f"error {error_id}: {type(exc).__name__}: {exc}",
+        error_id=error_id,
+        exception=type(exc).__name__,
+        trace=trace,
+    )
     return 500, {"error": "internal error", "error_id": error_id}
 
 
@@ -966,44 +1001,36 @@ def build_embedder() -> BatchingEmbedder:
 
 
 def build_model():
-    """Primary Gemini model, a full Flash tier, the cheap tier, then Gemma.
+    """The worker failover ladder: Claude's tiers, then Gemini's, then Gemma.
 
-    Four rungs, not one: a rate limit or a transient 5xx on the primary should
-    degrade the answer, not lose the request. The primary is
+    Which providers appear, and in what order, is
+    :func:`silkscreen.agents.providers.provider_order` -- Claude then Gemini,
+    each only when configured, ``SILKSCREEN_PROVIDER`` to override -- so a
+    service with only ``GOOGLE_API_KEY`` builds exactly the four Gemini rungs
+    it always did, and one with neither refuses naming both keys.
+
+    Claude contributes two rungs: the reasoning tier
+    (``SILKSCREEN_CLAUDE_MODEL``, else ``claude-opus-5``) and the cheap tier
+    (``claude-sonnet-5``). Gemini contributes four: the primary is
     :func:`~silkscreen.agents.model.primary_model` (``SILKSCREEN_MODEL``, else
     ``DEFAULT_MODEL``); the full-Flash rung sits between it and flash-lite
-    because an exhausted primary used to fall straight to the weakest proposer.
-    Rungs that name the same model id are folded. Gemma is a different model
-    family behind the same API, so an outage or quota exhaustion shared by the
-    Gemini tiers still leaves one rung standing.
+    because an exhausted primary used to fall straight to the weakest
+    proposer; Gemma is a different model family behind the same API, so an
+    outage or quota exhaustion shared by the Gemini tiers still leaves one rung
+    standing. Rungs that name the same model id are folded.
 
     The chain is built per request, so its quota cooldowns live in the
     process-wide :data:`~silkscreen.agents.resilience.SHARED_COOLDOWNS`: a
     model whose daily cap is gone is asked once, then skipped (and reported as
     skipped) until the day's reset, instead of on the first call of every run.
+    A Claude ``rate_limit_error`` is parked the same way, for the
+    ``retry-after`` it named.
     """
-    from silkscreen.agents.model import (
-        CHEAP_MODEL,
-        FALLBACK_MODEL,
-        GEMMA_MODEL,
-        primary_model,
-    )
-    from silkscreen.agents.resilience import SHARED_COOLDOWNS
+    # One ladder for the service and the CLI (resilience.default_chain), so the
+    # two cannot drift apart in what a failed primary falls back to.
+    from silkscreen.agents.resilience import default_chain
 
-    rungs = [
-        ("gemini-primary", primary_model(), 2),
-        ("gemini-flash", FALLBACK_MODEL, 2),
-        ("gemini-cheap", CHEAP_MODEL, 2),
-        ("gemma-open", GEMMA_MODEL, 1),
-    ]
-    providers: list[Provider] = []
-    seen: set[str] = set()
-    for name, model_id, attempts in rungs:
-        if model_id in seen:
-            continue
-        seen.add(model_id)
-        providers.append(Provider(name, GeminiModel(model_id), attempts=attempts))
-    return FallbackModel(providers=providers, _cooldown=SHARED_COOLDOWNS)
+    return default_chain(factory=GeminiModel)
 
 
 #: The pace /desk keeps when the caller names none. A desk snap is a full
@@ -1253,6 +1280,31 @@ def _record_failure_trace_ids(
         return []
 
 
+def _debug_transcript(
+    audio: bytes, mime_type: str, peak: float | None, purpose: object, text: str
+) -> None:
+    """Opt-in local diagnostics for the voice path; off unless the env asks.
+
+    ``SILKSCREEN_DEBUG_TRANSCRIPTS=1`` prints each transcript to stderr, and
+    ``SILKSCREEN_TRANSCRIPT_DUMP_DIR`` also keeps the clip so a bad transcript
+    can be replayed. Both stay on this machine; nothing is logged by default,
+    because a transcript is whatever was said at the bench.
+    """
+    if os.getenv("SILKSCREEN_DEBUG_TRANSCRIPTS") != "1":
+        return
+    stamp = time.strftime("%H%M%S")
+    sys.stderr.write(
+        f"[transcribe {stamp}] {len(audio)} bytes {mime_type} peak={peak} "
+        f"purpose={purpose}: {text!r}\n"
+    )
+    dump = os.getenv("SILKSCREEN_TRANSCRIPT_DUMP_DIR")
+    if dump:
+        ext = mime_type.split("/")[-1].split(";")[0] or "bin"
+        with contextlib.suppress(OSError):
+            Path(dump).mkdir(parents=True, exist_ok=True)
+            (Path(dump) / f"{stamp}-{uuid.uuid4().hex[:6]}.{ext}").write_bytes(audio)
+
+
 def run_chat_orchestrator(**kwargs):
     """Load ADK only for the route that needs its LLM agent."""
     try:
@@ -1421,6 +1473,10 @@ def generate(
     prior_art_requested = payload.get("prior_art", False)
     if not isinstance(prior_art_requested, bool):
         raise RequestError("'prior_art' must be a boolean")
+    # The printed mechanism (a robot arm) the board drives, under the same rule.
+    mechanism_requested = payload.get("mechanism", False)
+    if not isinstance(mechanism_requested, bool):
+        raise RequestError("'mechanism' must be a boolean")
     # The thinking level, from the frozen vocabulary. Validated here, before
     # anything spends time or quota, and never defaulted on a bad name: a run
     # that answers a 'thorough' request at 'fast' while reporting 'thorough'
@@ -1545,6 +1601,8 @@ def generate(
         opt_in_kwargs["simulate"] = True
     if prior_art_requested:
         opt_in_kwargs["prior_art"] = True
+    if mechanism_requested:
+        opt_in_kwargs["mechanism"] = True
 
     result = generate_pcb(
         model,
@@ -1714,6 +1772,20 @@ def generate(
                 "prior-art research did not run; the board was designed from scratch"
             )
 
+    if mechanism_requested:
+        # Additive, and only when opted in. The stage never answers None --
+        # no cad extra, nothing buildable, a failed export and a failing
+        # kernel clause are each a status inside the block -- so None here
+        # means the pipeline that answered did not run the stage at all.
+        mechanism = getattr(result, "mechanism", None)
+        response["mechanism"] = mechanism.as_dict() if mechanism is not None else None
+        if mechanism is None:
+            response["warnings"].append(
+                "mechanism design did not run; the board is delivered without an arm"
+            )
+        elif mechanism.status != "passed":
+            response["warnings"].append(mechanism.note())
+
     if sourcing_requested:
         # Additive, and only when opted in. The stage itself never answers
         # None -- a failure degrades to the deterministic rows plus a warning
@@ -1843,6 +1915,20 @@ def generate(
     return response
 
 
+_TOKENISH = re.compile(r"^[A-Za-z0-9_\-]{24,}$")
+
+
+def _loggable_path(raw: str) -> str:
+    """The request path without its query and with token-like segments masked.
+
+    A query string can carry anything a client typed, and the MCP bridge
+    accepts its bearer token as a path segment for clients that cannot set a
+    header; neither belongs in a log a support engineer reads.
+    """
+    path = urlsplit(raw).path
+    return "/".join("***" if _TOKENISH.match(seg) else seg for seg in path.split("/"))
+
+
 class Handler(BaseHTTPRequestHandler):
     """Same-origin chat, generation, placement repair, and built web UI."""
 
@@ -1891,6 +1977,9 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps(
                 {"error": "internal error", "error_id": error_id}
             ).encode()
+        if run_id:
+            self._run_id = run_id
+            _logs.bind(run_id=run_id)
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -2029,7 +2118,9 @@ class Handler(BaseHTTPRequestHandler):
         between a public URL and the owner's Gemini bill.
         """
         expected = access_token()
-        if not expected:
+        keys = _auth.store_from_env()
+        self._account = None
+        if not expected and keys is None:
             return True
         if route in AUTH_EXEMPT_ROUTES:
             return True
@@ -2043,9 +2134,19 @@ class Handler(BaseHTTPRequestHandler):
         scheme, _, presented = (self.headers.get("Authorization") or "").partition(" ")
         if scheme.strip().lower() != "bearer":
             return False
-        return hmac.compare_digest(
-            presented.strip().encode("utf-8"), expected.encode("utf-8")
-        )
+        presented = presented.strip()
+        if keys is not None and presented.startswith(_auth.KEY_PREFIX):
+            # A per-account key (service/auth.py): who is calling, and the
+            # account every later log line of this request names.
+            account = _auth.authenticate(keys, presented)
+            if account is None:
+                return False
+            self._account = account
+            _logs.bind(account_id=account.value)
+            return True
+        if not expected:
+            return False
+        return hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
 
     def _unauthorized(self) -> None:
         """Refuse one request, and close rather than keep the connection.
@@ -2288,7 +2389,7 @@ class Handler(BaseHTTPRequestHandler):
             self._desk_resolve()
             return
         if self.path in ("/deliver/auth", "/deliver/auth/start"):
-            # /start returns the consent URL for Hardy to open; /auth finishes
+            # /start returns the consent URL for Ada to open; /auth finishes
             # (client_opens) or runs the all-in-one server-side browser flow.
             payload = self._read_payload()
             if payload is None:
@@ -2492,6 +2593,10 @@ class Handler(BaseHTTPRequestHandler):
             # (service/amend.py). 409 for the same reason StepOrderError is:
             # the request was well-formed and the run's state refused it.
             self._send(409, {"error": str(exc)})
+        except _steps.StartInFlightError as exc:
+            # The same press, still running: the one 409 a client should wait
+            # out and repeat under the same key (steps.StartInFlightError).
+            self._send(409, {"error": str(exc), "should_retry": True})
         except _steps.StepOrderError as exc:
             self._send(409, {"error": str(exc)})
         except ValueError as exc:
@@ -2761,6 +2866,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             audio, mime_type, language, peak = transcribe_request(payload)
+            vocabulary = transcribe_vocabulary(payload)
             if peak is not None and peak < TRANSCRIBE_PEAK_THRESHOLD:
                 # Refused before the model call, and named: a window the
                 # caller measured below the speech threshold carries no
@@ -2795,7 +2901,10 @@ class Handler(BaseHTTPRequestHandler):
             # spoken turn and a spoken turn cannot delay a board run.
             model = self.transcribe_model_factory()
             self.voice_pacer.wait(VOICE_QUOTA_RPM)
-            text = transcribe_audio(model, audio, mime_type, language=language)
+            text = transcribe_audio(
+                model, audio, mime_type, language=language, vocabulary=vocabulary
+            )
+            _debug_transcript(audio, mime_type, peak, purpose, text)
         except Exception as exc:
             status, body = _error_response(exc)
             self._send(status, body)
@@ -2837,7 +2946,7 @@ class Handler(BaseHTTPRequestHandler):
         The engine is resolved and its *first* frame pulled before any header
         is sent, so a failure is an HTTP status rather than a short body. Once
         bytes are on the wire there is no way left to say "that was a
-        failure", and a truncated readback that a listener hears as Hardy
+        failure", and a truncated readback that a listener hears as Ada
         trailing off mid-net-name is precisely the quiet-zero this repo
         refuses everywhere else.
         """
@@ -3116,6 +3225,13 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(clarification, str):
             self._send(400, {"error": "'clarification' must be a string"})
             return
+        # The approval gate (orchestrator.py): the model may only propose a
+        # board and the caller asks a human. A voice assistant hears "can you
+        # hear me" as often as a board request, and must not spend on either.
+        confirm_before_build = payload.get("confirm_before_build", False)
+        if not isinstance(confirm_before_build, bool):
+            self._send(400, {"error": "'confirm_before_build' must be a boolean"})
+            return
 
         session_id = str(payload.get("session_id") or uuid.uuid4().hex)
         turn_id = str(payload.get("turn_id") or uuid.uuid4().hex[:12])
@@ -3178,6 +3294,7 @@ class Handler(BaseHTTPRequestHandler):
                     "model",
                     "thinking_level",
                     "quota_rpm",
+                    "confirm_before_build",
                 }
             }
             if clarification.strip():
@@ -3220,6 +3337,7 @@ class Handler(BaseHTTPRequestHandler):
                 emit=emit,
                 debug=bool(payload.get("debug", False)),
                 before_model_call=pace_orchestrator,
+                confirm_before_build=confirm_before_build,
             )
         except Exception as exc:
             if gone:
@@ -3236,6 +3354,7 @@ class Handler(BaseHTTPRequestHandler):
                     "event": "chat.done",
                     "assistant": outcome.assistant,
                     "needs_clarification": outcome.needs_clarification,
+                    "proposal": getattr(outcome, "proposal", None),
                     "model": outcome.model,
                     "thinking_level": thinking_level or "auto",
                     "quota_rpm": quota_rpm or "auto",
@@ -3249,8 +3368,45 @@ class Handler(BaseHTTPRequestHandler):
         except ConnectionError:
             pass
 
+    # ------------------------------------------------------------ logging
+
+    def parse_request(self) -> bool:
+        """Name the request before anything else can log about it."""
+        ok = super().parse_request()
+        self._request_id = (
+            _logs.request_id_from(self.headers) if ok else uuid.uuid4().hex
+        )
+        self._started = time.monotonic()
+        self._run_id: str | None = None
+        self._id_sent = False
+        _logs.bind(request_id=self._request_id, run_id=None, account_id=None)
+        return ok
+
+    def end_headers(self) -> None:
+        # Every response says which request it answers, so a customer quoting
+        # the id finds the log line.
+        if getattr(self, "_request_id", None) and not getattr(self, "_id_sent", True):
+            self._id_sent = True
+            self.send_header(_logs.REQUEST_ID_HEADER, self._request_id)
+        super().end_headers()
+
+    def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+        started = getattr(self, "_started", None)
+        _logs.emit(
+            "info",
+            f"{self.address_string()} - \"{self.requestline}\" {code} {size}",
+            method=self.command,
+            path=_loggable_path(self.path or ""),
+            status=int(code) if str(code).isdigit() else None,
+            duration_ms=(
+                None if started is None
+                else round((time.monotonic() - started) * 1000)
+            ),
+            run_id=getattr(self, "_run_id", None),
+        )
+
     def log_message(self, fmt: str, *args: Any) -> None:
-        sys.stderr.write(f"{self.address_string()} - {fmt % args}\n")
+        _logs.emit("warning", f"{self.address_string()} - {fmt % args}")
 
 
 def make_server(port: int | None = None) -> ThreadingHTTPServer:
@@ -3258,11 +3414,38 @@ def make_server(port: int | None = None) -> ThreadingHTTPServer:
     return ThreadingHTTPServer(("0.0.0.0", port), Handler)
 
 
+def _warm_kicad_library() -> None:  # pragma: no cover - process entry
+    """Build or load KiCad's library catalog before the first request needs it.
+
+    The first build parses 22,860 symbols (47 s on KiCad 10.0.6); without this
+    the first board anyone asked for would sit silently inside the proposal
+    stage for that long. On a daemon thread, so the service answers at once,
+    and it says in the log what it found.
+    """
+    import threading
+
+    def work() -> None:
+        from silkscreen import kicadlib
+
+        started = time.monotonic()
+        index = kicadlib.library_index()
+        if index is None:
+            sys.stderr.write("kicad library: not enabled or not installed\n")
+        else:
+            sys.stderr.write(
+                f"kicad library: {len(index)} symbols ready in "
+                f"{time.monotonic() - started:.1f}s\n"
+            )
+
+    threading.Thread(target=work, name="kicadlib-warm", daemon=True).start()
+
+
 def main() -> int:  # pragma: no cover - process entry
     # What the Setup Assistant saved under ~/.kaleo, applied setdefault so a
     # value already exported still wins. Here, not at import: a test that
     # imports this module must never read the developer's real files.
     _envfiles.apply_saved_env()
+    _warm_kicad_library()
     server = make_server()
     sys.stderr.write(f"listening on :{server.server_port}\n")
     server.serve_forever()

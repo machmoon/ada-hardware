@@ -1,7 +1,7 @@
 [package]
 name = "kaleo"
 version = "0.3.1"
-description = "Hardy: silkscreen's desktop app - describe a board, the engine generates it, review the result. A GPL-3.0 fork of Pluely."
+description = "Ada: silkscreen's desktop app - describe a board, the engine generates it, review the result. A GPL-3.0 fork of Pluely."
 authors = ["Pat Liu <liujkaleo@gmail.com>", "Srikanth Nani <mail@srikanthnani.com> (upstream Pluely)"]
 license = "GPL-3.0"
 repository = "https://github.com/machmoon/silkscreen"
@@ -11,6 +11,10 @@ readme = "../README.md"
 keywords = ["ai-assistant", "tauri", "desktop-app", "privacy-first", "meeting-assistant"]
 categories = ["gui", "multimedia", "accessibility", "science", "development-tools"]
 edition = "2021"
+# The executable is "Ada" so an unbundled dev build is named Ada in the Dock
+# tooltip and the app menu too; macOS takes that name from the process, and a
+# bundle's productName only covers `tauri build`. The crate keeps its old name.
+default-run = "Ada"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -20,6 +24,10 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "kaleo_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "Ada"
+path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -66,7 +74,7 @@ tauri-plugin-autostart = "2.5.0"
 # opt-level 0, and at that level one livekit-wakeword score of a 2 s window
 # took 3.08 s (measured 2026-09-13, M-series Mac) against 0.23 s with these
 # crates optimised — the spotter could not keep up with the microphone and
-# never saw "Hey Hardy" whole. Only the inference crates are listed, so the
+# never saw "Hey Ada" whole. Only the inference crates are listed, so the
 # rest of the app keeps fast debug builds.
 [profile.dev.package.livekit-wakeword]
 opt-level = 3

@@ -340,7 +340,7 @@ def test_key_urls_are_allowlisted_by_exact_host_over_https(url):
 
 
 def test_an_activity_becomes_one_incoming_with_the_mention_stripped():
-    incoming = incoming_from_activity(activity(text="<at>Kaleo</at> design a rail"))
+    incoming = incoming_from_activity(activity(text="<at>Ada</at> design a rail"))
     assert incoming.kind == "message"
     assert incoming.text == "design a rail"
     assert incoming.meeting_id == MEETING

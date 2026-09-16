@@ -20,8 +20,14 @@ fixed CP-SAT budget instead of on the tail of the run, and exactly one
 worker-model call is ever in flight. ``enclosure_start`` launches the case
 right after that join, from a snapshot of the placed board, and ``enclosure``
 joins it after route. Sourcing is the same pair, started right after the
-enclosure and joined right after it, and the SPICE verdict is a third pair,
-started and joined after sourcing.
+enclosure and joined right after it, the SPICE verdict is a third pair,
+started and joined after sourcing, and the mechanism (the printed arm the
+board drives) a fourth, started and joined after the verdict.
+
+Web research is a fifth pair, and the only one that starts before anything
+else: ``research_start`` launches it the moment the intent arrives and
+``research`` joins it after ``plan``, so its cited findings are in the brief
+``propose`` designs against -- the straight-line driver's points exactly.
 
 Each node is handed the run token as ``node_input`` and returns it, so the token
 is the only value ADK ever sees; the rest is looked up from the registry in
@@ -35,6 +41,8 @@ from google.adk.workflow import node
 
 from ..stages import (
     EnclosureJob,
+    MechanismJob,
+    ResearchJob,
     ReviewJob,
     SimulationJob,
     SourcingJob,
@@ -45,9 +53,12 @@ from ..stages import (
     prior_art_stage,
     propose_stage,
     read_stage,
+    research_sourcing_context,
     route_stage,
     schematic_stage,
     start_enclosure_stage,
+    start_mechanism_stage,
+    start_research_stage,
     start_review_stage,
     start_simulation_stage,
     start_sourcing_stage,
@@ -55,6 +66,33 @@ from ..stages import (
 from .runner import recording, run_context
 
 __all__ = ["build_workflow"]
+
+
+@node(name="research_start")
+def research_start(node_input: str) -> str:
+    """Start web research on a worker thread; off means no thread."""
+    run = run_context(node_input)
+    with recording(run):
+        run.research_job = start_research_stage(
+            run.models.for_stage("research"),
+            intent=run.intent,
+            research=run.web_research,
+            emit=run.emit,
+            enter=run.enter,
+            transport=run.web_research_transport,
+            budget=run.web_research_budget,
+        )
+    return node_input
+
+
+@node(name="research")
+def research(node_input: str) -> str:
+    """Join the web research started at the intent; its exception surfaces here."""
+    run = run_context(node_input)
+    with recording(run):
+        job = run.research_job or ResearchJob()
+        run.research_result = job.result()
+    return node_input
 
 
 @node(name="read")
@@ -114,7 +152,9 @@ def propose(node_input: str) -> str:
             # Parity with the straight-line driver: the plan is what the bare
             # intent meant, so propose designs against it in both engines or
             # the two produce different boards from one request.
-            brief=design_brief(run.plan_result, run.prior_art_result),
+            brief=design_brief(
+                run.plan_result, run.prior_art_result, run.research_result
+            ),
             max_repairs=run.max_repairs,
             emit=run.emit,
             enter=run.enter,
@@ -186,6 +226,7 @@ def sourcing_start(node_input: str) -> str:
                 emit=run.emit,
                 enter=run.enter,
                 probe=run.sourcing_probe,
+                context=research_sourcing_context(run.research_result),
             )
             if run.sourcing
             else SourcingJob()
@@ -209,6 +250,28 @@ def simulate_start(node_input: str) -> str:
             )
             if run.simulate
             else SimulationJob()
+        )
+    return node_input
+
+
+@node(name="mechanism_start")
+def mechanism_start(node_input: str) -> str:
+    """Start designing the arm on a worker thread; off means no thread."""
+    run = run_context(node_input)
+    with recording(run):
+        run.mechanism_job = (
+            start_mechanism_stage(
+                run.models.for_stage("mechanism"),
+                run.intent,
+                board_spec=run.spec,
+                prior_art=run.prior_art_result,
+                output=run.output,
+                emit_stages=run.emit_stages,
+                emit=run.emit,
+                enter=run.enter,
+            )
+            if run.mechanism
+            else MechanismJob()
         )
     return node_input
 
@@ -272,6 +335,16 @@ def simulate(node_input: str) -> str:
     return node_input
 
 
+@node(name="mechanism")
+def mechanism(node_input: str) -> str:
+    """Join the arm designed since placement; its exception surfaces here."""
+    run = run_context(node_input)
+    with recording(run):
+        job = run.mechanism_job or MechanismJob()
+        run.mechanism_result = job.result()
+    return node_input
+
+
 @node(name="review_start")
 def review_start(node_input: str) -> str:
     """Start the critic on a worker thread; off means no thread.
@@ -317,17 +390,23 @@ async def silkscreen(ctx: Context, token: str) -> str:
         # place's CP-SAT budget is model-call-free time it can answer in.
         # `review` joins before the three background lanes start, so exactly
         # one worker-model call is ever in flight -- the SDK driver's rule.
-        read, plan, propose, review_start, place, placement_repair, review,
-        enclosure_start, sourcing_start, simulate_start,
+        # `research_start` before everything and `research` after `plan`:
+        # the web is read while the datasheets and the plan are, and joined
+        # before propose -- the SDK driver's points.
+        research_start, read, plan, research, propose, review_start, place,
+        placement_repair, review, enclosure_start, sourcing_start, simulate_start,
+        mechanism_start,
     ):
         try:
             await ctx.run_node(stage, node_input=token)
         except BaseException:
             # A run abandoned in placement must not leave the critic running
-            # on a thread nobody will ever join.
+            # on a thread nobody will ever join -- nor web research, if it
+            # was abandoned before propose.
             run = run_context(token)
-            if run.review_job is not None:
-                run.review_job.wait()
+            for job in (run.research_job, run.review_job):
+                if job is not None:
+                    job.wait()
             raise
     try:
         for stage in (schematic, route):
@@ -339,12 +418,15 @@ async def silkscreen(ctx: Context, token: str) -> str:
         # ``sourcing`` nodes join, and a blocking wait here would stall the
         # loop for nothing.
         run = run_context(token)
-        for job in (run.enclosure_job, run.sourcing_job, run.simulation_job):
+        for job in (
+            run.enclosure_job, run.sourcing_job, run.simulation_job,
+            run.mechanism_job,
+        ):
             if job is not None:
                 job.wait()
         raise
-    # Enclosure, then sourcing, then simulation: the straight-line driver's
-    # join order.
+    # Enclosure, then sourcing, then simulation, then mechanism: the
+    # straight-line driver's join order.
     #
     # The same guard as above, and for the same reason: if the `enclosure`
     # node raises at its join, the `sourcing` and `simulate` nodes never run,
@@ -354,11 +436,14 @@ async def silkscreen(ctx: Context, token: str) -> str:
     # driver waits on all three in a `finally` before collecting any of them;
     # without this the two drivers disagree on the failure path.
     try:
-        for stage in (enclosure, sourcing, simulate):
+        for stage in (enclosure, sourcing, simulate, mechanism):
             await ctx.run_node(stage, node_input=token)
     except BaseException:
         run = run_context(token)
-        for job in (run.enclosure_job, run.sourcing_job, run.simulation_job):
+        for job in (
+            run.enclosure_job, run.sourcing_job, run.simulation_job,
+            run.mechanism_job,
+        ):
             if job is not None:
                 job.wait()
         raise

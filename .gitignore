@@ -118,3 +118,4 @@ enclosure.png
 
 # Agent scratch space, never part of the project.
 scratchpad/
+data/voice_samples/

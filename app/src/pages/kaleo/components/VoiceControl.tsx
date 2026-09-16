@@ -9,6 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { Button, Popover, PopoverAnchor, PopoverContent } from "@/components";
+import { WAKE_SWITCH_UNSAVED } from "@/hooks/useWakeWord";
 import type { WakeWord } from "@/hooks/useWakeWord";
 import { useIsSpeaking } from "@/hooks/useIsSpeaking";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
@@ -41,13 +42,13 @@ export type MicState =
  * The subset of the listener this control reads.
  *
  * `stoppedReason` is not on `WakeWord` yet — it is the patch this lane asked
- * the listener for (scratchpad/reviews/hardy-product.md, patch A) — so it is
+ * the listener for (scratchpad/reviews/ada-product.md, patch A) — so it is
  * optional and there is a fallback below. A `WakeWord` is assignable either
  * way, and the day the field lands this file needs no change.
  */
 export type MicWake = Pick<
   WakeWord,
-  "enabled" | "listening" | "justHeard" | "error" | "detail" | "sent" | "cap"
+  "enabled" | "listening" | "justHeard" | "error" | "detail" | "sent" | "cap" | "unsaved"
 > & { stoppedReason?: "user" | "cap" | "error" | null };
 
 /** Did the listener stop because it spent its budget, rather than being muted? */
@@ -137,11 +138,15 @@ export function micTitle(
   const windows = `${wake.cap === 1 ? "one" : wake.cap} four-second window${
     wake.cap === 1 ? "" : "s"
   }`;
+  // A click the browser refused to store holds for this session only; the
+  // tooltip says so in the two states a person reads it in, rather than
+  // showing a switch that will quietly spring back on the next launch.
+  const unsaved = wake.unsaved ? ` ${WAKE_SWITCH_UNSAVED}` : "";
   switch (state) {
     case "unmuted":
       return `I am listening for “Hey ${WAKE_WORD}”. Click to mute me.${
         budget ? ` ${budget} paid windows used this listen.` : ""
-      } Press and hold to talk to me directly instead.`;
+      } Press and hold to talk to me directly instead.${unsaved}`;
     case "arming":
       return `I am opening the microphone. I am not listening yet — I will say so when I am. Press and hold to talk to me right now instead.`;
     case "heard":
@@ -151,7 +156,7 @@ export function micTitle(
     case "refused":
       return `I am muted. ${wake.error}`;
     default:
-      return `I am muted — I am not listening for “Hey ${WAKE_WORD}”. Click to unmute; while unmuted I send four-second windows to the engine, one model call each, capped at ${wake.cap}. Press and hold to talk to me now without unmuting.`;
+      return `I am muted — I am not listening for “Hey ${WAKE_WORD}”. Click to unmute; while unmuted I send four-second windows to the engine, one model call each, capped at ${wake.cap}. Press and hold to talk to me now without unmuting.${unsaved}`;
   }
 }
 
@@ -173,7 +178,7 @@ export interface VoiceControlProps {
 }
 
 /**
- * The strip's one voice control: a mute button for "Hey Hardy".
+ * The strip's one voice control: a mute button for "Hey Ada".
  *
  * Unmuted means I am listening for the wake word. Muted means I am not. That
  * is the whole model, and it replaced a pair of microphone-shaped affordances
@@ -280,7 +285,7 @@ export const VoiceControl = ({
     // the strip, so it has to do the thing the strip is currently doing: the
     // ear is already closed by the duck for the length of every reply, so
     // toggling the mute here would be a click nobody can hear — the founder's
-    // "there is no way to shut Hardy up". Releasing the click un-ducks the ear
+    // "there is no way to shut Ada up". Releasing the click un-ducks the ear
     // on its own (`announce`), so the mute is untouched either way.
     if (speaking) {
       speaker.stop();
@@ -456,6 +461,14 @@ export const VoiceControl = ({
           {state === "heard" && wake ? (
             <span
               className="max-w-44 truncate text-[10.5px] text-[var(--strip-fg-2)]"
+              // The span truncates; the title carries the whole sentence, the
+              // same escape hatch its siblings have. A long phrase after the
+              // wake word was otherwise unreadable anywhere.
+              title={
+                wake.lastHeard
+                  ? `heard “${WAKE_WORD}, ${wake.lastHeard}”`
+                  : `heard “${WAKE_WORD}” — tell me what you need`
+              }
               data-testid="voice-heard"
             >
               {wake.lastHeard

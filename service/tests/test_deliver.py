@@ -169,7 +169,7 @@ def test_config_with_nothing_configured_names_every_fix(server):
     assert "GOOGLEAPPS_CHAT_WEBHOOK" in hints
     assert "GOOGLEAPPS_CLIENT_ID" in hints and "GOOGLEAPPS_CLIENT_SECRET" in hints
     # No client yet — do not suggest sign-in (the consent button needs the client).
-    assert "Hardy's Send panel" not in hints
+    assert "Ada's Send panel" not in hints
     # The service does not read .env, and the hint has to say so or the user
     # edits a file the service never opens.
     assert "does not read .env" in hints
@@ -238,7 +238,7 @@ def test_deliver_auth_all_in_one_still_works(server, tmp_path, monkeypatch):
     assert token_path.is_file()
 
 
-def test_config_oauth_without_token_points_at_hardy(server, tmp_path, monkeypatch):
+def test_config_oauth_without_token_points_at_ada(server, tmp_path, monkeypatch):
     monkeypatch.setenv("GOOGLEAPPS_CLIENT_ID", "client-id.apps.googleusercontent.com")
     monkeypatch.setenv("GOOGLEAPPS_CLIENT_SECRET", "client-secret-value")
     monkeypatch.setenv("GOOGLEAPPS_TOKEN_PATH", str(tmp_path / "no-token.json"))
@@ -248,7 +248,7 @@ def test_config_oauth_without_token_points_at_hardy(server, tmp_path, monkeypatc
     assert body["signed_in"] is False
     assert body["gmail"] is False
     hints = "\n".join(body["hints"])
-    assert "Hardy's Send panel" in hints
+    assert "Ada's Send panel" in hints
     assert "python -m googleapps auth" in hints
 
 

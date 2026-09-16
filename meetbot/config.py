@@ -1,4 +1,4 @@
-"""Hardy's Meet-bot configuration, validated once, naming everything missing.
+"""Ada's Meet-bot configuration, validated once, naming everything missing.
 
 The ``meetings/config.py`` convention: every value is read here, a bad one is
 a :class:`ConfigError` that names the variable, and a missing one is reported
@@ -18,7 +18,7 @@ from pathlib import Path
 
 __all__ = [
     "ConfigError",
-    "HardyConfig",
+    "AdaConfig",
     "parse_meet_url",
     "DEFAULT_ENGINE_URL",
 ]
@@ -84,7 +84,7 @@ def _number(env: dict[str, str], key: str, default, cast, *, minimum=None):
 
 
 @dataclass(frozen=True)
-class HardyConfig:
+class AdaConfig:
     """Everything one ``python -m meetbot join`` needs."""
 
     google_api_key: str
@@ -95,7 +95,7 @@ class HardyConfig:
     slack_channel: str = ""
     #: When set, only this Slack user's thread reply counts as the answer.
     slack_user: str = ""
-    display_name: str = "Hardy"
+    display_name: str = "Ada"
     profile_dir: Path = field(
         default_factory=lambda: Path.home() / ".hardy" / "meet-profile"
     )
@@ -153,7 +153,7 @@ class HardyConfig:
     @classmethod
     def from_env(
         cls, env: dict[str, str] | None = None, *, require_slack: bool = True
-    ) -> HardyConfig:
+    ) -> AdaConfig:
         """Build from the environment, naming every missing variable at once."""
         from silkscreen.agents.model import CHEAP_MODEL, DEFAULT_MODEL
 
@@ -199,7 +199,7 @@ class HardyConfig:
             slack_token=env.get("SLACK_BOT_TOKEN", "").strip(),
             slack_channel=env.get("HARDY_SLACK_CHANNEL", "").strip(),
             slack_user=env.get("HARDY_SLACK_USER", "").strip(),
-            display_name=env.get("HARDY_DISPLAY_NAME", "").strip() or "Hardy",
+            display_name=env.get("HARDY_DISPLAY_NAME", "").strip() or "Ada",
             profile_dir=Path(profile).expanduser()
             if profile
             else Path.home() / ".hardy" / "meet-profile",

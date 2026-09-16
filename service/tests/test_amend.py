@@ -269,7 +269,8 @@ def test_cancel_refuses_every_remaining_step(server):
     assert status == 200, body
     assert body["cancelled"] is True and body["already_cancelled"] is False
     assert body["stage"] == "proposed"
-    assert set(body["refused_steps"]) == set(steps.STEPS)
+    # propose ran as part of the start, so only the steps after it are refused.
+    assert set(body["refused_steps"]) == set(steps.STEPS) - {"propose"}
     assert body["in_flight"] is False
     assert body["still_running"] == []
     assert body["restart"]["available"] is True

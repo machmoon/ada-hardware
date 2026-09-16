@@ -88,7 +88,7 @@ pub fn handle_shortcut_action<R: Runtime>(app: &AppHandle<R>, action_id: &str) {
         "toggle_dashboard" => handle_toggle_dashboard(app),
         "toggle_window" => {
             handle_toggle_window(app);
-            // The menu bar's "Show/Hide Kaleo" label must follow a hotkey hide.
+            // The menu bar's "Show/Hide Ada" label must follow a hotkey hide.
             crate::tray::sync_visible(app);
         }
         "focus_input" => handle_focus_input(app),

@@ -1,4 +1,4 @@
-# Hardy
+# Ada
 
 [![CI](https://github.com/machmoon/silkscreen/actions/workflows/ci.yml/badge.svg)](https://github.com/machmoon/silkscreen/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
@@ -8,10 +8,10 @@
 **End-to-end PCB design. Describe a board in plain language, get a placed KiCad
 layout back — with the reasoning shown and every claim cited.**
 
-**Two names, one thing.** *Hardy* is who you talk to — the AI hardware engineer and
-the desktop app in [`app/`](app/). (The spoken wake word is still "Hardy", from the
+**Two names, one thing.** *Ada* is who you talk to — the AI hardware engineer and
+the desktop app in [`app/`](app/). (The spoken wake word is still "Ada", from the
 app's previous name.) *Silkscreen* is the engine underneath: the Python package, the
-`silkscreen` command, and this repository. Hardy is a client of Silkscreen; either
+`silkscreen` command, and this repository. Ada is a client of Silkscreen; either
 can be used without the other.
 
 Silkscreen reads the datasheets, proposes a circuit, refuses to build it if it does
@@ -23,7 +23,7 @@ you what it thinks is wrong.
 
 ## Hackathon submission
 
-**What it is.** Hardy is a multi-step AI hardware engineer. You describe a board (typed,
+**What it is.** Ada is a multi-step AI hardware engineer. You describe a board (typed,
 spoken, in a Google Meet, or in Slack); it proposes a circuit with Gemini, validates it,
 places parts with a CP-SAT solver, routes copper, designs a 3D-printable case with a
 CAD kernel, sources parts, reviews its own design, and hands you a real KiCad project.
@@ -33,7 +33,7 @@ layout and enclosure work.
 
 **External apps it connects to.**
 
-| App | What Hardy does with it | Verified live today |
+| App | What Ada does with it | Verified live today |
 |---|---|---|
 | **Google Gemini API** | proposes circuits, cases, reviews, meeting replies | yes |
 | **KiCad** | opens the generated `.kicad_sch`/`.kicad_pcb`; `kicad-cli` ERC, DRC and schematic parity | yes |
@@ -50,7 +50,7 @@ python -m venv .venv && ./.venv/bin/pip install -e ".[dev,agents,cad,meet,slack]
 cp .env.example .env            # set GOOGLE_API_KEY
 cd frontend && npm install && npm run build && cd ..
 cd app && npm install && cd ..  # desktop app (needs Rust + Node 22)
-./.venv/bin/silkscreen serve    # engine on :8081 and the Hardy desktop app
+./.venv/bin/silkscreen serve    # engine on :8081 and the Ada desktop app
 # optional front ends
 ./.venv/bin/python -m meetbot.session sign-in              # once, for the Meet bot
 ./.venv/bin/python -m meetbot join https://meet.google.com/xxx-xxxx-xxx
@@ -80,7 +80,7 @@ CLI only: `./.venv/bin/silkscreen "a 3.3V LDO board" --model gemini-3.5-flash -o
   (`verified` / `proposed` / `unavailable`, `spoken: true` only when audio really played),
   and the demo recordings document what broke.
 
-![Hardy desktop workflow demo](docs/img/hardy-desktop-demo.gif)
+![Ada desktop workflow demo](docs/img/hardy-desktop-demo.gif)
 
 ![Generated STM32 board layout in KiCad](docs/img/board.png)
 
@@ -115,7 +115,7 @@ Then, optionally, one command to configure a key and one to open the app:
 
 ```bash
 ./.venv/bin/silkscreen setup    # writes .env; never echoes the key back
-./.venv/bin/silkscreen serve    # starts the API + UI and opens the Hardy desktop app (--web for the browser)
+./.venv/bin/silkscreen serve    # starts the API + UI and opens the Ada desktop app (--web for the browser)
 ```
 
 <details>
@@ -171,14 +171,14 @@ Every stage is a real KiCad file you can open and inspect on its own, so you can
 where a design went wrong instead of only seeing the last artifact.
 
 ```
-3356 tests collected — no network, no API key, no KiCad install
+3807 tests collected — no network, no API key, no KiCad install
 ```
 
 **Next:** [full install guide and troubleshooting](docs/install.md) ·
 [contributing](CONTRIBUTING.md) · [how it works](#prompt-to-pcb)
 
 **Download:** [tagged releases](https://github.com/machmoon/silkscreen/releases) carry the
-Python wheel and built web UI. The native **Hardy** macOS shell currently runs
+Python wheel and built web UI. The native **Ada** macOS shell currently runs
 from a checkout; `.dmg` packaging, signing, and notarization are not yet built.
 
 ---
@@ -232,21 +232,21 @@ Platform-by-platform commands are in [docs/install.md](docs/install.md#kicad-opt
 | Component | State |
 |---|---|
 | `kicad.py` — `.kicad_pcb` read/write | **Working** · 33 tests |
-| `packing.py` — CP-SAT placer | **Working** · 44 tests |
+| `packing.py` — CP-SAT placer | **Working** · 50 tests |
 | `netlist.py` — validated circuit IR | **Working** · 31 tests |
 | `schematic.py` — `.kicad_sch` + `.kicad_pro` emission | **Working** · 38 tests · KiCad ERC clean |
-| `routing.py` — two-layer grid autorouter | **Working, partial by design** · 54 tests — see below |
-| `footprints.py` + `board.py` — land patterns, board emission | **Working** · 35 tests |
-| `agents/` — datasheet, propose, review, pipeline | **Working** · 72 tests |
+| `routing.py` — two-layer grid autorouter | **Working, partial by design** · 67 tests — see below |
+| `footprints.py` + `board.py` — land patterns, board emission | **Working** · 36 tests |
+| `agents/` — datasheet, propose, review, pipeline | **Working** · 73 tests |
 | `agents/adk/` — ADK dynamic-workflow driver for the pipeline | **Working** · 21 tests |
 | `agents/retrieval.py` — page-cited datasheet retrieval | **Working** · 15 tests |
-| `agents/resilience.py` — provider failover | **Working** · 31 tests |
+| `agents/resilience.py` — provider failover | **Working** · 34 tests |
 | `fab.py` — Gerber, Excellon, BOM, pick-and-place | **Working** · fab package export |
 | `order.py` — order options, manufacturability preflight | **Working** · blocks an unrouted board |
 | `sourcing.py` + `models3d.py` — BOM with distributor-checked MPNs, probed datasheets, library 3D models | **Working** · an MPN is `verified` only when Mouser lists that exact part number (`MOUSER_API_KEY` required); otherwise `proposed`, with `verify_error` saying why. `verified` means listed, **not** in stock and **not** the right package |
-| `mcp/` — MCP server over stdio | **Working** · 43 tests |
+| `mcp/` — MCP server over stdio | **Working** · 48 tests |
 | `audit/` — optional visual design review | **Working** · 52 tests |
-| `service/` — Cloud Run + Firestore cache | **Working** · 158 tests · deployed once to <https://silkscreen-vqdj4x5qbq-uc.a.run.app>, **currently down** (`/readyz` → 500, `/` → 503 on 2026-09-06, unhealthy since 2026-09-05). Redeploy with `scripts/deploy.sh` and re-verify with `curl -s -o /dev/null -w '%{http_code}' <url>/readyz` before a demo |
+| `service/` — Cloud Run + Firestore cache | **Working** · 165 tests · deployed once to <https://silkscreen-vqdj4x5qbq-uc.a.run.app>, **currently down** (`/readyz` → 500, `/` → 503 on 2026-09-06, unhealthy since 2026-09-05). Redeploy with `scripts/deploy.sh` and re-verify with `curl -s -o /dev/null -w '%{http_code}' <url>/readyz` before a demo |
 | `slackbot/` — Slack bot over the pipeline | **Working** · untested against a live workspace |
 | `googleapps/` — Chat, Gmail and Calendar delivery over the pipeline | **Working** · untested against live Google APIs |
 | `specreview.py` + the `spec_review` destination — a run's open questions become a booked meeting | **Working** · the Calendar half is untested against live Google APIs |
@@ -256,8 +256,8 @@ Platform-by-platform commands are in [docs/install.md](docs/install.md#kicad-opt
 | `frontend/` — Svelte review UI, served by the service | **Working** · persistent orchestrator chat, expandable traces, session JSON, review, schematic, placement and board tabs; spoken intent and findings read aloud via the browser's own Web Speech API (dictation on the intent and clarification fields in Chrome/Edge — Firefox has no recognition API and gets a notice; findings read by `speechSynthesis` with a stop control; never auto-started). Local-Whisper dictation is not built (`vendor/openwhispr/` is the reference) |
 | `engine/silkscreen/placement/` — verifier-grounded repair and company profiles | **Working** · deterministic and Gemini policies; experimental providers are opt-in |
 | `constraints.py` — approved build contract and post-route receipt | **Working** · opt-in, fail-closed, and deterministically tested |
-| Voice / talk input | **Working** · push-to-talk and "Hardy" wake word in the desktop overlay (ear toggle, off by default, paid windows capped at 15); the web SPA's separate browser Web Speech dictation and read-aloud are listed under `frontend/` |
-| `app/` — the Hardy desktop overlay (Tauri) | **Working** · approval-gated step strip over a live KiCad, order step with GLB export, in-app 3D board viewer (`ModelViewer`), Workspace delivery panel |
+| Voice / talk input | **Working** · push-to-talk and "Ada" wake word in the desktop overlay (ear toggle, off by default, paid windows capped at 15); the web SPA's separate browser Web Speech dictation and read-aloud are listed under `frontend/` |
+| `app/` — the Ada desktop overlay (Tauri) | **Working** · approval-gated step strip over a live KiCad, order step with GLB export, in-app 3D board viewer (`ModelViewer`), Workspace delivery panel |
 | Guided cursor | **Half built** · the in-webview pointer ships (`frontend/src/lib/guide.js`, `GuidePointer.svelte`, "Show me" on a finding); pointing at anything *outside* our own window — KiCad, a terminal, the OS — is **not built**, and there is no screen capture, accessibility-tree read or OS overlay behind it |
 | `spice/` — typed testbenches, decks, measurements, signed-margin assertions | **Working as a library** · reached today only by the MCP tools, `scripts/simulate_demo.py` and direct calls; **no pipeline stage, ADK node, CLI flag or service route builds a deck**, so a generated board is never simulated |
 
@@ -588,7 +588,7 @@ treats the board file as the interface.
 | Requires KiCad running | Yes | **No** |
 | Headless / CI | Hard | **Native** |
 | Platform lock | KiCad's plugin loader | **None — pure Python** |
-| Testable without KiCad | No | **Yes, all 3356 tests** |
+| Testable without KiCad | No | **Yes, all 3807 tests** |
 
 ### What it reads
 
@@ -1236,7 +1236,7 @@ engine/
       adk/          ADK dynamic workflow over the same stage bodies
     audit/        optional visual review of a finished board
     specreview.py validated meeting agenda for what a run could not settle
-  tests/          3356 tests — no network, no API keys, no KiCad
+  tests/          3807 tests — no network, no API keys, no KiCad
     fixtures/     ref.kicad_pcb -- 11-footprint board fixture
 scripts/
   demo.py         end-to-end: read -> place -> write -> verify

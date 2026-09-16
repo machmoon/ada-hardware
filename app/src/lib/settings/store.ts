@@ -303,7 +303,7 @@ export function createSettingsStore(
     }
 
     // Existing-user detection. A build before the store existed left
-    // `silkscreen_*` keys behind; someone who has already used Kaleo must not
+    // `silkscreen_*` keys behind; someone who has already used Ada must not
     // be gated behind a first-launch assistant, so setup is recorded as done
     // at version 0 (below SETUP_VERSION, which is the "Run Setup Again" hint)
     // and the Rust side is told to reveal the strip. Only when the backend

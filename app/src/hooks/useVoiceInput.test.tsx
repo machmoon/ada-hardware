@@ -148,7 +148,7 @@ describe("useVoiceInput", () => {
   it("treats a denied permission as an ordinary error state", async () => {
     mockEnsureMic.mockRejectedValue(
       new Error(
-        "Microphone permission was refused. Enable Hardy in System Settings → Privacy & Security → Microphone, then click the ear again."
+        "Microphone permission was refused. Enable Ada in System Settings → Privacy & Security → Microphone, then click the ear again."
       )
     );
 

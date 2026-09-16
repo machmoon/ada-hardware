@@ -621,3 +621,160 @@ def test_fallback_warns_that_it_is_single_sided():
     result = pack(parts, time_limit_s=0.001, grid_nm=1000)
     assert result.status is PackStatus.FALLBACK
     assert any("single-sided" in w for w in result.warnings)
+
+
+def test_a_part_pinned_to_a_named_edge_lands_on_that_edge():
+    """Any edge is not enough for a part with a direction (Part.edge_side)."""
+    from silkscreen.packing import Part, pack
+    from silkscreen.units import mm
+
+    parts = [Part(mm(8), mm(6), ref=f"C{i}") for i in range(4)]
+    parts.append(Part(mm(9), mm(7), ref="J1", edge_side="bottom"))
+    parts.append(Part(mm(4), mm(4), ref="J2", edge_side="right"))
+    result = pack(parts, clearance_nm=0, time_limit_s=5)
+    boxes = _boxes(parts, result)
+    assert boxes[4][1] == 0, f"J1 at {boxes[4]} is not on the bottom edge"
+    assert boxes[5][2] == result.board_width_nm, f"J2 at {boxes[5]} is not on the right"
+
+
+def test_edge_side_refuses_rotation_and_unknown_sides():
+    import pytest
+    from silkscreen.packing import Part, pack
+    from silkscreen.units import mm
+
+    with pytest.raises(ValueError, match="cannot also rotate"):
+        pack([Part(mm(5), mm(5), ref="J1", edge_side="bottom", allow_rotation=True)])
+    with pytest.raises(ValueError, match="not one of"):
+        pack([Part(mm(5), mm(5), ref="J1", edge_side="front")])
+
+
+def test_the_board_pins_usb_c_mouth_to_the_front_edge():
+    """The 2026-09-14 demo: J1 floated mid-board, mouth facing a resistor."""
+    from silkscreen.board import build_board
+    from silkscreen.netlist import parse_circuit_spec
+
+    spec = parse_circuit_spec(
+        {
+            "devices": {
+                "AMS1117-3.3": {"pins": {"GND": "1", "VOUT": "2", "VIN": "3"}},
+                "usb": {
+                    "kind": "connector",
+                    "package": "USB_C_Receptacle_Power",
+                    "pins": {"G1": "A12", "G2": "B12", "V1": "A9", "V2": "B9"},
+                },
+            },
+            "passives": {
+                "c1": {"type": "capacitor", "value": "10uF"},
+                "c2": {"type": "capacitor", "value": "22uF"},
+            },
+            "nets": {
+                "VIN": ["usb.V1", "usb.V2", "AMS1117-3.3.VIN", "c1.1"],
+                "GND": ["usb.G1", "usb.G2", "AMS1117-3.3.GND", "c1.2", "c2.2"],
+                "3V3": ["AMS1117-3.3.VOUT", "c2.1"],
+            },
+        }
+    )
+    board = build_board(spec, time_limit_s=5)
+    usb = next(p for p in board.parts if p.footprint.name == "USB_C_Receptacle_Power")
+    # Solver frame is Y-up; bottom (KiCad max Y, the case's front) is y = 0
+    # for the reserved box, so the part is the lowest thing on the board.
+    assert not usb.rotated
+    assert usb.y_nm == min(p.y_nm for p in board.parts)
+
+
+def test_the_board_puts_the_esp32_antenna_on_the_edge():
+    """Espressif's guideline: the WROOM antenna (footprint y < 0) at the edge."""
+    from silkscreen.board import build_board
+    from silkscreen.netlist import parse_circuit_spec
+
+    pins = {"GND": "1", "3V3": "2", "EN": "3", "IO0": "25", "GND_PAD": "39"}
+    spec = parse_circuit_spec(
+        {
+            "devices": {"ESP32-WROOM-32E": {"pins": pins}},
+            "passives": {
+                "c1": {"type": "capacitor", "value": "100nF"},
+                "r1": {"type": "resistor", "value": "10k"},
+            },
+            "nets": {
+                "3V3": ["ESP32-WROOM-32E.3V3", "c1.1", "r1.1"],
+                "GND": ["ESP32-WROOM-32E.GND", "ESP32-WROOM-32E.GND_PAD", "c1.2"],
+                "EN": ["ESP32-WROOM-32E.EN", "r1.2"],
+            },
+        }
+    )
+    board = build_board(spec, time_limit_s=5)
+    module = next(p for p in board.parts if p.footprint.name == "ESP32-WROOM-32E")
+    assert not module.rotated
+    # Solver Y-up: the antenna end faces the top, so the module's box is the
+    # highest thing on the board.
+    tops = {
+        p.ref: p.y_nm
+        + 2 * (p.footprint.courtyard_w_nm if p.rotated else p.footprint.courtyard_h_nm)
+        for p in board.parts
+    }
+    assert tops[module.ref] == max(tops.values())
+
+
+
+def test_a_keepout_obstacle_diverts_copper_that_would_cross_it():
+    """The mechanism behind board_keepouts, measured both ways.
+
+    A netless through-hole RoutePad is an obstacle on every layer. Between two
+    pads of one net it must push the track around; without it the same net
+    runs straight through the region -- so the check is not vacuous.
+    """
+    from silkscreen.routing import RoutePad, route
+    from silkscreen.units import mm
+
+    net = [
+        RoutePad("SIG", mm(1), mm(10), mm(1), mm(1), ref="A", number="1"),
+        RoutePad("SIG", mm(19), mm(10), mm(1), mm(1), ref="B", number="1"),
+    ]
+    keep = RoutePad("", mm(10), mm(10), mm(6), mm(8), through_hole=True, ref="U1")
+    x0, x1, y0, y1 = mm(7), mm(13), mm(6), mm(14)
+
+    def crosses(result):
+        for track in result.tracks:
+            for t in (0.0, 0.25, 0.5, 0.75, 1.0):
+                x = track.start_x_nm + t * (track.end_x_nm - track.start_x_nm)
+                y = track.start_y_nm + t * (track.end_y_nm - track.start_y_nm)
+                if x0 < x < x1 and y0 < y < y1:
+                    return True
+        return any(x0 < v.x_nm < x1 and y0 < v.y_nm < y1 for v in result.vias)
+
+    bounds = dict(min_x_nm=0, min_y_nm=0, max_x_nm=mm(20), max_y_nm=mm(20))
+    free = route(net, **bounds)
+    assert not free.unrouted and crosses(free)
+    kept = route(net + [keep], **bounds)
+    assert not kept.unrouted, kept.unrouted
+    assert not crosses(kept)
+
+
+def test_the_esp32_module_carries_an_antenna_keepout_at_its_antenna_end():
+    from silkscreen.board import (
+        ANTENNA_KEEPOUTS_NM,
+        board_keepouts,
+        board_pads,
+        build_board,
+    )
+    from silkscreen.netlist import parse_circuit_spec
+
+    pins = {"GND": "1", "3V3": "2", "EN": "3", "EP": "39"}
+    spec = parse_circuit_spec(
+        {
+            "devices": {"ESP32-WROOM-32E": {"pins": pins}},
+            "passives": {"c1": {"type": "capacitor", "value": "100nF"}},
+            "nets": {
+                "3V3": ["ESP32-WROOM-32E.3V3", "c1.1"],
+                "GND": ["ESP32-WROOM-32E.GND", "ESP32-WROOM-32E.EP", "c1.2"],
+            },
+        }
+    )
+    board = build_board(spec, time_limit_s=5)
+    (keep,) = board_keepouts(board)
+    module = next(p for p in board.parts if p.footprint.name == "ESP32-WROOM-32E")
+    assert keep.through_hole and keep.net == "" and keep.ref == module.ref
+    assert (keep.w_nm, keep.h_nm) == ANTENNA_KEEPOUTS_NM["ESP32-WROOM-32E"][2:]
+    # Solver Y-up: the antenna end (footprint y < 0) is above the module's pads.
+    pad_tops = max(p.y_nm for p in board_pads(board) if p.ref == module.ref)
+    assert keep.y_nm - keep.h_nm // 2 > pad_tops - mm(1)

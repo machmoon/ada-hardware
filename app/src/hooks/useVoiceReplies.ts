@@ -41,7 +41,9 @@ export function useVoiceReplies(steps: StepRun): void {
     const key = `${steps.status}:${steps.history.length}:${latest.step}:${steps.available.join(",")}`;
     if (spokenRef.current === key) return;
     spokenRef.current = key;
-    void announce(stageReadyLine(latest, steps.available));
+    // Teach the approving words at the first stage of a run only; later
+    // stages taper to what is done and where (moments.ts::stageReadyLine).
+    void announce(stageReadyLine(latest, steps.available, steps.history.length <= 1));
   }, [
     steps.status,
     steps.history,

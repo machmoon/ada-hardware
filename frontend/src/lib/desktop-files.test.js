@@ -4,7 +4,7 @@ import { saveTextWithDialog } from './desktop-files.js'
 
 describe('native desktop saves', () => {
   it('writes exactly the selected path and text', async () => {
-    const choosePath = vi.fn().mockResolvedValue('/Users/hardy/board.kicad_pcb')
+    const choosePath = vi.fn().mockResolvedValue('/Users/ada/board.kicad_pcb')
     const writeText = vi.fn().mockResolvedValue(undefined)
 
     const saved = await saveTextWithDialog('(kicad_pcb)', 'board.kicad_pcb', {
@@ -12,9 +12,9 @@ describe('native desktop saves', () => {
       writeText,
     })
 
-    expect(saved).toBe('/Users/hardy/board.kicad_pcb')
+    expect(saved).toBe('/Users/ada/board.kicad_pcb')
     expect(choosePath).toHaveBeenCalledWith({ defaultPath: 'board.kicad_pcb' })
-    expect(writeText).toHaveBeenCalledWith('/Users/hardy/board.kicad_pcb', '(kicad_pcb)')
+    expect(writeText).toHaveBeenCalledWith('/Users/ada/board.kicad_pcb', '(kicad_pcb)')
   })
 
   it('does not write when the user cancels the dialog', async () => {

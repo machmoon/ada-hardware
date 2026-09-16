@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 
 vi.mock("@/lib/settings/store", async () => (await import("@/lib/setup/testing")).makeSettingsStub());
 vi.mock("@/lib/notify/notify", () => ({ sendTestNotification: vi.fn(async () => ({ sent: true, reason: "" })) }));
-const invoke = vi.fn(async (_cmd: string, _args?: unknown) => undefined);
+const invoke = vi.fn(async (_cmd: string, _args?: unknown): Promise<unknown> => undefined);
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (cmd: string, args?: unknown) => invoke(cmd, args) }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/plugin-http", () => ({ fetch: vi.fn(async () => { throw new Error("ECONNREFUSED"); }) }));
@@ -81,11 +81,37 @@ describe("Welcome", () => {
     expect(screen.getByTestId("setup-continue").textContent).toBe("Finish");
   });
 
-  it("renders no step and leaves for the workbench when the store says finished", async () => {
+  it("leaves for the workbench when the store says finished and there is no shell", async () => {
     stub.__reset({ "setup.completed": true });
     mount();
-    expect(screen.queryByTestId("setup-step")).toBeNull();
     await waitFor(() => expect(screen.getByTestId("where").textContent).toBe("/workbench"));
+    expect(screen.queryByTestId("setup-step")).toBeNull();
+  });
+
+  it("the shell's setup_status outranks the store: a gated launch stays in the wizard", async () => {
+    // The 2026-09-16 split-brain: settings.json said false (Rust gated and
+    // opened /welcome) while the localStorage mirror still said true.
+    stub.__reset({ "setup.completed": true });
+    invoke.mockImplementation(async (cmd: string) =>
+      cmd === "setup_status" ? { completed: false, in_setup: false } : undefined
+    );
+    mount();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("setup_status", undefined));
+    // Give a wrong navigation every chance to happen, then assert it did not.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("where").textContent).toBe("/welcome");
+    expect(screen.getByTestId("setup-step")).toBeTruthy();
+  });
+
+  it("a shell in setup mode keeps the wizard even when the flag says completed", async () => {
+    stub.__reset({ "setup.completed": true });
+    invoke.mockImplementation(async (cmd: string) =>
+      cmd === "setup_status" ? { completed: true, in_setup: true } : undefined
+    );
+    mount();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("setup_status", undefined));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("where").textContent).toBe("/welcome");
   });
 
   it("Run Setup Again arrives with ?jump=appearance and is honoured once", () => {
@@ -112,7 +138,7 @@ describe("Welcome", () => {
     await waitFor(() => expect(screen.getByTestId("setup-title").textContent).toBe("You're all set"));
     expect(screen.queryByTestId("setup-footer")).toBeNull();
     expect(screen.getByTestId("setup-skipped-line").textContent).toBe(
-      "Skipped: Google, Billing, Microsoft, Notifications, Hey Hardy. Find them in Settings.",
+      "Skipped: Google, Billing, Microsoft, Notifications, Hey Ada. Find them in Settings.",
     );
   });
 
@@ -133,7 +159,9 @@ describe("Welcome", () => {
     mount();
     fireEvent.click(screen.getByTestId("setup-not-now"));
     await waitFor(() => expect(screen.getByTestId("where").textContent).toBe("/workbench"));
-    expect(invoke).toHaveBeenCalledTimes(1);
+    // One `setup_finish`; the gate's own `setup_status` read is not a finish.
+    const finishes = invoke.mock.calls.filter(([cmd]) => cmd === "setup_finish");
+    expect(finishes).toHaveLength(1);
     expect(localStorage.getItem(TOUR_CAPTION_KEY)).toBeNull();
     expect(readTour().kind).toBe("idle");
   });

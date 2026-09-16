@@ -42,7 +42,8 @@ the receipt of every number used, mm floats rounded to three places.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +61,7 @@ from .rules import (
     HOLE_COMPENSATION_NM,
     INSERTS,
     INSERTS_SHORT,
+    LABEL_DEPTH_NM,
     LIP_DEPTH_NM,
     LIP_SLACK_NM,
     LIP_VERTICAL_GAP_NM,
@@ -100,11 +102,11 @@ __all__ = [
 
 #: Overshoot so subtracted solids never share a face with what they cut.
 EPS_NM: int = mm(0.01)
-#: Depth and character size of the lid label. The label is a **deboss** cut
-#: into the outer face: that face is the bed when the lid prints, so an emboss
-#: there would put the letters under a 0.6 mm ceiling and fail ``overhang``
-#: honestly. ``params_mm["label_emboss"]`` stays 0.0 -- nothing stands proud.
-LABEL_DEPTH_NM: int = mm(0.6)
+#: Character size of the lid label. The label is a **deboss** cut into the
+#: outer face (depth ``rules.LABEL_DEPTH_NM``): that face is the bed when the
+#: lid prints, so an emboss there would put the letters under a 0.6 mm
+#: ceiling and fail ``overhang`` honestly. ``params_mm["label_emboss"]`` stays
+#: 0.0 -- nothing stands proud.
 LABEL_EMBOSS_NM: int = 0
 LABEL_TEXT_SIZE_NM: int = mm(6.0)
 #: A side cutout is refused when its part is further than this from the
@@ -184,6 +186,16 @@ class ExportPaths:
     step: Path
     base_stl: Path
     lid_stl: Path
+    #: The assembly as glTF (``<stem>.glb``), for the desktop's in-app viewer
+    #: (``ModelViewer`` reads plain-triangle glTF); None when the writer
+    #: refused, which is a warning on the model, never a failed export --
+    #: the STEP is the product.
+    glb: Path | None = None
+    #: Why ``glb`` is None, in words. Both this class and ``EnclosureModel``
+    #: are frozen, so a refused preview is recorded here rather than appended
+    #: to ``model.warnings`` (a tuple) -- which is what used to raise out of
+    #: the export and lose the STEP it had already written.
+    glb_error: str | None = None
 
 
 # ------------------------------------------------------------ nm -> mm seam
@@ -1258,7 +1270,16 @@ def _build_lid(
     return lid, z1
 
 
-def build_enclosure(spec: EnclosureSpec, envelope: BoardEnvelope) -> EnclosureModel:
+#: ``on_stage(name, shape)`` -- called with each solid the build finishes
+#: (``"board"``, ``"base"``, ``"lid"``), for a watcher drawing the case in a
+#: CAD window as it takes shape. Only real, finished solids: the sketches
+#: and cutters in between are not the case and are not announced.
+OnStage = Callable[[str, Any], None]
+
+
+def build_enclosure(
+    spec: EnclosureSpec, envelope: BoardEnvelope, *, on_stage: OnStage | None = None
+) -> EnclosureModel:
     """Build base, lid and keep-out solids for ``spec`` around ``envelope``.
 
     Raises :class:`~.errors.KernelUnavailable` without build123d,
@@ -1278,9 +1299,13 @@ def build_enclosure(spec: EnclosureSpec, envelope: BoardEnvelope) -> EnclosureMo
     receipt = _params(d)
 
     board, boxes = _build_board(k, envelope, d)
+    if on_stage is not None:
+        on_stage("board", board)
     base, plugs, record, keepout, press = _build_base(
         k, spec, envelope, d, cutouts, warnings, receipt
     )
+    if on_stage is not None:
+        on_stage("base", base)
     _check_solid(base, "base")
 
     lid = None
@@ -1290,6 +1315,8 @@ def build_enclosure(spec: EnclosureSpec, envelope: BoardEnvelope) -> EnclosureMo
         lid_asm, top_z = _build_lid(
             k, spec, envelope, d, cutouts, keepout, press, warnings, receipt
         )
+        if on_stage is not None:
+            on_stage("lid", lid_asm)
         _check_solid(lid_asm, "lid")
         lid_assembled = b.Location((0, _mm(d.outer_y), _mm(top_z)), (180, 0, 0))
         lid = _op(
@@ -1328,6 +1355,15 @@ def build_enclosure(spec: EnclosureSpec, envelope: BoardEnvelope) -> EnclosureMo
 # -------------------------------------------------------------------- export
 
 
+def export_shape(shape: Any, path: Path) -> Path:
+    """Write one solid as STEP -- the live show's per-stage file. The same
+    writer :func:`export_model` uses, without the assembly labelling."""
+    b = require_kernel()
+    _op("EXPORT_FAILED", f"STEP export of {path.name}",
+        lambda: b.export_step(shape, path) or None)
+    return path
+
+
 def export_model(
     model: EnclosureModel, directory: str | Path, stem: str = "enclosure"
 ) -> ExportPaths:
@@ -1360,4 +1396,10 @@ def export_model(
     if model.lid is not None:
         _op("INVALID_SHAPE", "lid STL export",
             lambda: b.export_stl(model.lid, paths.lid_stl) or None)
-    return paths
+    glb = directory / f"{stem}.glb"
+    try:
+        if b.export_gltf(assembly, glb, binary=True):
+            return replace(paths, glb=glb)
+        return replace(paths, glb_error=f"glTF preview not written: {glb.name}")
+    except Exception as exc:  # noqa: BLE001 - a preview, never the product
+        return replace(paths, glb_error=f"glTF preview not written: {exc}")

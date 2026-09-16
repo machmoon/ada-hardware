@@ -88,10 +88,10 @@ def test_superseded_block_is_flushed_at_once_and_later_polish_ignored():
 
 
 def test_own_speech_is_marked_self_under_either_label():
-    stab = CaptionStabilizer(self_name="Hardy", stabilize_s=0.0)
-    out = feed(stab, 0.0, (1, "You", "Why not?"), (2, "hardy", "Tell me more"))
+    stab = CaptionStabilizer(self_name="Ada", stabilize_s=0.0)
+    out = feed(stab, 0.0, (1, "You", "Why not?"), (2, "ada", "Tell me more"))
     out += stab.flush(1.0)
-    assert texts(out) == [("Hardy", "Why not?", True), ("Hardy", "Tell me more", True)]
+    assert texts(out) == [("Ada", "Why not?", True), ("Ada", "Tell me more", True)]
 
 
 def test_empty_text_is_never_yielded_and_a_nameless_block_waits_for_its_name():
@@ -132,7 +132,7 @@ def test_transcriber_is_refused_in_words():
 
 
 class FakeSession:
-    display_name = "Hardy"
+    display_name = "Ada"
 
     def __init__(self, page):
         self.page = page
@@ -169,7 +169,7 @@ def test_scripted_meeting_turns_captions_on_and_yields_each_turn_once():
     utterances = asyncio.run(_with_page("?timeline=1", body, init=True))
     assert texts(utterances) == [
         ("Pat Liu", "I don't think this will work.", False),
-        ("Hardy", "Why not? What worries you?", True),
+        ("Ada", "Why not? What worries you?", True),
         ("Pat Liu", "The battery is too small.", False),
     ]
     assert all(isinstance(u, Utterance) and u.t_start <= u.t_end for u in utterances)

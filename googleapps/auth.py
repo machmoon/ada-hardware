@@ -1,6 +1,6 @@
 """OAuth 2.0 installed-app flow with PKCE, on the stdlib.
 
-``python -m googleapps auth`` (and Hardy's ``POST /deliver/auth``) opens
+``python -m googleapps auth`` (and Ada's ``POST /deliver/auth``) opens
 Google's consent page in the browser, catches the redirect on a 127.0.0.1
 loopback port, exchanges the code, and writes the token JSON to the token
 path with mode 0o600. After that, every Gmail and Calendar call goes through
@@ -116,8 +116,12 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 #: Exactly what the two features need, nothing broader: send mail as the
 #: user, and manage events. Neither scope can read the user's mailbox.
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.send"
+#: Read-only mail access, added 2026-09-16 so an agent can read a one-time
+#: code the applicant asked it to fetch (the a16z Alpha intake emails one).
+#: Read, never modify: the scope cannot delete, send or label anything.
+GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
-SCOPES = (GMAIL_SCOPE, CALENDAR_SCOPE)
+SCOPES = (GMAIL_SCOPE, GMAIL_READ_SCOPE, CALENDAR_SCOPE)
 
 #: Which scope each delivery destination cannot work without. One table, read
 #: by the CLI's pre-flight, ``check`` and ``service.deliver.config_report`` --
@@ -143,7 +147,7 @@ SCOPE_LABELS: dict[str, str] = {
 EXPIRY_SKEW_S = 60
 
 RERUN_HINT = (
-    "sign in again from Hardy's Send panel, or run `python -m googleapps auth`"
+    "sign in again from Ada's Send panel, or run `python -m googleapps auth`"
 )
 
 
@@ -529,12 +533,12 @@ def access_token(
 # -- the interactive flow --------------------------------------------------
 
 _LANDING_OK = (
-    b"<!doctype html><meta charset='utf-8'><title>Hardy</title>"
-    b"<p>Signed in. You can close this tab and return to Hardy.</p>"
+    b"<!doctype html><meta charset='utf-8'><title>Ada</title>"
+    b"<p>Signed in. You can close this tab and return to Ada.</p>"
 )
 _LANDING_DENIED = (
-    b"<!doctype html><meta charset='utf-8'><title>Hardy</title>"
-    b"<p>Authorization was not granted. Nothing was stored; return to Hardy "
+    b"<!doctype html><meta charset='utf-8'><title>Ada</title>"
+    b"<p>Authorization was not granted. Nothing was stored; return to Ada "
     b"and try again.</p>"
 )
 
@@ -589,7 +593,7 @@ def _loopback_authorize(
     socket is then the code that runs in production.
 
     ``on_url`` is called with the consent URL as soon as it exists (before
-    waiting for the redirect), so a caller like Hardy can open it itself when
+    waiting for the redirect), so a caller like Ada can open it itself when
     the service process cannot.
     """
 

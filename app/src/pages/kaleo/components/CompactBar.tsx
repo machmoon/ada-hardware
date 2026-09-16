@@ -17,7 +17,7 @@ export interface CompactBarProps {
    */
   onTranscript: (text: string) => void;
   /**
-   * The "Hey Hardy" listener, owned by the page. The pill's microphone is its
+   * The "Hey Ada" listener, owned by the page. The pill's microphone is its
    * mute control, so folding the strip away does not take the ear with it.
    */
   wake?: WakeWord;

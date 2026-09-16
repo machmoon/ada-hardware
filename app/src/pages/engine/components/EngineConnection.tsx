@@ -20,7 +20,7 @@ export interface BaseUrlCheck {
  * This is a refusal, not a warning, and the reason is worth stating plainly:
  * the silkscreen service ships **no authentication and no CORS headers**, by
  * design — it expects to be reachable only from the machine it runs on. A base
- * URL pointing at anything else means Kaleo is handing an unauthenticated
+ * URL pointing at anything else means Ada is handing an unauthenticated
  * `/generate` endpoint — one that spends the user's Gemini quota on every call
  * — to whatever else can route to that address.
  *
@@ -159,7 +159,7 @@ export interface EngineConnectionProps {
 }
 
 /**
- * Where the user points Kaleo at a running engine.
+ * Where the user points Ada at a running engine.
  *
  * The draft is local state and only a validated value is committed, so a
  * half-typed address never becomes the one the rest of the app uses.
@@ -218,7 +218,7 @@ export const EngineConnection = ({
     <div id="engine-connection" className={cn("space-y-3", className)}>
       <Header
         title="Engine address"
-        description="Hardy talks to the silkscreen Python service over HTTP on your own machine"
+        description="Ada talks to the silkscreen Python service over HTTP on your own machine"
         isMainTitle
       />
 

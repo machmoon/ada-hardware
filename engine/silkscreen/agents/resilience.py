@@ -71,7 +71,13 @@ __all__ = [
 #: turns up in plenty of unrelated text (a URL, a part number, a nested message
 #: body), whereas ``RESOURCE_EXHAUSTED`` is the gRPC status string google-genai
 #: puts in the error body it stringifies.
-PROVIDER_DOWN_MARKERS = ("RESOURCE_EXHAUSTED",)
+#:
+#: ``rate_limit_error`` is the Anthropic API's word for the same wall (HTTP 429;
+#: https://docs.anthropic.com/en/api/errors). ``ClaudeModel`` puts it in
+#: every 429 message, with ``retry in Ns`` from the ``retry-after`` header for
+#: :func:`retry_delay_s`). Its sibling ``overloaded_error`` (529) is left out
+#: for the ``UNAVAILABLE`` reason above: transient load, worth the retry.
+PROVIDER_DOWN_MARKERS = ("RESOURCE_EXHAUSTED", "rate_limit_error")
 
 
 def provider_is_down(error: str) -> bool:
@@ -368,9 +374,13 @@ class FallbackModel:
                 swapped.append(provider)
                 continue
             moved = True
+            # Named for the model the sibling actually runs: a Claude rung
+            # asked for the (Gemini-named) cheap tier moves to Claude's own
+            # cheap model, and an event naming the Gemini id would be false.
+            target = getattr(sibling, "model", None)
             swapped.append(
                 Provider(
-                    name=f"{provider.name}-{model}",
+                    name=f"{provider.name}-{target if isinstance(target, str) and target else model}",
                     model=sibling,
                     attempts=provider.attempts,
                 )
@@ -486,3 +496,158 @@ class FallbackModel:
                 return text
 
         raise AllProvidersFailed(attempts)
+
+    def generate_turn(
+        self,
+        messages: list,
+        *,
+        tools: list,
+        system: str | None = None,
+        max_output_tokens: int = 8192,
+    ):
+        """The tool-calling face of the ladder (``agents.harness.model.ToolModel``).
+
+        One difference from :meth:`generate`, which fails over per call: once
+        the conversation holds an assistant turn, only the provider that
+        produced it is asked, because both providers sign what they said and a
+        Claude history cannot be replayed to Gemini (``harness/model.py``).
+        A rung that is down after that point raises :class:`AllProvidersFailed`
+        naming the pin, and the caller restarts the loop from its input --
+        counted as fresh calls, never a silent switch mid-history.
+        """
+        from .harness import tool_model_for
+
+        attempts: list[Attempt] = []
+        ready, skipped = self._eligible()
+        for name, remaining in skipped.items():
+            attempt = Attempt(
+                provider=name, ok=False, elapsed_s=0.0,
+                error=(
+                    f"skipped: quota refused recently; {remaining:.1f}s "
+                    "before it is asked again"
+                ),
+            )
+            attempts.append(attempt)
+            self.log.append(attempt)
+        pinned = next(
+            (
+                m.provider
+                for m in reversed(messages)
+                if m.role == "assistant" and m.provider
+            ),
+            None,
+        )
+        for provider in ready:
+            tool_model = tool_model_for(provider.model)
+            if pinned is not None and tool_model.provider != pinned:
+                attempts.append(Attempt(
+                    provider=provider.name, ok=False, elapsed_s=0.0,
+                    error=f"skipped: the conversation is pinned to {pinned!r}",
+                ))
+                continue
+            for try_no in range(provider.attempts):
+                if self.before_attempt is not None:
+                    self.before_attempt(provider.name)
+                started = time.monotonic()
+                try:
+                    turn = tool_model.generate_turn(
+                        messages, tools=tools, system=system,
+                        max_output_tokens=max_output_tokens,
+                    )
+                    empty = not turn.text and not turn.tool_calls
+                    if empty and turn.stop_reason == "end":
+                        raise ModelError(f"{provider.name} returned an empty turn")
+                except Exception as exc:
+                    attempt = Attempt(
+                        provider=provider.name, ok=False,
+                        error=f"{type(exc).__name__}: {exc}",
+                        elapsed_s=time.monotonic() - started,
+                    )
+                    attempts.append(attempt)
+                    self.log.append(attempt)
+                    if provider_is_down(attempt.error or ""):
+                        self._cooldown[self._key(provider)] = (
+                            self._clock() + quota_cooldown_s(attempt.error or "")
+                        )
+                        break
+                    if try_no + 1 < provider.attempts:
+                        self._sleep(
+                            min(self.backoff_s * (2**try_no), self.max_backoff_s)
+                        )
+                    continue
+                attempt = Attempt(
+                    provider=provider.name,
+                    ok=True,
+                    elapsed_s=time.monotonic() - started,
+                )
+                attempts.append(attempt)
+                self.log.append(attempt)
+                return turn
+        raise AllProvidersFailed(attempts)
+
+
+def default_chain(
+    primary: str | None = None, *, factory: Callable[[str], Model] | None = None
+) -> FallbackModel:
+    """The one failover ladder, used by the service and the CLI alike.
+
+    Per configured provider, in :func:`~silkscreen.agents.providers.
+    provider_order` (Claude, then Gemini): Claude's primary and cheap tiers;
+    Gemini's primary, Flash, cheap tier and Gemma. ``primary`` pins the lead
+    model of the provider it names and moves that provider first. Several
+    rungs, not one: a rate limit or a transient 5xx on the primary should
+    degrade the answer, not lose the request -- measured 2026-09-14, a bare
+    ``GeminiModel`` died on one ``504 DEADLINE_EXCEEDED``. Rungs naming the
+    same model id are folded; quota cooldowns live in the process-wide
+    :data:`SHARED_COOLDOWNS`. ``factory`` builds the Gemini rungs (default
+    :class:`GeminiModel`) -- the seam callers' tests patch. With no provider
+    configured the Gemini ladder is still built, so its own error names the
+    missing key.
+    """
+    from .claude import (
+        CLAUDE_CHEAP_MODEL,
+        ClaudeModel,
+        claude_primary_model,
+        is_claude_model,
+    )
+    from .model import (
+        CHEAP_MODEL,
+        FALLBACK_MODEL,
+        GEMMA_MODEL,
+        GeminiModel,
+        primary_model,
+    )
+    from .providers import NoProviderConfigured, provider_order
+
+    try:
+        order = provider_order()
+    except NoProviderConfigured:
+        order = ["gemini"]
+    if primary:
+        owner = "claude" if is_claude_model(primary) else "gemini"
+        order = [owner] + [p for p in order if p != owner]
+    gemini = factory or GeminiModel
+    rungs: list[tuple[str, str, int, Callable[[str], Model]]] = []
+    for provider in order:
+        if provider == "claude":
+            lead = primary if is_claude_model(primary) else claude_primary_model()
+            rungs += [
+                ("claude-primary", lead, 2, ClaudeModel),
+                ("claude-cheap", CLAUDE_CHEAP_MODEL, 2, ClaudeModel),
+            ]
+        else:
+            lead = primary if primary and not is_claude_model(primary) else primary_model()
+            rungs += [
+                ("gemini-primary", lead, 2, gemini),
+                ("gemini-flash", FALLBACK_MODEL, 2, gemini),
+                ("gemini-cheap", CHEAP_MODEL, 2, gemini),
+                ("gemma-open", GEMMA_MODEL, 1, gemini),
+            ]
+    providers: list[Provider] = []
+    seen: set[str] = set()
+    for name, model_id, attempts, make in rungs:
+        if model_id in seen:
+            continue
+        seen.add(model_id)
+        providers.append(Provider(name, make(model_id), attempts=attempts))
+    return FallbackModel(providers=providers, _cooldown=SHARED_COOLDOWNS)

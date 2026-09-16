@@ -19,7 +19,7 @@ export type NotifyOs = "always" | "not_focused" | "never";
 export interface SettingsSchema {
   /** Native banners on or off. Default off: the test button is the opt-in. */
   "notify.enabled": boolean;
-  /** When a banner may fire relative to Kaleo having focus. */
+  /** When a banner may fire relative to Ada having focus. */
   "notify.os": NotifyOs;
   /** The Rust gate reads this exact key; anything but `true` gates the strip. */
   "setup.completed": boolean;

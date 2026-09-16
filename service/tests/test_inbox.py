@@ -1,4 +1,4 @@
-"""The inbox: ideas from Slack waiting for the Hardy desktop to accept one.
+"""The inbox: ideas from Slack waiting for the Ada desktop to accept one.
 
 Unit tests drive :class:`service.inbox.Inbox` with a fake clock; the route tests
 drive the real server, because the bridge and the overlay are two different

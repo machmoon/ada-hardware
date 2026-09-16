@@ -721,8 +721,8 @@ feature is tracked under feature 12.
                                                                      rather than showing a blank canvas, survives a
                                                                      lost context. "Open 3D model" in KiCad remains
 
- 21  Hardy voice + desk (2-week lock, 2026-09-06)        [LOCKED]      Tech Lead. Do not invent a parallel plan.
-     North star: "Hey Hardy" feels like Hey Siri —
+ 21  Ada voice + desk (2-week lock, 2026-09-06)        [LOCKED]      Tech Lead. Do not invent a parallel plan.
+     North star: "Hey Ada" feels like Hey Siri —
      always-on tiny LOCAL wake classifier, then STT.
      Apple does not expose custom OS wake. Third
      parties use Porcupine or openWakeWord.
@@ -732,14 +732,14 @@ feature is tracked under feature 12.
      Picovoice dependency exists; wake/mod.rs:6
      says "Picovoice is not used". What shipped is
      livekit-wakeword (Apache-2.0) with a locally
-     trained hey_hardy head: recall 0.867, zero false
+     trained hey_ada head: recall 0.867, zero false
      accepts/hour at threshold 0.7. cpal owns the mic in Rust. WKWebView is
      UI only. Gemini POST /transcribe ONLY after
      wake or PTT — never idle wake spotting.
      Desk: stop lying that the PNG was used;
      POST /desk/resolve vision → caption + optional
      SPA GuidePointer. No KiCad edits.
-     Tree: app/ is Hardy. desktop/ is the old sidecar
+     Tree: app/ is Ada. desktop/ is the old sidecar
      — do not add cpal/Porcupine there
      (test_desktop_tauri_contract.py forbids it).
      Exception, and it matters: desktop/kicad_live.py
@@ -764,7 +764,7 @@ feature is tracked under feature 12.
                                                                      _transcribe (wake-hot-loop → PTT/post-wake
                                                                      only); README.md voice row. Do not touch
                                                                      Rust KWS, /desk/resolve, or desktop/.
- ----- W1–2 local KWS ("hey Hardy")                      [PARTIAL]     Agent 2. Rust spotter + hardy-wake shipped
+ ----- W1–2 local KWS ("hey Ada")                      [PARTIAL]     Agent 2. Rust spotter + ada-wake shipped
                                                                      (wake/, livekit-wakeword via ort-tract, oww
                                                                      stub, mock). NOT libloading Porcupine — that
                                                                      was planned and never built. Agent 4 still wires post-wake STT
@@ -817,7 +817,7 @@ feature is tracked under feature 12.
                                                                      new markdown docs; commit/push.
  ----- DoD: "feels like Hey Siri" MVP                  [LOCKED]      (1) Ear default off. (2) Always-on listen
                                                                      is local KWS only — zero Gemini bytes
-                                                                     while idle. (3) After "hey Hardy" or PTT,
+                                                                     while idle. (3) After "hey Ada" or PTT,
                                                                      one command clip → one POST /transcribe.
                                                                      (4) Settings/ear name the backend (local
                                                                      | off), never "engine clips" while
@@ -1040,7 +1040,7 @@ feature is tracked under feature 12.
                                                                      kaleo.settings.setup.* in the webview store too
                                                                      (~/Library/WebKit/kaleo/WebsiteData/.../
                                                                      LocalStorage/localstorage.sqlite3).
-                                                                     (2) A machine that has ever run Kaleo has
+                                                                     (2) A machine that has ever run Ada has
                                                                      silkscreen_* keys, and store.ts:313 reads those
                                                                      as an existing user and auto-finishes setup, so
                                                                      the wizard cannot be seen at all until they are
@@ -1055,7 +1055,7 @@ feature is tracked under feature 12.
                                                                      PKCE like googleapps/auth.py, token file + refresh
  ----- Live coach marks inside the strip               [OPEN]        58 px non-activating panel; per-skin stop lists;
                                                                      one caption under the strip ships instead
- ----- Notification click-back, "Hardy" branding in dev  [OPEN]        the plugin discards the handle on macOS; dev builds
+ ----- Notification click-back, "Ada" branding in dev  [OPEN]        the plugin discards the handle on macOS; dev builds
                                                                      say "Terminal"; delivery unverified on this macOS
  ----- Menu-bar (tray) item                            [OPEN]        tray-icon feature, template icon asset, engine state
                                                                      push; a way back for Accessory-mode users
@@ -1164,18 +1164,37 @@ feature is tracked under feature 12.
                                                                      at today's board sizes. Numbers here so the next
                                                                      person does not re-measure it.
 
- 28 The enclosure gate does not gate                   [OPEN]        measured 2026-09-07 while answering "is FreeCAD
+ 28 The enclosure gate does not gate                   [PARTLY DONE] 2026-09-13: min_wall and cutout_admits_plug fixed
+                                                                     (rows below); overhang was already fixed by
+                                                                     scoring the B-rep normal, not the facet
+                                                                     (test_overhang_scores_a_chamfered_round_corner…).
+                                                                     Re-measured on assembly_board and a demo-placed
+                                                                     ref board: verify_model().passed is True with
+                                                                     and without a label, square and 3 mm corners.
+                                                                     Still open: the four vacuous clauses and board
+                                                                     retention.
+                                                                     measured 2026-09-07 while answering "is FreeCAD
                                                                      better than OpenSCAD". It is not (see below), but
                                                                      the audit found worse: verify_model().passed is
                                                                      False on all three demo boards. No generated case
                                                                      passes its own acceptance gate.
- ----- min_wall fails iff a label is set               [OPEN]        v2 debosses the label 0.6 mm into a 2.0 mm lid
+ ----- min_wall fails iff a label is set               [DONE]        2026-09-13. rules.LABEL_DEPTH_NM owns the depth;
+                                                                     kernel._wall_samples scores a lid sample whose
+                                                                     ray exits into a pocket open to the bed at that
+                                                                     depth against wall - depth (never below
+                                                                     MIN_WALL_NM) and names it "plate under the
+                                                                     label deboss". test_a_labelled_lid_passes_…
+                                                                     Original finding: v2 debosses the label 0.6 mm into a 2.0 mm lid
                                                                      (cad.py:105 -- that face is the print bed, so an
                                                                      emboss cannot print honestly), leaving 1.400 mm
                                                                      against 1.950 required. The clause is correct;
                                                                      nothing told it a decorative pocket is not a
                                                                      wall. Isolated by toggling the label alone.
- ----- overhang fails iff corner_radius > 0            [OPEN]        a tessellation artefact, not a real overhang.
+ ----- overhang fails iff corner_radius > 0            [DONE]        fixed before 2026-09-13 (the clause scores the
+                                                                     surface normal at each facet's centroid);
+                                                                     re-measured 2026-09-13: margin 0.0000 at 3 mm
+                                                                     corners, passing. Original finding:
+                                                                     a tessellation artefact, not a real overhang.
                                                                      Square corners: the elephant-foot chamfer is
                                                                      planar and reads exactly 45.0 deg, margin 0.0000
                                                                      -- sitting ON OVERHANG_LIMIT_DEG with zero
@@ -1195,7 +1214,13 @@ feature is tracked under feature 12.
                                                                      computed, off by 0.0000 every time), lid_mates
                                                                      (+0.2000 on every board -- it restates
                                                                      lip_slack).
- ----- cutout_admits_plug does not check the face      [OPEN]        the acceptance gate is not the safety net it
+ ----- cutout_admits_plug does not check the face      [DONE]        2026-09-13. kernel._plug_reach_gap_mm measures
+                                                                     how far the plug entering the declared wall
+                                                                     stops short of its receptacle; past
+                                                                     cad.EDGE_NEAR_NM the clause fails with the
+                                                                     distance as its margin. _near_faces stays.
+                                                                     test_a_cutout_on_the_wrong_wall_fails_…
+                                                                     Original finding: the acceptance gate is not the safety net it
                                                                      reads as. v2 DOES reject a wrong-wall cutout --
                                                                      but at BUILD time, in cad.py:_near_faces, which
                                                                      raises CutoutError. The clause itself passes the
@@ -1565,7 +1590,7 @@ OPEN WORK, SUMMARISED
 Everything actionable reduces to: feature 2 in full (parallel reads, now the
 R11 rung under 12), finding-level hallucination filtering under 4, the request
 timeout under 5, feature 6 in full (confirmation gates), the deploy and smoke
-check under 7, the ops polish under 8, Hardy voice/desk under 21 (feature 9's
+check under 7, the ops polish under 8, Ada voice/desk under 21 (feature 9's
 voice row is no longer done; the SPA's own browser Web Speech dictation and
 read-aloud row under 9 is done and separate from it), the error taxonomy under
 10 (from PR #5 review), and the stream-fallback tightening under 11 (from PR #9
@@ -1626,7 +1651,7 @@ the whole test suite passed over. See "Verifying against real KiCad" in
 CLAUDE.md. It is a local gate, not a CI one.
 
 ────────────────────────────────────────────────────────────────────────────
-Feature 26 — Hardy as a coworker: local listening, joining calls, guided cursor
+Feature 26 — Ada as a coworker: local listening, joining calls, guided cursor
 [NOT STARTED — parked 2026-09-06 as not important right now]
 ────────────────────────────────────────────────────────────────────────────
 
@@ -1650,7 +1675,7 @@ STAGE 1, local listening. The only hard part is macOS system audio.
   Windows (WASAPI loopback) and Linux (Pulse .monitor). macOS was ALWAYS a
   stub: upstream used a CoreAudio process tap via `cidre`, whose build shells
   out to xcodebuild and so needs a full ~10 GB Xcode install. Today, on a call,
-  Hardy hears only what leaks from the speakers into the microphone.
+  Ada hears only what leaks from the speakers into the microphone.
   Two verified fixes:
     - screencapturekit crate 9.0.1 — system audio, macOS 13+, Command Line
       Tools only. Screen Recording is already granted (desk.rs shells out to
@@ -1715,5 +1740,106 @@ capture layer.
 NOT VERIFIED: no live AX dump against a running KiCad (all of the above is
 static inspection); nothing was compiled; PostEvent semantics are documented
 only in Apple forum answers, not the reference docs; whether wx DIALOG controls
-carry usable AXTitles is open, and it decides whether Hardy can point inside the
+carry usable AXTitles is open, and it decides whether Ada can point inside the
 DRC dialog or only get you to it.
+
+Feature 27 — the agent harness and the verifiers (2026-09-15; docs/agent-harness.md)
+Decision: keep Google ADK for the chat root, the fixed Workflow and Gemini;
+own a small synchronous tool loop in engine/silkscreen/agents/harness/ whose
+primitives are copied from the OpenAI Agents SDK and ADK's reflect-retry;
+the Claude Agent SDK is a developer tool, not the loop. The moat is the
+verifier set (engine/silkscreen/verify/) plus a receipt.
+- [done] Device.no_connect: only a declared open pin gets the schematic's
+  no-connect flag. Measured: a regulator with GND on no net passed KiCad ERC
+  with 0 violations before; now the proposer refuses in round 1 and ERC reports
+  pin_not_connected + power_pin_not_driven.
+- [done] verify/: Verdict with signed clauses; electrical_completeness (R1-R4);
+  erc/drc/parity via kicad-cli; erc_from_spec draws into a temp dir.
+- [done] propose_circuit runs electrical_completeness every round and ERC when
+  kicad-cli is present (SILKSCREEN_ERC_IN_LOOP=0 disables; conftest sets 0);
+  event propose.verdict. Six board_eval fixtures: zero completeness false
+  positives; ERC found undeclared open pins in two, now declared.
+- [done, offline only] harness core (Agent, Runner, Budget, tripwires,
+  ReflectAndRetry, Receipt/Summary tripwire, ScriptedToolModel), Gemini and
+  Claude tool adapters, FallbackModel.generate_turn (provider pinned),
+  _EventingModel.generate_turn (model.call with tool_calls/tokens),
+  design.run_design; engine/tests/test_harness.py, test_verify.py.
+- open: a `design` stage on both drivers behind SILKSCREEN_HARNESS=1; one live
+  turn per adapter once billing is on the key; runner restart when the pinned
+  rung dies; simulate and case clauses as Verdicts; check_board on the MCP
+  server and the receipt on /generate and the desktop; board_eval scoring the
+  harness (it drives a text-only ScriptedModel); pin_not_driven on mixed
+  library/generated sheets not measured; ADK root lookup tools for "quick
+  queries" (it has only propose_board/generate_board today).
+- open (Pat 2026-09-15): the harness's second agent is the SYSTEM agent -- "build AI
+  CAD for a robot arm, then import and assemble the entire thing with the
+  electronics". Tools: design_mechanism (a build123d/cadgen model script from a
+  brief, run in the sandbox the case restyle already uses), mechanism_clauses
+  (enclosure/kernel-style signed margins: reach, torque, joint clearance,
+  printability), board_step (kicad-cli pcb export step of the routed board),
+  assemble (enclosure/assembly.py: mates, fasteners, harness lengths), and the
+  same required-verifier gate: the assembly cannot finish while a clause is
+  red. Existing pieces: agents/mechanism.py (opt-in stage), mechanism/ kernel,
+  enclosure/assembly.py, docs/ai-cad-plan.md; prior art earthtojake/text-to-cad
+  skills/cad (cadgen assemblies with source-level joints and mating datums).
+- [done 2026-09-15] Ground fill (Pat: "most boards you do a fill for GND on both
+  layers"): route_board(ground_fill=True) hands every ground-class net to two
+  copper zones (emit_kicad_pcb), the router skips them (RouteResult.filled), and
+  the zones stay unfilled in the file (KiCad fills on open; every check runs
+  kicad-cli with --refill-zones). Fill-and-save was reverted: KiCad's save is
+  its own format version and kiutils cannot read it back. Gated test proves DRC
+  0 unconnected on a board whose GND was never routed (test_ground_fill.py).
+- open (seen 2026-09-15 on the ESP32 demo): the spec-review agenda's known_refs
+  filter reports "also named ESP32-WROOM-32E ... which the board does not
+  contain" for every item -- it knows board refs (U1) but not spec part names,
+  so items are flagged that are correct. Add spec names to known_refs.
+- [done 2026-09-16] Ground that is actually connected, and the USB pair that
+  always lost. board_eval on the six fixed circuits, same machine, features
+  off vs on: KiCad-clean 3/6 -> 6/6; ESP32 dev board 91.7% -> 100% routed,
+  DRC 5 -> 0, unconnected 6 -> 0. What changed (board.py): SMD pads on a
+  poured net connect solidly (zone_connect 2, both generated and library
+  footprints: starved_thermal gone); a fan-out via + straight track at every
+  ground SMD pad, planned BEFORE routing and handed to the router as
+  obstacles (FreeRouting's order, AutorouteBatchLoop.java @60336be); a
+  2.54 mm stitching-via grid after routing (ViaStitching FillArea.py default,
+  GPL, design only); differential pairs routed first (routing.first_nets from
+  signals.diff_pairs); and a reversible connector's interleaved pair pins
+  (USB-C B7 A6 A7 B6) joined by loops on opposite sides of the pin row before
+  routing (plan_pair_joins; flipped once if a pair still fails). Both eval
+  fixtures with a CH340C now declare its modem pins open; the in-loop ERC had
+  made board_eval crash on them. Tests: test_ground_fill.py, test_pair_joins.py.
+- [done 2026-09-16] Arm + electronics as one checked assembly
+  (mechanism/system.py, `silkscreen robot`): a designed arm (MECHANISM-SPEC)
+  or an imported arm STEP, plus the routed board through kicad-cli or a board
+  STEP; clauses arm_imported / board_imported / board_clear_home /
+  board_clear_sampled with signed margins; an imported arm's motion is stated
+  unchecked, never green. Measured: the sample 3-joint arm with the ESP32
+  board (54 solids) clears by 10 mm at every sampled pose. The mechanism
+  package had no tests before today: test_mechanism_system.py. Open: wire it
+  into generate_pcb's --arm run and the desktop; an import path for vendor
+  servos/brackets as catalogue parts.
+- [done 2026-09-16] stages.py: the six identical background Job classes are
+  one generic Lane (old names are aliases, ReviewJob keeps its SKIPPED
+  default); ScriptedModel is locked and a by_marker value may be a list of
+  answers given in turn.
+- [superseded 2026-09-16, see above] the demo run's routing on the 40-part ESP32 board was 36/40 before the
+  fill (+5V, +3V3, EN out of budget; GND now filled). Power nets should route
+  first or get wider tracks; measure with board_eval after the fill lands.
+
+- open (Pat 2026-09-15): after the codebase simplification, run TWO Fable adversarial
+  code reviewers over the result before it ships (the 2026-09-15 red team found every
+  defect in the seams; do the same for the simplification).
+
+- done 2026-09-16: differential pairs are routed coupled (diffpair.py): one centreline,
+  both traces at a constant 0.25 mm gap, short breakout leads. ESP32 eval: USB 69 %
+  coupled, skew 0.9 mm, 6/6 KiCad-clean. open: pair vias (layer change), length
+  tuning (serpentines) to close skew, pairs with more than two terminals per net,
+  an impedance-derived width once a stackup is modelled.
+- done 2026-09-16: conftest restores os.environ after every test (a CLI test leaked
+  the developer's .env keys into service/ model-ladder tests).
+- open (found 2026-09-16, another session's lane): googleapps/auth.py added the
+  gmail.readonly scope to SCOPES without updating
+  service/tests/test_deliver.py::test_config_reports_a_full_grant_as_all_three_usable,
+  which now fails. Decide whether delivery should require that scope.
+- open: meetbot/tests/test_session.py::test_init_scripts_run_before_the_page_scripts
+  needs `playwright install` on this machine (environment, not code).

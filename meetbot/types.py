@@ -1,4 +1,4 @@
-"""Shared value types for the Hardy Google Meet bot.
+"""Shared value types for the Ada Google Meet bot.
 
 Kept tiny on purpose: every module in ``meetbot`` imports these, so they carry
 no behaviour and no dependency beyond the standard library.

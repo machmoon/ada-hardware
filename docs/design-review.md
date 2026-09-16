@@ -1,4 +1,4 @@
-# Design review — SPA + Kaleo overlay (2026-08-31)
+# Design review — SPA + Ada overlay (2026-08-31)
 
 > **Dated snapshot — do not read this as current.** Verified 2026-08-31 and not
 > maintained since. Several findings have been fixed and several components it
@@ -8,7 +8,7 @@
 > one, and do not cite a line number from here as evidence about today's code.
 
 Read-only review of both user surfaces ahead of judging. Every claim below was
-checked against the code as of this pass: the SPA at `frontend/src`, the Kaleo
+checked against the code as of this pass: the SPA at `frontend/src`, the Ada
 overlay at the `kaleo-dev` scratchpad checkout (`app/src/pages/{kaleo,workbench,engine}`
 only — `contexts/`, `hooks/`, and shared `components/` were being refactored by
 other agents while this was written, so line numbers cited from those files are
@@ -135,7 +135,7 @@ the same PR — a judge reading the repo should not find two running views.)*
 
 ---
 
-## B. Punch list — Kaleo overlay (`app/src/pages/{kaleo,workbench,engine}`)
+## B. Punch list — Ada overlay (`app/src/pages/{kaleo,workbench,engine}`)
 
 ### KAL-1. Red dot + disabled Generate still reads as "app is broken" — the shipped incident is only half-fixed
 

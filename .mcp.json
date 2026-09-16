@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": ".venv/bin/silkscreen-mcp",
       "args": [],
-      "env": { "HARDY_REPO_ROOT": "." }
+      "env": { "ADA_REPO_ROOT": "." }
     }
   }
 }

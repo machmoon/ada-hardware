@@ -133,6 +133,10 @@ class Footprint:
     #: anode and pin 2 the cathode, the convention the schematic symbol
     #: draws, so the legend marks pad 2 and the 3D model turns to match.
     polarised: bool = False
+    #: The KiCad library footprint this was loaded from
+    #: (:class:`silkscreen.kicadlib.LibraryFootprint`), or None for a pattern
+    #: generated here. The emitter writes a library footprint verbatim.
+    library: object | None = None
 
     def pad_by_number(self, number: str) -> Pad | None:
         for pad in self.pads:

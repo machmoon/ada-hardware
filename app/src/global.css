@@ -49,7 +49,6 @@
 
 :root {
   --radius: 0.625rem;
-  --cursor-type: default;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -154,6 +153,13 @@
   height: 8px;
 }
 
+/* A box that starts scrolling keeps its content where it was: the 8 px the
+   bar takes is reserved from the first frame, so the receipts do not jump
+   left and back on the frame the panel fills (overlay-motion audit, item 13). */
+.overflow-y-auto {
+  scrollbar-gutter: stable;
+}
+
 *::-webkit-scrollbar-track {
   background: transparent !important;
   border-radius: 4px;
@@ -173,10 +179,6 @@
   background: transparent !important;
 }
 
-* {
-  cursor: var(--cursor-type) !important;
-}
-
 html {
   overscroll-behavior: none;
 }
@@ -193,7 +195,7 @@ body {
 
    The dark-glass "strip" material was rolled back to the Card above; these
    four tokens survive it because the one voice control (VoiceControl, the
-   "Hey Hardy" mute) says whether it is listening in colour, and a var() that
+   "Hey Ada" mute) says whether it is listening in colour, and a var() that
    resolves to nothing would make unmuted and muted look identical. They are
    colour roles only: no fill, no radius, no material.
    --------------------------------------------------------------------------- */

@@ -6,7 +6,7 @@
 > rung, PRs #41/#42), so a hung primary times out and fails over instead of
 > sitting silently — but failover still costs minutes you do not have on stage.
 > **Pin `gemini-3.5-flash` for every live run on the CLI**
-> (`--model gemini-3.5-flash`). **You cannot do this in the web/Hardy model
+> (`--model gemini-3.5-flash`). **You cannot do this in the web/Ada model
 > selector:** `IntentForm.svelte:25,30` offers only `gemini-3.7-flash` and
 > `gemini-3.1-pro-preview`, and that selector picks the *orchestrator* model, not
 > the worker the datasheet and proposal stages use. So a web demo runs on the
@@ -49,15 +49,15 @@ Do these in order. The demo has no live-fixable failure mode for a skipped step.
    `--port` or `PORT` override it. Then confirm
    `http://127.0.0.1:8081/healthz` — locally `/healthz` works fine; the
    404-at-the-edge gotcha (below) is cloud-only.
-4. Launch **Hardy** (the v0.3.1 release predates the rename and still installs
-   as `/Applications/Hardy.app`, from `Ada_0.3.1_aarch64.dmg` on the tagged GitHub
-   release; later builds install as `Hardy.app` — **Apple silicon
+4. Launch **Ada** (the v0.3.1 release predates the rename and still installs
+   as `/Applications/Ada.app`, from `Ada_0.3.1_aarch64.dmg` on the tagged GitHub
+   release; later builds install as `Ada.app` — **Apple silicon
    only**; do not plan this demo on an Intel Mac). In its Engine page, set the
    base URL to `http://127.0.0.1:8081` and watch the health check go green.
-5. Voice out: flip the voice toggle on. With an ElevenLabs key in Hardy's voice
+5. Voice out: flip the voice toggle on. With an ElevenLabs key in Ada's voice
    settings you get the good voice; with no key it uses the system voice — the
    fallback is automatic. Play one test run at venue volume.
-6. Voice in (optional): Hardy's spoken intent goes through the engine's
+6. Voice in (optional): Ada's spoken intent goes through the engine's
    `/transcribe` endpoint. **If you have not tested it in this room, type the
    intent instead.** Typing is not a downgrade; the pipeline is the show.
 7. **Record the golden session now.** Run the golden intent once in the web SPA,
@@ -100,7 +100,7 @@ added a 2-pin `J_IN` connector, which crashes board emission (see the warning
 block). Say the exclusion; do not trim it.
 
 Add the AMS1117-3.3 datasheet URL in the datasheets field and switch grounding
-on (both the SPA form and Hardy's run form take part-to-URL rows; grounding only
+on (both the SPA form and Ada's run form take part-to-URL rows; grounding only
 does anything when a URL is present). The first-run form was simplified in the
 demo punch-list pass (#43), so this is fewer fields than you rehearsed last
 week.
@@ -117,10 +117,10 @@ asked; it is a strength.
 
 ## The 3:00 script
 
-**0:00 — Cold open, Hardy on top of the desktop.**
-Hardy is already floating. Say:
+**0:00 — Cold open, Ada on top of the desktop.**
+Ada is already floating. Say:
 
-> "This is Hardy — a desktop copilot for a PCB engine called Silkscreen. I'm going
+> "This is Ada — a desktop copilot for a PCB engine called Silkscreen. I'm going
 > to describe a power supply, and it's going to read the datasheet, design the
 > circuit, refuse to build it until it validates, place it, route copper, and
 > then — the part we care about — argue against its own design."
@@ -152,7 +152,7 @@ Talking points, in the order the stages light up:
 > default engine, not a wrapper. And the same service is live on Cloud Run
 > right now."
 
-**1:15 — WOW BEAT 1: the voice.** The run completes and Hardy *speaks the digest
+**1:15 — WOW BEAT 1: the voice.** The run completes and Ada *speaks the digest
 of the review out loud* while the findings render. Shut up and let it talk.
 Expected content: the finding about the ceramic output capacitor on the
 AMS1117, against the datasheet. Then:
@@ -178,7 +178,7 @@ switches and the pointer lands on the actual capacitor on the board. Say:
 > The pointer only advances when you say so, and if it can't find its target it
 > says that instead of pointing at the wrong thing."
 
-**2:20 — WOW BEAT 3: KiCad, now one click from Hardy.** In Hardy, hit **Save** —
+**2:20 — WOW BEAT 3: KiCad, now one click from Ada.** In Ada, hit **Save** —
 a native save dialog writes the project to disk — then click the **Open in
 KiCad** button that appears. (If you want zero risk, Cmd-Tab to the pre-opened
 KiCad project instead; the button is the better story, the Dock is the safer
@@ -225,13 +225,13 @@ intent is not optional.
 
 Drop the SPA and KiCad. One surface, one artifact, one argument.
 
-- **0:00** Cold open line, type the golden intent in Hardy (model pinned to 3.5
+- **0:00** Cold open line, type the golden intent in Ada (model pinned to 3.5
   Flash), run. (15 s)
 - **0:15** Narrate the stream, compressed: "reads the real datasheet with page
   citations — validates the circuit before anything is built — CP-SAT placement
   — A* routing that names what it can't finish — then an adversarial review."
   (45 s)
-- **1:00** Voice beat: Hardy speaks the ceramic-cap finding. (15 s)
+- **1:00** Voice beat: Ada speaks the ceramic-cap finding. (15 s)
 - **1:15** Close: "That's a real KiCad project on disk — one click opens it in
   KiCad — and the review just caught a stability bug with a datasheet citation.
   Gemini + ADK dynamic workflows + a live Cloud Run service with Firestore."
@@ -244,7 +244,7 @@ the SPA and the voice beat becomes show-the-finding; the close is unchanged.
 
 No live run. SPA with the golden session already open, KiCad behind it.
 
-> "You describe a board in plain language. Hardy's engine reads the datasheet,
+> "You describe a board in plain language. Ada's engine reads the datasheet,
 > designs and validates the circuit, places it with CP-SAT, routes it, and then
 > argues against its own design — this finding says my output capacitor can
 > make the regulator oscillate, with the datasheet page cited. [click finding —
@@ -264,7 +264,7 @@ No live run. SPA with the golden session already open, KiCad behind it.
 | **Cloud URL looks dead** | Two different causes, and they need different answers. (a) A `/healthz` probe: Google's edge intercepts it on `run.app` domains and 404s before the container answers — that 404 means nothing. (b) It is actually down: as of 2026-09-06, `/readyz` answers 500 and `/` answers 503, and has since 2026-09-05. | Check `GET /` and `/readyz` yourself before the demo, not on stage. If `/` renders, show it. If it does not, **do not open the link** — redeploy with `scripts/deploy.sh` beforehand, or say plainly that the service is deployed and not currently up and move to the local engine, which does the entire demo. |
 | **Audio out fails / room is loud** | The speech layer never throws — a failed TTS call degrades to silence with one warning, and the findings render on screen regardless. | The findings *are* the captions; read the top one aloud yourself. If ElevenLabs specifically fails, the system voice is the automatic fallback — no action needed. |
 | **Spoken intent misfires** | Voice input goes through the engine's `/transcribe` and depends on room noise. | Type it. The script above already treats typing as the default; speaking is a garnish, not a beat. |
-| **Hardy won't launch or won't connect** | The .dmg is aarch64-only; the engine URL is configured in its Engine page with a live health check. | The web SPA does the entire demo except the spoken digest — run the same script there and read the digest yourself. Check the health light *before* going on stage. |
+| **Ada won't launch or won't connect** | The .dmg is aarch64-only; the engine URL is configured in its Engine page with a live health check. | The web SPA does the entire demo except the spoken digest — run the same script there and read the digest yourself. Check the health light *before* going on stage. |
 | **SPA looks broken (empty feed, stuck form)** | This is the Vite dev-server split-module trap. | You should never be on the dev server on stage. If you somehow are: kill it, use the built bundle the service serves at `/`. |
 | **Open in KiCad does nothing / KiCad missing** | The button needs KiCad installed; it is at `/Applications/KiCad/KiCad.app` on the demo machine. | Cmd-Tab to the pre-opened project (checklist step 8). If KiCad is truly gone, the SPA's Schematic tab and board well cover the visuals; say the files are on disk. Never install anything live. |
 | **Run finishes but the reviewer misses the capacitor finding** | It is a live model; the class is reliably elicited but not contractual. | Whatever findings it did produce are real — present those, with their citations. If you need the ceramic-cap beat specifically, the golden session has it. |

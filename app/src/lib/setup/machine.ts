@@ -53,7 +53,7 @@ export const CARD_NAMES: Record<SetupCardId, string> = {
   stripe: "Billing",
   microsoft: "Microsoft",
   notifications: "Notifications",
-  voice: "Hey Hardy",
+  voice: "Hey Ada",
 };
 
 export interface SetupState {

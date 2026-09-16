@@ -14,7 +14,7 @@ import {
 } from "./components";
 
 /**
- * The engine page: point Kaleo at a running service, and prove it is alive.
+ * The engine page: point Ada at a running service, and prove it is alive.
  *
  * This page exists because "connection refused" is not a diagnosis. Every
  * other surface in the app fails the same opaque way when the Python service
@@ -80,7 +80,7 @@ const Engine = () => {
       <div id="engine-start" className="space-y-3">
         <Header
           title="Starting the engine"
-          description="Hardy does not start or bundle the service — it is a separate Python process you run from the silkscreen checkout"
+          description="Ada does not start or bundle the service — it is a separate Python process you run from the silkscreen checkout"
           isMainTitle
         />
         <EngineStartCommands />
@@ -105,7 +105,7 @@ const Engine = () => {
         <p className="text-xs leading-relaxed text-muted-foreground">
           The service ships no authentication and sends no CORS headers, on
           purpose — it assumes it is reachable only from the machine it runs on.
-          Every run it accepts spends your Gemini quota. So Hardy refuses any
+          Every run it accepts spends your Gemini quota. So Ada refuses any
           address that is not <code className="font-mono">http://</code> on
           loopback: accepting one would put an open, billable endpoint on the
           network, and neither this app nor the service would notice.

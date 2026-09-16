@@ -74,7 +74,7 @@ class FakeStripe:
 
 
 def fake_authorize(state_holder):
-    """Stand in for the browser: read the state out of the URL Kaleo built
+    """Stand in for the browser: read the state out of the URL Ada built
     and hand back the redirect Stripe would have sent."""
 
     def authorize(build_url):

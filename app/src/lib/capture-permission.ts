@@ -1,6 +1,6 @@
-// Capture permissions for Hardy.
+// Capture permissions for Ada.
 //
-// Spoken “hey Hardy” needs the microphone. We may ask the OS permission dialog
+// Spoken “hey Ada” needs the microphone. We may ask the OS permission dialog
 // once; we never yank the user into System Settings on every arm — if they
 // already denied, the ear shows where to flip it and they open Settings
 // themselves.
@@ -48,7 +48,7 @@ export async function ensureSpokenAudio(): Promise<CaptureAccess> {
     }
     if ((await macosMicGranted()) === false) {
       throw new Error(
-        "Microphone is off for Hardy. Enable it in System Settings → Privacy & Security → Microphone, then click the ear again."
+        "Microphone is off for Ada. Enable it in System Settings → Privacy & Security → Microphone, then click the ear again."
       );
     }
   }
@@ -71,7 +71,7 @@ export async function ensureSpokenAudio(): Promise<CaptureAccess> {
     const message = (error as Error)?.message || "permission denied";
     if (/denied|not.?allowed|permission/i.test(message)) {
       throw new Error(
-        "Microphone permission was refused. Enable Hardy in System Settings → Privacy & Security → Microphone, then click the ear again."
+        "Microphone permission was refused. Enable Ada in System Settings → Privacy & Security → Microphone, then click the ear again."
       );
     }
     throw new Error(`could not use the microphone: ${message}`);

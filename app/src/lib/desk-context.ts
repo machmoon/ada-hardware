@@ -1,6 +1,6 @@
 // Desk context for spoken deixis (“I don’t like this”).
 //
-// When the engineer points with the cursor and talks, Hardy needs the screen
+// When the engineer points with the cursor and talks, Ada needs the screen
 // under the pointer — not just the words. This module asks Rust for a
 // screenshot (cursor burned in when the OS allows) plus cursor coordinates.
 // The PNG rides a dedicated /desk/resolve call; it is never thrown away, and
@@ -125,5 +125,5 @@ export async function enrichWithDeskContext(
   return { utterance, snap };
 }
 
-/** Older name used by the hardy-path wiring. Same contract. */
+/** Older name used by the ada-path wiring. Same contract. */
 export const prepareDeskContext = enrichWithDeskContext;

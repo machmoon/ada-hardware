@@ -7,8 +7,8 @@
 //     this every milestone would land twice. The test button is the one
 //     exception, since it is pressed in the dashboard.
 //   - "Focused" is asked of the Rust side (`kaleo_has_focus`: is either of
-//     Kaleo's windows the key window), because `document.hasFocus()` in a
-//     58 px non-activating panel is not "Kaleo is frontmost". The DOM answer
+//     Ada's windows the key window), because `document.hasFocus()` in a
+//     58 px non-activating panel is not "Ada is frontmost". The DOM answer
 //     is the fallback while the command does not exist.
 //   - Copy is frozen here (`milestoneCopy`) and honest: never "board ready"
 //     over unrouted nets, never a case or sourcing outcome before it has been
@@ -37,7 +37,7 @@ export const NOTIFY_WEBVIEW_LABEL = "main";
 // ------------------------------------------------------------------ the gate
 
 /**
- * May a banner fire right now? `focused` is whether Kaleo is the frontmost
+ * May a banner fire right now? `focused` is whether Ada is the frontmost
  * app, from whichever signal the caller has.
  */
 export function shouldNotify(settings: NotifySettings, focused: boolean): boolean {
@@ -197,7 +197,7 @@ export function currentWebviewLabel(): Promise<string | null> {
 }
 
 /**
- * Is Kaleo frontmost? The Rust command knows about both windows; the DOM
+ * Is Ada frontmost? The Rust command knows about both windows; the DOM
  * fallback is the best this webview can say alone.
  */
 export async function kaleoHasFocus(): Promise<boolean> {
@@ -280,7 +280,7 @@ export async function sendTestNotification(): Promise<TestNotificationResult> {
 
   try {
     await send({
-      title: "Hardy is set up",
+      title: "Ada is set up",
       body: "This is what a finished run looks like.",
     });
     return { sent: true, reason: "" };

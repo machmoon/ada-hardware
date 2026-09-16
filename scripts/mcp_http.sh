@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Serve Hardy's MCP server over Streamable HTTP so a remote-only client
+# Serve Ada's MCP server over Streamable HTTP so a remote-only client
 # (claude.ai custom connectors, and therefore Claude in Chrome) can reach it.
 # Claude Desktop and Claude Code speak stdio and do not need this.
 #
@@ -13,5 +13,5 @@
 # leave an unauthenticated tunnel up unattended.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-export HARDY_REPO_ROOT="$PWD"
+export ADA_REPO_ROOT="$PWD"
 exec .venv/bin/python -m silkscreen.mcp.http --port "${MCP_HTTP_PORT:-8788}" "$@"

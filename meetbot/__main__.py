@@ -1,4 +1,4 @@
-"""``python -m meetbot join <meet-url>`` -- Hardy attends a call, then builds.
+"""``python -m meetbot join <meet-url>`` -- Ada attends a call, then builds.
 
 Reads ``.env`` the way ``python -m slackbot`` does (``silkscreen.cli._load_dotenv``,
 setdefault semantics, so an exported variable wins).
@@ -21,7 +21,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(prog="python -m meetbot")
     sub = parser.add_subparsers(dest="command", required=True)
-    join = sub.add_parser("join", help="join a Meet call as Hardy")
+    join = sub.add_parser("join", help="join a Meet call as Ada")
     join.add_argument("url", help="https://meet.google.com/abc-defg-hij")
     join.add_argument(
         "--no-slack",
@@ -55,11 +55,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     _load_dotenv(Path.cwd() / ".env")
 
-    from .config import ConfigError, HardyConfig, parse_meet_url
+    from .config import ConfigError, AdaConfig, parse_meet_url
 
     try:
         parse_meet_url(args.url)
-        config = HardyConfig.from_env(require_slack=not args.no_slack)
+        config = AdaConfig.from_env(require_slack=not args.no_slack)
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

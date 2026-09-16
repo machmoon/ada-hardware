@@ -1,5 +1,5 @@
-//! On-device "Hey Hardy" — cpal owns the mic, a Spotter scores frames, Tauri
-//! emits `hardy-wake`. Nothing here POSTs `/transcribe` or talks to Gemini.
+//! On-device "Hey Ada" — cpal owns the mic, a Spotter scores frames, Tauri
+//! emits `ada-wake`. Nothing here POSTs `/transcribe` or talks to Gemini.
 //!
 //! Primary spotter: open-source **livekit-wakeword** (ONNX). Feature gate:
 //! without `KALEO_WAKE_ONNX` (or `KALEO_WAKE_MOCK=1`), `wake_start` refuses
@@ -151,7 +151,7 @@ fn run_loop(
             eprintln!(
                 "[wake] the microphone is delivering exact silence — on macOS that is \
                  what a denied microphone permission looks like; allow it for the app \
-                 that launched Kaleo in System Settings > Privacy & Security > Microphone"
+                 that launched Ada in System Settings > Privacy & Security > Microphone"
             );
         }
 
@@ -242,7 +242,7 @@ pub fn wake_start(app: AppHandle, state: State<'_, WakeState>) -> Result<WakeSta
     }
     listening.store(true, Ordering::SeqCst);
     let handle = thread::Builder::new()
-        .name("hardy-wake".into())
+        .name("ada-wake".into())
         .spawn(move || {
             run_loop(app_thread, spotter, stop_thread, mock, policy);
             listening.store(false, Ordering::SeqCst);
@@ -263,7 +263,7 @@ pub fn wake_stop(state: State<'_, WakeState>) -> Result<(), String> {
     Ok(())
 }
 
-/// Offline / demo: fire one `hardy-wake` without speaking (needs mock or listening).
+/// Offline / demo: fire one `ada-wake` without speaking (needs mock or listening).
 #[tauri::command]
 pub fn wake_debug_trigger(app: AppHandle, state: State<'_, WakeState>) -> Result<(), String> {
     let cfg = WakeConfig::resolve(&resource_roots(&app));
@@ -275,7 +275,7 @@ pub fn wake_debug_trigger(app: AppHandle, state: State<'_, WakeState>) -> Result
         let _ = app.emit(
             WAKE_EVENT,
             WakeHitPayload {
-                phrase: "hardy".into(),
+                phrase: "ada".into(),
                 utterance: None,
             },
         );
@@ -291,24 +291,24 @@ mod tests {
     #[test]
     fn payload_omits_utterance_so_the_page_records_the_command() {
         let payload = WakeHitPayload {
-            phrase: "hey hardy".into(),
+            phrase: "hey ada".into(),
             utterance: None,
         };
         let json = serde_json::to_value(&payload).unwrap();
-        assert_eq!(json["phrase"], "hey hardy");
+        assert_eq!(json["phrase"], "hey ada");
         assert!(json.get("utterance").is_none());
     }
 
     #[test]
     fn event_name_matches_the_frontend_seam() {
-        assert_eq!(WAKE_EVENT, "hardy-wake");
+        assert_eq!(WAKE_EVENT, "ada-wake");
     }
 
     #[test]
     fn mock_spotter_fires_once_when_triggered() {
         let fire = Arc::new(AtomicBool::new(true));
         let mut spotter = MockSpotter::new(Arc::clone(&fire));
-        assert_eq!(spotter.poll().unwrap().expect("hit").phrase, "hardy");
+        assert_eq!(spotter.poll().unwrap().expect("hit").phrase, "ada");
         assert!(spotter.poll().unwrap().is_none());
     }
 }

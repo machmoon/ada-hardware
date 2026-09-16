@@ -166,7 +166,7 @@ destinations use. Every destination succeeds or fails on its own inside one
 ```jsonc
 {
   "spec_review": true,                      // boolean, required to book one
-  "attendees": ["hardy@example.com"],         // list, or a comma-separated string
+  "attendees": ["ada@example.com"],         // list, or a comma-separated string
   "when": "2026-09-08T15:00:00Z"            // RFC 3339 with an offset, or null
 }
 ```
@@ -258,7 +258,7 @@ Calendar renders a subset of HTML in it (the same rule `chat.py` applies to
 ### On the CLI
 
 ```bash
-python -m googleapps run "a 3.3V LDO board" --spec-review --attendee hardy@example.com
+python -m googleapps run "a 3.3V LDO board" --spec-review --attendee ada@example.com
 ```
 
 `--spec-review` sits alongside `--schedule` and shares `--attendee`.

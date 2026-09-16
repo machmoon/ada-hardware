@@ -5,6 +5,7 @@
                                +-> enclosure  (worker thread) --+
                                +-> sourcing   (worker thread) --+
                                +-> simulation (worker thread) --+
+                               +-> mechanism  (worker thread) --+
 
 Three gates stand between model output and the final board. The circuit IR
 refuses malformed proposals and hands every error back for repair. The
@@ -30,6 +31,7 @@ from ..prior_art import PriorArtResult
 from ..routing import RouteResult
 from ..sourcing import SourcingResult, bom_csv, grouped_bom_csv
 from ..spice.simulators import Simulator
+from ..web_research import ResearchBudget, WebResearchResult
 from .datasheet import PartFacts
 from .effort import (
     UNSET,
@@ -41,6 +43,7 @@ from .effort import (
     model_name,
     profile_for,
 )
+from .mechanism import MechanismResult
 from .model import Document, Model
 from .plan import PlanResult
 from .propose import ProposalAttempt
@@ -49,6 +52,7 @@ from .simulate import SimulationResult
 from .stages import (
     NO_ARTIFACTS,
     EnclosureResult,
+    MechanismJob,
     SchematicArtifacts,
     SimulationJob,
     SourcingJob,
@@ -59,9 +63,12 @@ from .stages import (
     prior_art_stage,
     propose_stage,
     read_stage,
+    research_sourcing_context,
     route_stage,
     schematic_stage,
     start_enclosure_stage,
+    start_mechanism_stage,
+    start_research_stage,
     start_review_stage,
     start_simulation_stage,
     start_sourcing_stage,
@@ -128,6 +135,11 @@ class PipelineResult:
     #: (``result.simulation.findings``, kept apart from the critic's
     #: ``findings`` because the two have different provenance).
     simulation: SimulationResult | None = None
+    #: The jointed printed mechanism (a robot arm), or None when it was not
+    #: requested (``mechanism=True``). Never None when it was: no ``cad``
+    #: extra, nothing buildable, a failed export and a failing kernel clause
+    #: are each a ``status`` on it with the reason in words.
+    mechanism: MechanismResult | None = None
     #: The brief the planning stage produced, or None when it did not run.
     #: A thin intent -- "a home security camera system" -- used to become a
     #: netlist with nothing having decided where power enters; this is that
@@ -138,6 +150,11 @@ class PipelineResult:
     #: requested (``prior_art=True``). Never None when it was: a rate limit or
     #: an outage is a status on it, not an absence.
     prior_art: PriorArtResult | None = None
+    #: The web research started when the intent arrived (Firecrawl), or None
+    #: when it was not requested (``web_research=True``). Never None when it
+    #: was: no ``FIRECRAWL_API_KEY`` is status ``unconfigured`` with the
+    #: sentence saying so, and every budget stop is in ``stops``.
+    web_research: WebResearchResult | None = None
     #: Datasheets that were asked for and could not be read, one line each.
     #:
     #: A part whose read fails is dropped from ``facts`` and the run carries
@@ -186,6 +203,11 @@ class PipelineResult:
             ordered.extend(getattr(self.enclosure, "snapshots", ()))
         # The BOM is sourced on a worker thread the same way, and written by
         # _finish just before the board it describes.
+        # The mechanism is designed on a worker thread too; its STEP is
+        # primary and each printed part has an STL.
+        if self.mechanism is not None and self.mechanism.exports is not None:
+            ordered.append(self.mechanism.exports.step)
+            ordered.extend(self.mechanism.exports.stls)
         ordered.append(self.bom_path)
         ordered.append(self.grouped_bom_path)
         ordered.append(self.board_path)
@@ -369,24 +391,113 @@ class _EventingModel:
                 )
         return text
 
-    def _emit_call(
-        self, started: float, *, call_id: str, ok: bool, chars: int
-    ) -> None:
+    def generate_turn(
+        self,
+        messages: list,
+        *,
+        tools: list,
+        system: str | None = None,
+        max_output_tokens: int = 8192,
+    ):
+        """The tool-calling face of the tap (``agents.harness.model.ToolModel``).
+
+        Same ``model.call``/``model.retry``/``model.response`` frames as
+        :meth:`generate`, correlated by the same call ids, so a harness turn
+        is not a paid call the debug console cannot see. The frame carries
+        ``tool_calls`` and token counts where a text call carries ``chars``.
+        """
+        from .harness import tool_model_for
+
         with self._lock:
-            self._emit(
-                {
-                    "event": "model.call",
-                    "layer": "worker",
-                    "call_id": call_id,
-                    "stage": self.stage,
-                    "provider": getattr(self._model, "last_provider", None),
-                    "model": getattr(self._model, "last_model", None)
-                    or getattr(self._model, "model", None),
-                    "elapsed_s": round(time.monotonic() - started, 3),
-                    "ok": ok,
-                    "chars": chars,
-                }
+            self._call_seq += 1
+            call_id = f"{self._call_prefix}-{self._call_seq}"
+        if self.include_responses:
+            last = messages[-1].text if messages else ""
+            with self._lock:
+                self._emit(
+                    {
+                        "event": "model.request",
+                        "layer": "worker",
+                        "call_id": call_id,
+                        "stage": self.stage,
+                        "system": (system or "")[:MAX_REQUEST_TEXT],
+                        "prompt": last[:MAX_REQUEST_TEXT],
+                        "messages": len(messages),
+                        "tools": [t.name for t in tools],
+                        "max_output_tokens": max_output_tokens,
+                        "truncated": len(system or "") > MAX_REQUEST_TEXT
+                        or len(last) > MAX_REQUEST_TEXT,
+                    }
+                )
+        log = getattr(self._model, "log", None)
+        seen = len(log) if isinstance(log, list) else 0
+        started = time.monotonic()
+        try:
+            turn = tool_model_for(self._model).generate_turn(
+                messages,
+                tools=tools,
+                system=system,
+                max_output_tokens=max_output_tokens,
             )
+        except Exception:
+            self._emit_retries(log, seen, call_id)
+            self._emit_call(started, call_id=call_id, ok=False, chars=0)
+            raise
+        self._emit_retries(log, seen, call_id)
+        self._emit_call(
+            started, call_id=call_id, ok=True, chars=len(turn.text),
+            tool_calls=len(turn.tool_calls),
+            input_tokens=turn.usage.input_tokens,
+            output_tokens=turn.usage.output_tokens,
+        )
+        if self.include_responses:
+            with self._lock:
+                self._emit(
+                    {
+                        "event": "model.response",
+                        "layer": "worker",
+                        "call_id": call_id,
+                        "stage": self.stage,
+                        "provider": turn.provider,
+                        "model": getattr(self._model, "last_model", None)
+                        or getattr(self._model, "model", None),
+                        "chars": len(turn.text),
+                        "tool_calls": [c.name for c in turn.tool_calls],
+                        "truncated": len(turn.text) > MAX_RESPONSE_TEXT,
+                        "text": turn.text[:MAX_RESPONSE_TEXT],
+                    }
+                )
+        return turn
+
+    def _emit_call(
+        self,
+        started: float,
+        *,
+        call_id: str,
+        ok: bool,
+        chars: int,
+        tool_calls: int | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> None:
+        frame = {
+            "event": "model.call",
+            "layer": "worker",
+            "call_id": call_id,
+            "stage": self.stage,
+            "provider": getattr(self._model, "last_provider", None),
+            "model": getattr(self._model, "last_model", None)
+            or getattr(self._model, "model", None),
+            "elapsed_s": round(time.monotonic() - started, 3),
+            "ok": ok,
+            "chars": chars,
+        }
+        if tool_calls is not None:
+            frame["tool_calls"] = tool_calls
+            frame["input_tokens"] = input_tokens
+            frame["output_tokens"] = output_tokens
+        with self._lock:
+            self._emit(frame)
 
     def _emit_retries(self, log: object, seen: int, call_id: str) -> None:
         if not isinstance(log, list):
@@ -591,11 +702,13 @@ def _finish(
     enclosure: EnclosureResult | None = None,
     sourcing: SourcingResult | None = None,
     simulation: SimulationResult | None = None,
+    mechanism: MechanismResult | None = None,
     emit_stages: bool = True,
     unread_datasheets: list[str] | None = None,
     plan: PlanResult | None = None,
     effort: EffortReceipt | None = None,
     prior_art: PriorArtResult | None = None,
+    web_research: WebResearchResult | None = None,
 ) -> PipelineResult:
     """Write the board if asked, then assemble the result. Emits nothing.
 
@@ -655,10 +768,12 @@ def _finish(
         bom_path=bom_path,
         grouped_bom_path=grouped_bom_path,
         simulation=simulation,
+        mechanism=mechanism,
         unread_datasheets=list(unread_datasheets or []),
         plan=plan,
         effort=effort,
         prior_art=prior_art,
+        web_research=web_research,
     )
 
 
@@ -693,6 +808,10 @@ def _generate_pcb_sdk(
     effort: str | None = None,
     prior_art: bool = False,
     prior_art_transport: Any = None,
+    web_research: bool = False,
+    web_research_transport: Any = None,
+    web_research_budget: ResearchBudget | None = None,
+    mechanism: bool = False,
 ) -> PipelineResult:
     """Run the stages as a straight line. See :func:`generate_pcb`."""
     emit, agent_model, enter, observe, tier = _wire_events(
@@ -714,36 +833,54 @@ def _generate_pcb_sdk(
         placement_fallback_model, "placement_repair", "placement-fallback"
     )
 
+    # Web research starts the moment the intent arrives, on its own thread,
+    # and reads the web while the datasheets, prior art and plan run; it is
+    # joined right before propose so its cited findings are in the brief.
+    research_job = start_research_stage(
+        models.for_stage("research"),
+        intent=intent,
+        research=web_research,
+        emit=emit,
+        enter=enter,
+        transport=web_research_transport,
+        budget=web_research_budget,
+    )
     unread_datasheets: list[str] = []
-    facts = read_stage(
-        models.for_stage("read"),
-        sheets=datasheets,
-        preloaded_facts=preloaded_facts,
-        emit=emit,
-        enter=enter,
-        unread=unread_datasheets,
-    )
-    prior_art_result = prior_art_stage(
-        models.for_stage("prior_art"),
-        intent=intent,
-        prior_art=prior_art,
-        emit=emit,
-        enter=enter,
-        transport=prior_art_transport,
-    )
-    plan_result = plan_stage(
-        models.for_stage("plan"),
-        intent=intent,
-        plan=plan,
-        max_repairs=max_repairs,
-        emit=emit,
-        enter=enter,
-    )
+    try:
+        facts = read_stage(
+            models.for_stage("read"),
+            sheets=datasheets,
+            preloaded_facts=preloaded_facts,
+            emit=emit,
+            enter=enter,
+            unread=unread_datasheets,
+        )
+        prior_art_result = prior_art_stage(
+            models.for_stage("prior_art"),
+            intent=intent,
+            prior_art=prior_art,
+            emit=emit,
+            enter=enter,
+            transport=prior_art_transport,
+        )
+        plan_result = plan_stage(
+            models.for_stage("plan"),
+            intent=intent,
+            plan=plan,
+            max_repairs=max_repairs,
+            emit=emit,
+            enter=enter,
+        )
+    finally:
+        # A run abandoned before propose must not leave research spending
+        # model calls and Firecrawl pages on a thread nobody will join.
+        research_job.wait()
+    research_result = research_job.result()
     spec, attempts = propose_stage(
         models.for_stage("propose"),
         intent=intent,
         facts=facts,
-        brief=design_brief(plan_result, prior_art_result),
+        brief=design_brief(plan_result, prior_art_result, research_result),
         max_repairs=max_repairs,
         emit=emit,
         enter=enter,
@@ -825,6 +962,7 @@ def _generate_pcb_sdk(
             emit=emit,
             enter=enter,
             probe=sourcing_probe,
+            context=research_sourcing_context(research_result),
         )
         if sourcing
         else SourcingJob()
@@ -843,6 +981,23 @@ def _generate_pcb_sdk(
         if simulate
         else SimulationJob()
     )
+    # And the arm the board drives, the same way: it needs the intent, the
+    # validated spec (so its servos are ones the board's driver can command)
+    # and the prior art. Off means no thread and no events.
+    mechanism_job = (
+        start_mechanism_stage(
+            models.for_stage("mechanism"),
+            intent,
+            board_spec=spec,
+            prior_art=prior_art_result,
+            output=output,
+            emit_stages=emit_stages,
+            emit=emit,
+            enter=enter,
+        )
+        if mechanism
+        else MechanismJob()
+    )
     try:
         artifacts = schematic_stage(
             spec,
@@ -860,11 +1015,14 @@ def _generate_pcb_sdk(
         enclosure_job.wait()
         sourcing_job.wait()
         simulation_job.wait()
-    # Enclosure, then sourcing, then simulation: a fixed join order, so a
-    # scripted model and the ADK driver settle the three lanes identically.
+        mechanism_job.wait()
+    # Enclosure, then sourcing, then simulation, then mechanism: a fixed join
+    # order, so a scripted model and the ADK driver settle the lanes
+    # identically.
     enclosure_result = enclosure_job.result()
     sourcing_result = sourcing_job.result()
     simulation_result = simulation_job.result()
+    mechanism_result = mechanism_job.result()
 
     return _finish(
         intent=intent,
@@ -880,11 +1038,13 @@ def _generate_pcb_sdk(
         enclosure=enclosure_result,
         sourcing=sourcing_result,
         simulation=simulation_result,
+        mechanism=mechanism_result,
         emit_stages=emit_stages,
         unread_datasheets=unread_datasheets,
         plan=plan_result,
         effort=receipt,
         prior_art=prior_art_result,
+        web_research=research_result,
     )
 
 
@@ -920,6 +1080,10 @@ def generate_pcb(
     engine: str = "",
     prior_art: bool = False,
     prior_art_transport: Any = None,
+    web_research: bool = False,
+    web_research_transport: Any = None,
+    web_research_budget: ResearchBudget | None = None,
+    mechanism: bool = False,
 ) -> PipelineResult:
     """Generate a placed board from a natural-language intent.
 
@@ -1048,8 +1212,37 @@ def generate_pcb(
             rate-limited and says so). A fact whose quote is not in its file
             is dropped and reported. Result on ``result.prior_art``; see
             :func:`silkscreen.agents.prior_art.research`.
+        mechanism: Additionally design the printed mechanism the board
+            drives -- a jointed robot arm: the model proposes a
+            MECHANISM-SPEC (catalogue servos and bearings, link lengths,
+            ranges), build123d builds every part, and the mechanism kernel
+            measures torque, reach, self-collision, pockets, bearing seats,
+            walls and overhangs with signed margins. The validated circuit
+            and the prior art go into its brief, and an actuator the board's
+            servo driver cannot command is rejected for repair. Opt-in; one
+            model call plus one repair round, on a worker thread joined after
+            simulation. With ``output`` set and ``emit_stages`` on it writes
+            ``mechanism.step`` and one STL per part beside the board. Result
+            on ``result.mechanism`` with a status, never None when asked for.
         prior_art_transport: The HTTP seam of that research; ``None`` is
             the real network, and tests pass a recorded transport.
+        web_research: From the moment the intent arrives, research the
+            request on the web on a worker thread: Firecrawl searches and
+            scrapes, the model reads the pages into facts with verbatim
+            quotes (a quote not on its page is dropped and reported), and
+            follow-up questions seed a narrower second round -- the
+            dzhng/deep-research loop, bounded by ``web_research_budget``.
+            Joined right before propose; the cited findings join the brief
+            propose designs against and the part facts join the sourcing
+            prompt. Opt-in; needs ``FIRECRAWL_API_KEY``, and without it the
+            result is status ``unconfigured`` in words (GitHub prior art
+            still runs). Result on ``result.web_research``; see
+            :func:`silkscreen.agents.web_research.research_web`.
+        web_research_transport: The Firecrawl HTTP seam; ``None`` is the real
+            network, and tests pass a recorded transport.
+        web_research_budget: Breadth, depth, page and wall-clock budget
+            (:class:`silkscreen.web_research.ResearchBudget`); ``None`` is
+            the default budget.
         engine: Which driver runs the stages -- ``"sdk"`` for the straight line
             in this module, ``"adk"`` for the Google ADK workflow in
             :mod:`silkscreen.agents.adk`. Both call the same stage bodies and
@@ -1097,6 +1290,10 @@ def generate_pcb(
             effort=effort,
             prior_art=prior_art,
             prior_art_transport=prior_art_transport,
+            web_research=web_research,
+            web_research_transport=web_research_transport,
+            web_research_budget=web_research_budget,
+            mechanism=mechanism,
         )
     if chosen == "adk":
         # Imported here, never at module scope: a base install has no google.adk,
@@ -1137,6 +1334,10 @@ def generate_pcb(
             effort=effort,
             prior_art=prior_art,
             prior_art_transport=prior_art_transport,
+            web_research=web_research,
+            web_research_transport=web_research_transport,
+            web_research_budget=web_research_budget,
+            mechanism=mechanism,
         )
     # RuntimeError, not ValueError: the service answers a pipeline ValueError as
     # a 400 with the raw message, and a bad engine name is not a client's fault.

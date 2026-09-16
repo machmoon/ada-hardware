@@ -54,6 +54,16 @@ describe("stageReadyLine", () => {
     expect(line).toContain("here on the strip");
   });
 
+  it("tapers: after the first stage it says what is done and where, and stops teaching", () => {
+    const line = stageReadyLine(response(), ["route"], false);
+    expect(line).toBe("The placement is done. It is open in KiCad.");
+  });
+
+  it("still says where a stage went wrong once tapered", () => {
+    const line = stageReadyLine(response({ shown_in_kicad: false }), ["route"], false);
+    expect(line).toContain("could not open it in KiCad");
+  });
+
   it("says a finished run is finished, and that nothing was ordered", () => {
     expect(stageReadyLine(response({ step: "order", next: [] }), [])).toBe(
       "Every stage has run. Nothing was ordered."

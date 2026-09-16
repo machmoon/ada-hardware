@@ -246,7 +246,7 @@ pub fn run() {
 /// `tauri dev` runs the bare debug binary rather than a `.app` bundle, so
 /// macOS has no Info.plist to read an icon from and the Dock shows the
 /// generic executable icon. Hand NSApplication the same PNG the bundle
-/// carries so a dev-mode Dock shows the Kaleo mark. Release builds are
+/// carries so a dev-mode Dock shows the Ada mark. Release builds are
 /// bundled and already get the icon from `bundle.icon`, hence the
 /// `debug_assertions` gate at the call site.
 #[cfg(all(target_os = "macos", debug_assertions))]

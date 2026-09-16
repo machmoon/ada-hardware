@@ -8,9 +8,9 @@ describe("terminal sigil routing", () => {
     expect(route("./configure").destination).toBe("shell");
   });
 
-  it("sends a capitalised line to Hardy", () => {
+  it("sends a capitalised line to Ada", () => {
     const routed = route("Why did that build fail?");
-    expect(routed.destination).toBe("hardy");
+    expect(routed.destination).toBe("ada");
     expect(routed.text).toBe("Why did that build fail?");
   });
 
@@ -34,7 +34,7 @@ describe("terminal sigil routing", () => {
     const routed = route(" Rscript analyse.R");
     expect(routed.destination).toBe("shell");
     expect(routed.text).toBe("Rscript analyse.R");
-    expect(route("Rscript analyse.R").destination).toBe("hardy");
+    expect(route("Rscript analyse.R").destination).toBe("ada");
   });
 
   it("routes nothing at all while a full-screen program is running", () => {
@@ -45,8 +45,8 @@ describe("terminal sigil routing", () => {
     }
   });
 
-  it("is a plain terminal when Hardy routing is switched off", () => {
-    expect(route("Why is this failing?", { hardyEnabled: false }).destination).toBe("shell");
+  it("is a plain terminal when Ada routing is switched off", () => {
+    expect(route("Why is this failing?", { adaEnabled: false }).destination).toBe("shell");
   });
 
   it("passes a bare Enter through so the prompt redraws", () => {

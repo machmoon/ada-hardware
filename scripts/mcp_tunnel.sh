@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bring up Hardy for claude.ai / Claude in Chrome in one go: the token-gated
+# Bring up Ada for claude.ai / Claude in Chrome in one go: the token-gated
 # Streamable HTTP bridge (scripts/mcp_http.sh) plus a cloudflared quick
 # tunnel, then print the connector URL.
 #

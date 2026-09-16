@@ -90,7 +90,7 @@ const NEEDS_SIGN_IN: DeliverConfig = {
   signed_in: false,
   token: "missing",
   hints: [
-    "Gmail and Calendar: sign in with Google from Hardy's Send panel (or run `python -m googleapps auth`; token at /x)",
+    "Gmail and Calendar: sign in with Google from Ada's Send panel (or run `python -m googleapps auth`; token at /x)",
   ],
 };
 

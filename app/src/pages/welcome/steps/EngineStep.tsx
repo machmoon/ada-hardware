@@ -11,7 +11,7 @@ import type { SetupCardId } from "@/lib/setup/machine";
 export const ENGINE_TITLE = "Start the engine";
 export const ENGINE_TITLE_DOWN = "Start the engine in a terminal";
 export const ENGINE_SUBTITLE =
-  "Two things live outside Hardy: the engine that generates boards, and KiCad, the canvas she works on.";
+  "Two things live outside Ada: the engine that generates boards, and KiCad, the canvas she works on.";
 
 /** How long a healthy engine sits on screen before the wizard moves on. */
 export const AUTO_ADVANCE_MS = 600;
@@ -22,11 +22,11 @@ export const KICAD_ENV_VAR = "KICAD_CLI";
 export const KICAD_MISSING_FIX =
   "Install KiCad, or set KICAD_CLI to the kicad-cli binary if it lives somewhere off PATH.";
 /** What finding the binary does and does not prove. Never "KiCad works". */
-export const KICAD_FOUND_CAVEAT = "Found on this Mac. Hardy did not run it, so the version is not known.";
+export const KICAD_FOUND_CAVEAT = "Found on this Mac. Ada did not run it, so the version is not known.";
 export const KICAD_MISSING_COST =
-  "Hardy still designs boards without it. What stops working is showing a stage in KiCad, the ERC and DRC checks, and the 3D export the order step ships.";
+  "Ada still designs boards without it. What stops working is showing a stage in KiCad, the ERC and DRC checks, and the 3D export the order step ships.";
 export const KICAD_UNKNOWN =
-  "Hardy could not ask this machine what it has — that answer only exists in the desktop app.";
+  "Ada could not ask this machine what it has — that answer only exists in the desktop app.";
 
 type KicadState = "checking" | "found" | "missing" | "unknown";
 

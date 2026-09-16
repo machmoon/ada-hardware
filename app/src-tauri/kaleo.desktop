@@ -1,7 +1,7 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Hardy
+Name=Ada
 Comment=Describe a circuit board in a sentence and watch it get designed, placed, routed and reviewed
 Exec=kaleo
 Icon=kaleo

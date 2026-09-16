@@ -34,8 +34,10 @@ from ...prior_art import PriorArtResult
 from ...routing import RouteResult
 from ...sourcing import SourcingResult
 from ...spice.simulators import Simulator
+from ...web_research import ResearchBudget, WebResearchResult
 from ..datasheet import PartFacts
 from ..effort import UNSET, StageModels
+from ..mechanism import MechanismResult
 from ..model import Model
 from ..pipeline import PipelineResult, _finish, _resolve_effort, _wire_events
 from ..plan import PlanResult
@@ -46,6 +48,8 @@ from ..stages import (
     NO_ARTIFACTS,
     EnclosureJob,
     EnclosureResult,
+    MechanismJob,
+    ResearchJob,
     ReviewJob,
     SchematicArtifacts,
     SimulationJob,
@@ -105,6 +109,14 @@ class _RunContext:
     simulator: Simulator | str | None = None
     prior_art: bool = False
     prior_art_transport: Any = None
+    web_research: bool = False
+    web_research_transport: Any = None
+    web_research_budget: ResearchBudget | None = None
+    #: Web research in flight on its worker thread between ``research_start``
+    #: and ``research``; the latter joins it into ``research_result``.
+    research_job: ResearchJob | None = None
+    research_result: WebResearchResult | None = None
+    mechanism: bool = False
     facts: list[PartFacts] = field(default_factory=list)
     prior_art_result: PriorArtResult | None = None
     plan_result: PlanResult | None = None
@@ -128,6 +140,10 @@ class _RunContext:
     #: and ``simulate``.
     simulation_job: SimulationJob | None = None
     simulation_result: SimulationResult | None = None
+    #: The arm in flight the same way, between ``mechanism_start`` and
+    #: ``mechanism``.
+    mechanism_job: MechanismJob | None = None
+    mechanism_result: MechanismResult | None = None
     #: The critic in flight on its worker thread between ``review_start``
     #: and ``review``; the latter joins it into ``review_report``.
     review_job: ReviewJob | None = None
@@ -292,6 +308,10 @@ def generate_pcb_adk(
     effort: str | None = None,
     prior_art: bool = False,
     prior_art_transport: Any = None,
+    web_research: bool = False,
+    web_research_transport: Any = None,
+    web_research_budget: ResearchBudget | None = None,
+    mechanism: bool = False,
 ) -> PipelineResult:
     """Run the stages as an ADK workflow. See :func:`silkscreen.agents.generate_pcb`.
 
@@ -349,6 +369,10 @@ def generate_pcb_adk(
         simulator=simulator,
         prior_art=prior_art,
         prior_art_transport=prior_art_transport,
+        web_research=web_research,
+        web_research_transport=web_research_transport,
+        web_research_budget=web_research_budget,
+        mechanism=mechanism,
     )
     token = secrets.token_hex(8)
     _RUNS[token] = run
@@ -384,9 +408,11 @@ def generate_pcb_adk(
         enclosure=run.enclosure_result,
         sourcing=run.sourcing_result,
         simulation=run.simulation_result,
+        mechanism=run.mechanism_result,
         emit_stages=emit_stages,
         unread_datasheets=run.unread_datasheets,
         plan=run.plan_result,
         effort=receipt,
         prior_art=run.prior_art_result,
+        web_research=run.research_result,
     )

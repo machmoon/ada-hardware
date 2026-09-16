@@ -1,4 +1,4 @@
-// Tests for the one place Kaleo talks to the engine.
+// Tests for the one place Ada talks to the engine.
 //
 // `@tauri-apps/plugin-http` is mocked wholesale: these tests own every byte
 // the "network" answers with, including how the NDJSON body is chunked, so the
@@ -13,6 +13,7 @@ vi.mock("@tauri-apps/plugin-http", () => ({ fetch: vi.fn() }));
 
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import {
+  startRetryDelayMs,
   MAX_TIME_LIMIT_S,
   MIN_TIME_LIMIT_S,
   SilkscreenError,
@@ -731,6 +732,24 @@ describe("startSteps", () => {
     expect(body.kicad_live).toBe(true);
   });
 
+  it("puts plan_first and research on the wire when asked, and omits them when not", async () => {
+    // The regression behind the 870 s run of 2026-09-16: the hook sent
+    // `plan_first: true`, normalization dropped it, and the engine ran
+    // plan+propose+draw in one request. `false` is the engine default and is
+    // omitted rather than sent, the `ground`/`debug` rule.
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, { session: "s1", step: "plan", next: [] }));
+    await startSteps("http://x", { intent: "a toy car", plan_first: true, research: true });
+    let body = JSON.parse(String((mockFetch.mock.calls[0][1] as RequestInit).body));
+    expect(body.plan_first).toBe(true);
+    expect(body.research).toBe(true);
+
+    mockFetch.mockResolvedValueOnce(jsonResponse(200, { session: "s2", step: "propose", next: [] }));
+    await startSteps("http://x", { intent: "a toy car", plan_first: false });
+    body = JSON.parse(String((mockFetch.mock.calls[1][1] as RequestInit).body));
+    expect("plan_first" in body).toBe(false);
+    expect("research" in body).toBe(false);
+  });
+
   it("sends an Idempotency-Key only when one was given", async () => {
     // The header the engine dedupes a start by (service/steps.py::start_once).
     // Absent unless a caller supplies one, so nothing older changes shape.
@@ -747,6 +766,42 @@ describe("startSteps", () => {
     await startSteps("http://x", { intent: "a 3.3V LDO board" });
     const without = (mockFetch.mock.calls[1][1] as RequestInit).headers as Record<string, string>;
     expect("Idempotency-Key" in without).toBe(false);
+  });
+
+  it("waits out a start still running under its key, then returns that run", async () => {
+    // 2026-09-14: the engine said "already starting" twice while the first
+    // press was still proposing, and the strip reported a failed schematic.
+    vi.useFakeTimers();
+    try {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse(409, { error: "already starting", should_retry: true }))
+        .mockResolvedValueOnce(jsonResponse(409, { error: "already starting", should_retry: true }))
+        .mockResolvedValueOnce(jsonResponse(200, { session: "s1", step: "propose", next: [] }));
+      const pending = startSteps("http://x", { intent: "an LDO" }, undefined, "", "press-1");
+      await vi.advanceTimersByTimeAsync(startRetryDelayMs(1) + startRetryDelayMs(2));
+      const answer = await pending;
+      expect(answer.session).toBe("s1");
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      for (const call of mockFetch.mock.calls) {
+        expect(((call[1] as RequestInit).headers as Record<string, string>)["Idempotency-Key"]).toBe(
+          "press-1"
+        );
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never retries a 409 the engine did not mark retryable", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(409, { error: "needs the run to be 'placed'" }));
+    await expect(
+      startSteps("http://x", { intent: "an LDO" }, undefined, "", "press-1")
+    ).rejects.toMatchObject({ status: 409 });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("backs off like Stripe: 0.5 s doubling, capped at 5 s", () => {
+    expect([1, 2, 3, 4, 5, 6].map(startRetryDelayMs)).toEqual([500, 1000, 2000, 4000, 5000, 5000]);
   });
 });
 

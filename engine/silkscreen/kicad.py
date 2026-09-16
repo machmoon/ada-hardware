@@ -53,6 +53,9 @@ __all__ = [
 POWER_NET_PATTERNS = (
     "gnd", "agnd", "dgnd", "pgnd", "vss", "avss", "dvss", "earth",
     "vcc", "vdd", "avdd", "dvdd", "vbus", "vin", "vout", "vref",
+    # Battery, system and actuator rails (2026-09-14: an XT60-fed VBAT rail got
+    # no PWR_FLAG, so KiCad ERC failed the regulator input as undriven).
+    "vbat", "vbatt", "vsys", "vmot", "vmotor", "vservo",
 )
 
 #: Nets with more pads than this are also treated as global rails even if the

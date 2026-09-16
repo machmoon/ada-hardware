@@ -80,7 +80,7 @@ export const SETTING_KEY = "notify.enabled" as const;
  * only useful thing to say is where the switch actually is.
  */
 export const DENIED_HINT =
-  "macOS is blocking Hardy's notifications. Open System Settings › Notifications › Hardy, allow them, then turn this back on.";
+  "macOS is blocking Ada's notifications. Open System Settings › Notifications › Ada, allow them, then turn this back on.";
 
 export const UNSUPPORTED_HINT =
   "Notifications need the desktop app. Nothing will be sent from a browser tab.";
@@ -174,7 +174,7 @@ export async function enableNotifications(): Promise<EnableOutcome> {
 // ---------------------------------------------------------------- the sending
 
 /**
- * Is Kaleo frontmost? `kaleo_has_focus` is asked first because it knows about
+ * Is Ada frontmost? `kaleo_has_focus` is asked first because it knows about
  * both windows; `document.hasFocus()` alone answers for one 58 px panel, which
  * is not the same question. The command may not be registered — the fallback
  * is not an error path.

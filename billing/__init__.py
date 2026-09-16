@@ -1,4 +1,4 @@
-"""Usage-credit billing for Kaleo, in the shape ``googleapps/`` established.
+"""Usage-credit billing for Ada, in the shape ``googleapps/`` established.
 
 Stdlib only -- no ``stripe`` SDK -- because this makes two REST calls and the
 repo already talks to Slack, Google and Meet the same way. Every outbound

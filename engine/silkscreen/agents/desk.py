@@ -143,7 +143,7 @@ Respond with ONE JSON object -- no prose, no code fence:
 }}
 
 Rules:
-- caption is what Hardy says out loud. Be specific (the finding title, the
+- caption is what Ada says out loud. Be specific (the finding title, the
   part ref, the control label). Bound it to a couple of sentences.
 - abstain=true when you cannot see what the pointer is on, the screenshot
   is blank or occluded, or the utterance is not about the screen. Then

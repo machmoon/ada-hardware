@@ -375,7 +375,7 @@ def test_generate_returns_a_passing_v2_constraint_receipt(server):
     assert body["blockers"] == []
 
 
-def test_blocked_constraints_do_not_hide_the_generated_artifact(server):
+def test_blocked_constraints_do_not_hide_the_generated_artifact(server, unrouted_boards):
     status, body = post(
         server,
         {
@@ -415,8 +415,17 @@ def test_generate_can_verify_and_apply_placement_before_routing(server):
         part["ref"]: (part["x_mm"], part["y_mm"])
         for part in body["placements"]["parts"]
     }
+    # The verifier judges the emitted Edge.Cuts frame, which is the packing
+    # frame the response uses plus the outline margin on every side
+    # (placement/adapter.py::verifier_board). The two agree once that one
+    # documented offset is taken back out.
+    from silkscreen.placement.adapter import OUTLINE_MARGIN_MM
+
     verifier_xy = {
-        part["ref"]: (round(part["x"], 3), round(part["y"], 3))
+        part["ref"]: (
+            round(part["x"] - OUTLINE_MARGIN_MM, 3),
+            round(part["y"] - OUTLINE_MARGIN_MM, 3),
+        )
         for part in placement["board"]["components"]
     }
     assert response_xy == verifier_xy
@@ -1147,10 +1156,13 @@ def test_schematic_carries_validated_parts_pins_and_nets(server):
         "pins",
     }
     assert by_id["AMS1117-3.3"]["kind"] == "device"
+    # ``Device.pins`` maps a datasheet pin name to its physical number, and
+    # the endpoint check below requires exactly that orientation; this literal
+    # had the two swapped and could never pass alongside it.
     assert by_id["AMS1117-3.3"]["pins"] == [
-        {"name": "1", "number": "GND"},
-        {"name": "2", "number": "VOUT"},
-        {"name": "3", "number": "VIN"},
+        {"name": "GND", "number": "1"},
+        {"name": "VOUT", "number": "2"},
+        {"name": "VIN", "number": "3"},
     ]
     assert by_id["c_bulk_vin"]["kind"] == "capacitor"
     assert by_id["c_bulk_vin"]["value"] == "10uF"
@@ -2794,7 +2806,7 @@ def test_a_stream_reports_the_run_and_ends_with_the_one_shot_body(server):
     assert streamed == once_body
 
 
-def test_generate_stream_reports_blocked_constraint_verification(server):
+def test_generate_stream_reports_blocked_constraint_verification(server, unrouted_boards):
     status, _, frames = post_stream(
         server,
         {
@@ -3088,6 +3100,29 @@ BAD_ORDER_OPTIONS = [
 ]
 
 
+@pytest.fixture
+def unrouted_boards(monkeypatch):
+    """Every board in this test comes out of routing as ratsnest.
+
+    These order tests were written when "nothing here routes" was simply true
+    of the pipeline. The router now finishes the scripted regulator, so the
+    boards they meant -- the unrouted kind, which the order gate must refuse
+    -- have to be asked for. A router with a one-node budget is the honest way
+    to get one: it runs the real code path and names every net as unfinished,
+    rather than faking a result the order step would read differently.
+    """
+    from silkscreen.agents import stages
+    from silkscreen.board import route_board
+
+    monkeypatch.setattr(
+        stages,
+        "route_board",
+        lambda board, **kw: route_board(
+            board, max_expansions=1, max_expansions_per_net=1, max_ripups=0
+        ),
+    )
+
+
 def order_of(srv, options=None):
     """One successful order request, as the whole response body.
 
@@ -3148,7 +3183,7 @@ def test_no_order_key_unless_it_was_asked_for(server):
     ]
 
 
-def test_the_order_block_is_purely_additive(server):
+def test_the_order_block_is_purely_additive(server, unrouted_boards):
     """Asking for an order adds a key and changes nothing else.
 
     Stated as an equality against a plain run rather than as a list of fields
@@ -3194,7 +3229,7 @@ def test_an_order_request_returns_a_manifest_and_the_fab_files(server):
     assert manifest["disclaimer"].strip(), "the disclaimer must actually say something"
 
 
-def test_an_unrouted_board_is_not_orderable(server):
+def test_an_unrouted_board_is_not_orderable(server, unrouted_boards):
     """The gate, on the only kind of board this pipeline can currently make.
 
     Nothing here routes, so every net joining two pads is still open and the
@@ -3331,7 +3366,7 @@ def test_the_fab_files_are_json_safe_and_well_formed(server):
     ]
 
 
-def test_an_order_and_grounding_coexist(ground_server):
+def test_an_order_and_grounding_coexist(ground_server, unrouted_boards):
     """Two opt-in blocks in one response, neither standing on the other."""
     ground_server.store.put("AMS1117-3.3", _cached_facts())
     seed_pages(ground_server)
@@ -3553,7 +3588,7 @@ def test_transcribe_uses_the_cheap_factory_and_is_paced(server):
         model = "gemini-transcribe-test"
 
     cheap = NamedScripted(
-        by_marker={"transcribing a spoken request": " hardy, an LDO board \n"}
+        by_marker={"transcribing a spoken request": " ada, an LDO board \n"}
     )
     primary_calls = []
 
@@ -3590,7 +3625,7 @@ def test_transcribe_uses_the_cheap_factory_and_is_paced(server):
         Handler.model_factory = staticmethod(scripted)
 
     assert status == 200, body
-    assert body == {"text": "hardy, an LDO board", "model": "gemini-transcribe-test"}
+    assert body == {"text": "ada, an LDO board", "model": "gemini-transcribe-test"}
     assert dictate_status == 200
     assert len(cheap.calls) == 2
     assert primary_calls == []
@@ -3642,7 +3677,7 @@ def test_transcribe_wake_does_not_burn_the_shared_pacer(server):
         model = "gemini-transcribe-test"
 
     cheap = NamedScripted(
-        by_marker={"transcribing a spoken request": " hardy, an LDO board \n"}
+        by_marker={"transcribing a spoken request": " ada, an LDO board \n"}
     )
     shared = RecordingPacer()
     voice = RecordingPacer()
@@ -3761,3 +3796,57 @@ def test_chat_stream_names_a_proposal_failure_from_the_board_tool(server):
     assert frames[-1]["event"] == "chat.error"
     assert frames[-1]["status"] == 422
     assert frames[-1]["reason"] == "proposal_invalid"
+
+
+def test_chat_stream_passes_the_approval_gate_and_returns_the_proposal(server):
+    previous_catalog = Handler.__dict__["model_catalog_factory"]
+    previous_runner = Handler.__dict__["orchestrator_runner"]
+    Handler.model_catalog_factory = staticmethod(
+        lambda: {"auto_model": "gemini-test", "models": [{"id": "gemini-test"}]}
+    )
+    calls = []
+
+    def orchestrate(**kwargs):
+        calls.append(kwargs)
+        return OrchestratorResult(
+            "Want me to build a 3.3 V LDO board?",
+            None,
+            False,
+            str(kwargs["model"]),
+            "A 3.3 V LDO board",
+        )
+
+    Handler.orchestrator_runner = staticmethod(orchestrate)
+    try:
+        status, _, frames = post_stream(
+            server,
+            {"intent": "make an LDO board", "confirm_before_build": True},
+            path="/chat/stream",
+        )
+    finally:
+        Handler.model_catalog_factory = previous_catalog
+        Handler.orchestrator_runner = previous_runner
+
+    assert status == 200
+    assert calls[0]["confirm_before_build"] is True
+    assert frames[-1]["event"] == "chat.done"
+    assert frames[-1]["proposal"] == "A 3.3 V LDO board"
+    assert frames[-1]["result"] is None
+
+
+def test_chat_stream_refuses_a_non_boolean_approval_gate(server):
+    previous_runner = Handler.__dict__["orchestrator_runner"]
+    calls = []
+    Handler.orchestrator_runner = staticmethod(lambda **kwargs: calls.append(kwargs))
+    try:
+        status, body = post(
+            server,
+            {"intent": "hello", "confirm_before_build": "yes"},
+            path="/chat/stream",
+        )
+    finally:
+        Handler.orchestrator_runner = previous_runner
+
+    assert status == 400
+    assert "confirm_before_build" in body["error"]
+    assert calls == []

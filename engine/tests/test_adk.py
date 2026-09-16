@@ -110,7 +110,9 @@ def test_events_trace_every_stage_and_model_call(tmp_path, offline_pdf_fetch):
         # level, resolved by the one shared helper rather than twice.
         "effort.selected",
         "stage.start", "read.part", "read.fetch", "model.call", "stage.done",
-        "stage.start", "model.call", "stage.done",
+        # One verdict per proposal round: electrical completeness (ERC is off
+        # in the suite by the root conftest, so it emits no second verdict).
+        "stage.start", "model.call", "propose.verdict", "stage.done",
         "stage.start", "stage.done",
         "stage.start", "stage.done",
         "stage.start", "stage.done",
@@ -189,7 +191,7 @@ def test_the_event_name_set_is_frozen(tmp_path, offline_pdf_fetch):
     assert {e["event"] for e in events} == {
         "effort.selected",
         "stage.start", "stage.done", "read.part", "read.fetch",
-        "propose.round", "model.call",
+        "propose.round", "propose.verdict", "model.call",
     }
 
 

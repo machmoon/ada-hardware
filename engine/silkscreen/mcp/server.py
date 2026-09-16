@@ -29,7 +29,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..board import build_board, emit_kicad_pcb
+from ..board import build_board, emit_kicad_pcb, package_errors
 from ..footprints import CHIP_SIZES, UnsupportedPackage, chip_passive
 from ..netlist import ValidationError, parse_circuit_spec
 from ..packing import Part, pack
@@ -182,7 +182,7 @@ TOOLS: list[dict[str, Any]] = [
             "route (left as ratsnest, never hidden) and every review finding "
             "with its severity. Unlike the other tools this one calls a "
             "Gemini model, so it needs GOOGLE_API_KEY (or a .env in the "
-            "Hardy checkout) and takes one to two minutes."
+            "Ada checkout) and takes one to two minutes."
         ),
         "inputSchema": {
             "type": "object",
@@ -244,6 +244,12 @@ def _tool_validate_circuit(args: dict[str, Any]) -> dict[str, Any]:
         spec = parse_circuit_spec(args)
     except ValidationError as exc:
         return _text_result({"valid": False, "errors": list(exc.errors)})
+    # The IR can be well formed and still not drawable: a pin numbered for a
+    # pad its land pattern lacks. ``build_board`` refuses that, so a
+    # validator that said "valid" here would disagree with the next tool.
+    drawable = package_errors(spec)
+    if drawable:
+        return _text_result({"valid": False, "errors": drawable})
     return _text_result(
         {
             "valid": True,
@@ -498,13 +504,13 @@ DEFAULT_BOARDS_DIR = Path("~/Hardy/boards")
 def _load_env_if_needed() -> None:
     """Read ``.env`` the way the CLI does, without making it a requirement.
 
-    ``HARDY_REPO_ROOT`` (the desktop app's own variable) names the checkout;
+    ``ADA_REPO_ROOT`` (the desktop app's own variable) names the checkout;
     the cwd is tried after it. Nothing is overwritten -- the same setdefault
     rule as :func:`silkscreen.cli._load_dotenv`.
     """
     from ..cli import _load_dotenv
 
-    for root in (os.environ.get("HARDY_REPO_ROOT"), os.getcwd()):
+    for root in (os.environ.get("ADA_REPO_ROOT"), os.getcwd()):
         if root:
             _load_dotenv(Path(root) / ".env")
 

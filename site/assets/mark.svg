@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 110 472 292" width="472" height="292" aria-label="Ada">
+  <!-- The Ada mark without its tile: the differential pair from the app icon
+       (app/src-tauri/icons/gen_app_icon.py), in whatever colour the page sets. -->
+  <g fill="none" stroke="currentColor" stroke-width="50" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M42 293 H157 L311 139 H470"/>
+    <path d="M42 373 H157 L311 219 H470"/>
+  </g>
+</svg>

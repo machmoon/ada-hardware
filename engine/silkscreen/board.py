@@ -14,10 +14,14 @@ if KiCad's own parser cannot read what we wrote, the tests fail.
 
 from __future__ import annotations
 
+import functools
+import math
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
+from .diffpair import CoupledRoute, PairFailure, route_pair
 from .footprints import (
     BATTERY_PACKAGES,
     CONNECTOR_PACKAGES,
@@ -46,7 +50,17 @@ from .models3d import model_for
 from .netlist import CircuitSpec
 from .packing import Layer, Part, Placement, pack
 from .packing import Net as PackNet
-from .routing import RoutePad, RouteResult, Track, Via, route
+from .routing import (
+    DEFAULT_EDGE_CLEARANCE_NM,
+    DEFAULT_TRACK_WIDTH_NM,
+    DEFAULT_VIA_DIAMETER_NM,
+    DEFAULT_VIA_DRILL_NM,
+    RoutePad,
+    RouteResult,
+    Track,
+    Via,
+    route,
+)
 from .units import DEFAULT_CLEARANCE_NM, NM_PER_MM, mm
 
 __all__ = [
@@ -183,6 +197,65 @@ class PlacedPart:
     y_nm: int = 0
     rotated: bool = False
     layer: Layer = Layer.TOP
+    #: ``{pad number: net name}`` for pins the part declares and the circuit
+    #: leaves unwired, named the way KiCad names them
+    #: (:func:`kicad_unconnected_net`).
+    #: Written into the ``.kicad_pcb`` only -- never routed, never counted as
+    #: unrouted -- so the board agrees with the schematic's no-connect flags.
+    no_connects: dict[str, str] = field(default_factory=dict)
+
+
+def _schematic_pins(device) -> list[tuple[str, str]]:
+    """``(pin name, number)`` for every pin the schematic will draw.
+
+    For a library-bound IC that is the library symbol's pins -- all of them,
+    under the library's names -- because that is the symbol the schematic
+    embeds and the names KiCad builds its ``unconnected-(...)`` nets from. For
+    everything else it is the pins the circuit declared. KiCad's unnamed pin
+    ``~`` has no name in the net.
+    """
+    from .kicadlib.packages import PACKAGE_SYMBOLS, package_pads
+
+    package = getattr(device, "package", None) or ""
+    symbol = getattr(device, "symbol", None)
+    pads = None
+    if not symbol and package in PACKAGE_SYMBOLS:
+        symbol = PACKAGE_SYMBOLS[package]
+        pads = package_pads(package)
+    elif not symbol and package:
+        symbol = _connector_symbol(package, device)
+    if symbol:
+        from . import kicadlib
+        from .kicadlib.symbol import load_symbol
+
+        if kicadlib.enabled():
+            loaded = load_symbol(symbol, pads=pads)
+            if loaded is not None:
+                return [
+                    ("" if p.name == "~" else p.name, p.number) for p in loaded.pins
+                ]
+    return [(name, str(number)) for name, number in device.pins.items()]
+
+
+def kicad_unconnected_net(ref: str, pin_name: str, number: str) -> str:
+    """The net KiCad gives a no-connect pin when it updates a board.
+
+    ``SCH_PIN::GetDefaultNetName`` in ``eeschema/sch_pin.cpp``: an unconnected
+    pin is ``unconnected-(REF-NAME-PadNUMBER)`` when its name differs from its
+    number and ``unconnected-(REF-PadNUMBER)`` otherwise, the name passed
+    through ``EscapeString(..., CTX_NETNAME)`` (``common/string_utils.cpp``),
+    which turns ``/`` into ``{slash}`` and drops line breaks. A pad left with
+    no net instead reads to schematic parity as "Pad missing net given by
+    schematic" -- 33 of those on the 2026-09-14 demo board.
+    """
+
+    def escape(text: str) -> str:
+        return text.replace("/", "{slash}").replace("\n", "").replace("\r", "")
+
+    number = str(number)
+    if pin_name and pin_name != number:
+        return f"unconnected-({ref}-{escape(pin_name)}-Pad{escape(number)})"
+    return f"unconnected-({ref}-Pad{escape(number)})"
 
 
 @dataclass
@@ -202,6 +275,18 @@ class BoardResult:
     #: before telling anyone the board is routed.
     unrouted_nets: dict[str, str] = field(default_factory=dict)
     routed_nets: list[str] = field(default_factory=list)
+    #: Nets carried by a copper pour on both layers rather than by tracks
+    #: (the ground fill :func:`route_board` reserves and :func:`emit_kicad_pcb`
+    #: draws as two zones). KiCad fills the zones; see :func:`write_board`.
+    filled_nets: list[str] = field(default_factory=list)
+    #: How many of ``vias`` are ground stitching (:func:`stitch_filled_nets`)
+    #: rather than signal layer changes, so a via count stays readable.
+    stitching_vias: int = 0
+    #: Nets the router lays before any other: both legs of every
+    #: differential pair :func:`silkscreen.signals.diff_pairs` recognises.
+    priority_nets: list[str] = field(default_factory=list)
+    #: One :meth:`CoupledRoute.as_dict` per pair laid with a constant gap.
+    coupled_pairs: list[dict] = field(default_factory=list)
 
     @property
     def size_mm(self) -> tuple[float, float]:
@@ -368,6 +453,10 @@ def _named_package(
             f"{kind} {name!r} names no package; its land pattern cannot be "
             f"guessed from the pin count. Supported: {sorted(known)}."
         )
+    if kind == "connector" and package not in known:
+        library = _library_connector(package, pin_count, nets)
+        if library is not None:
+            return library
     if package not in known:
         raise UnsupportedPackage(
             f"No {kind} land pattern named {package!r} (for {name!r}). "
@@ -393,6 +482,40 @@ def _named_package(
         raise UnsupportedPackage(str(exc)) from exc
 
 
+def _library_connector(
+    package: str, pin_count: int, nets: dict[str, str]
+) -> Footprint | None:
+    """A connector family or KiCad id (``kicadlib.connectors``) as a footprint.
+
+    Raises when the family is known but KiCad has no part with that many pins,
+    so the refusal names the family rather than the fixed package list.
+    """
+    from . import kicadlib
+    from .kicadlib.connectors import is_connector_spec, resolve
+
+    if not is_connector_spec(package):
+        return None
+    if not kicadlib.enabled():
+        raise UnsupportedPackage(
+            f"connector package {package!r} is a KiCad library family, and "
+            f"KiCad's libraries are not available here; use one of "
+            f"{sorted(CONNECTOR_PACKAGES)}."
+        )
+    found = resolve(package, pin_count)
+    if found is None:
+        raise UnsupportedPackage(
+            f"no installed KiCad footprint for connector {package!r} with "
+            f"{pin_count} pins; write the count the part really has, e.g. "
+            f"{package.split('_')[0]}_4P."
+        )
+    if pin_count > found.pins:
+        raise UnsupportedPackage(
+            f"{package!r} resolves to {found.lib_id} with {found.pins} pins, but the "
+            f"circuit declares pin {pin_count}."
+        )
+    return _library_footprint_by_id(found.lib_id, nets)
+
+
 def _footprint_for_device(
     name: str,
     pin_count: int,
@@ -400,6 +523,7 @@ def _footprint_for_device(
     *,
     kind: str = "ic",
     package: str | None = None,
+    symbol: str | None = None,
 ) -> Footprint:
     """Pick a package from the device's kind, then its name, then the pin count.
 
@@ -446,6 +570,9 @@ def _footprint_for_device(
     named = _named_chip_footprint(name, pin_count, nets)
     if named is not None:
         return named
+    library = _library_footprint(symbol, nets)
+    if library is not None:
+        return library
     if pin_count == 3:
         return sot223(nets)
     if pin_count in SOIC_PINS:
@@ -456,6 +583,121 @@ def _footprint_for_device(
         f"No package rule for {name!r} with {pin_count} pins. Supported: "
         f"{supported_packages_text()}."
     )
+
+
+def _library_footprint(symbol: str | None, nets: dict[str, str]) -> Footprint | None:
+    """The symbol's default KiCad footprint with ``nets`` on its pads, or None.
+
+    Only for a device :func:`silkscreen.kicadlib.resolve.apply_library` bound
+    to a library symbol, and only while the library is enabled. A symbol with no
+    default footprint, or a footprint not installed, is None and the pin-count
+    rule decides as before -- never a guessed land pattern.
+    """
+    if not symbol:
+        return None
+    from . import kicadlib
+
+    index = kicadlib.library_index()
+    entry = index.get(symbol) if index is not None else None
+    if entry is None or not entry.footprint:
+        return None
+    return _library_footprint_by_id(entry.footprint, nets)
+
+
+def _library_footprint_by_id(lib_id: str, nets: dict[str, str]) -> Footprint | None:
+    try:
+        loaded = _load_library_footprint(lib_id)
+    except (OSError, ValueError):
+        return None
+    base = loaded.footprint
+    return Footprint(
+        name=base.name,
+        pads=[replace(pad, net=_net_for(nets, pad.number)) for pad in base.pads],
+        courtyard_w_nm=base.courtyard_w_nm,
+        courtyard_h_nm=base.courtyard_h_nm,
+        body_w_nm=base.body_w_nm,
+        body_h_nm=base.body_h_nm,
+        description=base.description,
+        library=loaded,
+    )
+
+
+def _library_footprint_block(
+    part: PlacedPart,
+    anchor_x: int,
+    anchor_y: int,
+    net_index: dict[str, int],
+    filled_nets: frozenset[str] = frozenset(),
+) -> str:
+    """One library footprint, placed, exactly as KiCad would embed it.
+
+    KiCad's "Update PCB from Schematic" copies the library footprint into the
+    board; this does the same from :class:`silkscreen.kicadlib.LibraryFootprint`
+    text: every pad shape, silkscreen and fab line and the 3D model stay the
+    library's, and only what placement decides is written -- position (the
+    courtyard-centred anchor plus the recorded offset back to the library
+    origin), reference, value and each pad's net (a no-connect pad takes
+    KiCad's own ``unconnected-(...)`` name). Unrotated, top-side parts only;
+    the builder does not rotate library parts.
+    """
+    from kiutils.footprint import Footprint as KiFootprint
+    from kiutils.items.common import Net, Position
+    from kiutils.utils.sexpr import parse_sexp
+
+    fp = part.footprint
+    lib = fp.library
+    kfp = KiFootprint.from_sexpr(parse_sexp(lib.text))
+    library, _, entry = lib.lib_id.partition(":")
+    kfp.libraryNickname = library
+    kfp.entryName = entry
+    kfp.version = None
+    kfp.generator = None
+    kfp.tedit = None
+    kfp.tstamp = _uuid(part.ref)
+    kfp.layer = "F.Cu"
+    ox, oy = lib.origin_offset_nm
+    kfp.position = Position(
+        X=(anchor_x + ox) / NM_PER_MM, Y=(anchor_y + oy) / NM_PER_MM
+    )
+    kfp.properties["Reference"] = part.ref
+    kfp.properties["Value"] = part.value
+    nets_by_pad = {pad.number: pad.net for pad in fp.pads}
+    for pad in kfp.pads:
+        name = nets_by_pad.get(str(pad.number)) or part.no_connects.get(
+            str(pad.number), ""
+        )
+        pad.net = Net(number=net_index[name], name=name) if name else None
+        # The same solid pour connection the generated pads get
+        # (:func:`emit_kicad_pcb`), for the same reason.
+        if name in filled_nets and pad.type == "smd":
+            pad.zoneConnect = 2
+    return "  " + kfp.to_sexpr(indent=2).strip()
+
+
+def footprint_lib_id(part: PlacedPart) -> str:
+    """The ``Lib:Name`` the board and the schematic both call this footprint.
+
+    One definition because two places write it: the board's footprint and the
+    schematic symbol's ``Footprint`` field. When they disagree, schematic
+    parity reports ``footprint_symbol_mismatch`` -- measured 2026-09-14 on the
+    first board with KiCad library footprints, whose symbols still said
+    ``silkscreen:SOT-223-3_TabPin2``.
+    """
+    library = part.footprint.library
+    if library is not None:
+        return library.lib_id
+    return f"silkscreen:{part.footprint.name}"
+
+
+def _net_for(nets: dict[str, str], number: str) -> str:
+    return (nets or {}).get(str(number), "")
+
+
+@functools.lru_cache(maxsize=512)
+def _load_library_footprint(lib_id: str):
+    from .kicadlib import load_footprint
+
+    return load_footprint(lib_id)
 
 
 #: The pin counts each land-pattern generator actually covers. The prompt
@@ -493,7 +735,9 @@ def supported_packages_text() -> str:
             for k, c in sorted(_NAMED_CHIPS.items())
         )
         + ". "
-        f"kind 'connector', by package name: {sorted(CONNECTOR_PACKAGES)}. "
+        f"kind 'connector', by package name: {sorted(CONNECTOR_PACKAGES)}, or "
+        f"(KiCad library) a real connector family written FAMILY_<N>P with N the "
+        f"part's pin count: {', '.join(_connector_families())}. "
         f"kind 'battery', by package name: {sorted(BATTERY_PACKAGES)}. "
         f"kind 'switch', by package name: {sorted(SWITCH_PACKAGES)}. "
         f"kind 'testpoint', by package name: {sorted(TESTPOINT_PACKAGES)}"
@@ -518,6 +762,7 @@ def package_errors(spec: CircuitSpec) -> list[str]:
                 nets,
                 kind=device.kind,
                 package=device.package,
+                symbol=device.symbol,
             )
         except UnsupportedPackage as exc:
             errors.append(str(exc))
@@ -581,6 +826,111 @@ def _device_pin_nets(spec: CircuitSpec, device) -> dict[str, str]:
                 if number:
                     pin_nets[str(number)] = conn.net
     return pin_nets
+
+
+#: Pads a connector ties together by function, per package. KiCad's own
+#: ``Connector:USB_C_Receptacle_USB2.0_16P`` symbol gives every contact in a
+#: group one pin name (four ``GND``, four ``VBUS``, two ``D+``, two ``D-``),
+#: so a schematic that wires one of them has wired all of them. The IR lets the
+#: model name pins one by one, and on 2026-09-14 a model declared GND on A1/B12
+#: and VBUS on A4/B9 only: the other GND and VBUS lands (B1/A12, B4/A9) shipped
+#: with no net -- half the receptacle unpowered, 33 parity conflicts and two
+#: solder-mask bridges on the demo board. The groups follow the pin functions
+#: ``footprints.py`` documents for each pattern.
+TIED_PADS: dict[str, tuple[tuple[str, ...], ...]] = {
+    "USB_C_Receptacle_USB2.0_16P": (
+        ("A1", "A12", "B1", "B12"),  # GND
+        ("A4", "A9", "B4", "B9"),  # VBUS
+        ("A6", "B6"),  # D+ (a USB 2.0 device ties both contacts)
+        ("A7", "B7"),  # D-
+    ),
+    "USB_C_Receptacle_Power": (
+        ("A12", "B12"),  # GND
+        ("A9", "B9"),  # VBUS
+    ),
+    # Named chips, keyed as in _NAMED_CHIPS: KiCad's RF_Module:ESP32-WROOM-32E
+    # symbol stacks GND as one pin on pads [1,15,38,39] (the slug is 39), so a
+    # circuit that wires "GND" wires all four, as KiCad's own netlist would.
+    "esp32_wroom_32e": (("1", "15", "38", "39"),),
+}
+
+
+def _tie_key(device) -> str:
+    """The :data:`TIED_PADS` key for a device: its package, or for an IC the
+    named-chip stem its part number matches (refused variants match nothing)."""
+    if device.package:
+        return device.package
+    normalised = _normalised(device.name)
+    if any(key in normalised for key in _CHIP_REFUSALS):
+        return ""
+    stems = sorted(_NAMED_CHIPS, key=len, reverse=True)
+    return next((stem for stem in stems if stem in normalised), "")
+
+
+def tie_package_pins(spec: CircuitSpec) -> tuple[CircuitSpec, list[str]]:
+    """Wire every contact of a tied group once any one of them is wired.
+
+    Returns the completed spec and one note per pad it tied, so the change is
+    reported rather than made quietly. A group whose wired members already
+    disagree is left alone: that is a short :func:`_pad_errors` names, not
+    something to guess a winner for. Runs on the accepted proposal, before
+    either emitter, so the schematic and the board both carry the tie.
+    """
+    from dataclasses import replace
+
+    notes: list[str] = []
+    conns = {c.net: list(c.endpoints) for c in spec.connections}
+    devices = []
+    for device in spec.devices:
+        groups = TIED_PADS.get(_tie_key(device))
+        if not groups:
+            devices.append(device)
+            continue
+        pins = dict(device.pins)
+        name_of = {str(number): name for name, number in pins.items()}
+        net_of_pin: dict[str, str] = {}
+        for net, endpoints in conns.items():
+            for endpoint in endpoints:
+                part, _, pin = endpoint.rpartition(".")
+                if part == device.name:
+                    net_of_pin[pin] = net
+        for group in groups:
+            wired = {
+                net_of_pin[name_of[n]]
+                for n in group
+                if n in name_of and name_of[n] in net_of_pin
+            }
+            if len(wired) != 1:
+                continue
+            (net,) = wired
+            base = next(
+                name_of[n].rstrip("0123456789_").rstrip("+-") or name_of[n]
+                for n in group
+                if n in name_of and name_of[n] in net_of_pin
+            )
+            for number in group:
+                name = name_of.get(number)
+                if name is None:
+                    name = f"{base}_{number}"
+                    while name in pins:
+                        name += "_"
+                    pins[name] = number
+                    name_of[number] = name
+                if name in net_of_pin:
+                    continue
+                conns[net].append(f"{device.name}.{name}")
+                net_of_pin[name] = net
+                notes.append(
+                    f"{device.name} pad {number} tied to {net}: the "
+                    f"{device.package} carries it on the same contact group"
+                )
+        devices.append(replace(device, pins=pins))
+    if not notes:
+        return spec, notes
+    connections = [
+        replace(c, endpoints=tuple(conns[c.net])) for c in spec.connections
+    ]
+    return replace(spec, devices=devices, connections=connections), notes
 
 
 def _pad_errors(device, fp: Footprint) -> list[str]:
@@ -653,6 +1003,88 @@ def _is_power(net: str) -> bool:
     return any(lowered.startswith(t) for t in _POWER_TOKENS)
 
 
+#: Placer weight of the pull between a decoupling capacitor's rail leg and the
+#: IC pin it serves, against 1.0 for a signal net and 0.25 for a whole rail.
+#: The ground leg is pulled equally: what matters is the loop the cap closes,
+#: and pulling only the rail leg just moved the length onto ground. Swept
+#: 2026-09-14 over (rail, ground) = (4,1), (2,2), (4,4), (8,8) on the regulator,
+#: via and two-chip fixtures; (2,2) cut total loop length 15-18 % and, on the
+#: regulator, routed copper too (43.0 -> 39.5 mm); heavier weights bought no
+#: shorter loop and cost copper.
+DECOUPLING_WEIGHT = 2.0
+DECOUPLING_GROUND_WEIGHT = 2.0
+
+
+@dataclass(frozen=True)
+class Decoupling:
+    """One capacitor serving one IC supply pin (endpoint strings, spec names)."""
+
+    cap: str
+    rail_endpoint: str  # "C1.1"
+    ground_endpoint: str  # "C1.2"
+    pin_endpoint: str  # "U1.VDD"
+    ground_pin_endpoint: str | None  # "U1.GND", when the IC has one
+
+
+def decoupling_caps(spec: CircuitSpec) -> list[Decoupling]:
+    """Each decoupling capacitor and the IC supply pin it belongs next to.
+
+    The rule is tscircuit's (``rfcs/2026-07-31-automatic-decoupling-capacitor-
+    detection-and-enforcement.md``): a capacitor joined between an IC's power
+    pin and ground is a decoupling cap, and it belongs close to *that pin*.
+    The placer only sees nets, and a rail is one down-weighted bounding box
+    over every pad on it -- the cap can sit anywhere inside the box at no cost,
+    which is how C1 on the ESP32 demo board ended up across the board from the
+    module's 3V3 pin. So each detected cap gets its own two-terminal net to
+    the pin.
+
+    Only ``kind == "ic"`` devices count (a connector's VBUS pin is a source,
+    not a load), and when one rail feeds several IC pins the caps are dealt
+    out in turn so each pin gets its share rather than all of them crowding
+    the first.
+    """
+    from .netlist import PassiveType
+    from .schematic import net_class
+
+    devices = {d.name: d for d in spec.devices}
+    caps = {p.name for p in spec.passives if p.type is PassiveType.CAPACITOR}
+    net_of: dict[str, str] = {}
+    for conn in spec.connections:
+        for endpoint in conn.endpoints:
+            net_of[endpoint] = conn.net
+
+    def ic_pins(net: str) -> list[str]:
+        conn = next(c for c in spec.connections if c.net == net)
+        out = []
+        for endpoint in conn.endpoints:
+            part, _, _ = endpoint.rpartition(".")
+            device = devices.get(part)
+            if device is not None and device.kind == "ic":
+                out.append(endpoint)
+        return out
+
+    served: dict[str, int] = {}
+    found: list[Decoupling] = []
+    for cap in sorted(caps):
+        legs = [(f"{cap}.{n}", net_of.get(f"{cap}.{n}")) for n in ("1", "2")]
+        classes = [net_class(net) if net else None for _, net in legs]
+        if sorted(map(str, classes)) != ["ground", "rail"]:
+            continue
+        rail_leg, rail = legs[classes.index("rail")]
+        ground_leg, ground = legs[classes.index("ground")]
+        pins = ic_pins(rail)
+        if not pins:
+            continue
+        pin = min(pins, key=lambda e: (served.get(e, 0), pins.index(e)))
+        served[pin] = served.get(pin, 0) + 1
+        part = pin.rpartition(".")[0]
+        ground_pin = next(
+            (e for e in ic_pins(ground) if e.rpartition(".")[0] == part), None
+        )
+        found.append(Decoupling(cap, rail_leg, ground_leg, pin, ground_pin))
+    return found
+
+
 def solver_pad_offset(fp, pad, reserve) -> tuple[int, int]:
     """A pad as an offset from the bottom-left of the box the solver places.
 
@@ -677,6 +1109,33 @@ def solver_pad_offset(fp, pad, reserve) -> tuple[int, int]:
     ox = (pad.x_nm if pad else 0) + fp.courtyard_w_nm + reserve.side
     oy = (fp.courtyard_h_nm - (pad.y_nm if pad else 0)) + reserve.bottom
     return ox, oy
+
+
+#: Parts that only work at a board edge, and the side they must face with the
+#: footprint unrotated, in the solver's Y-up frame.
+#:
+#: Connectors a cable plugs into from outside the board face their mouth. Both
+#: patterns open toward KiCad +Y -- the USB-C receptacles' pads sit on the
+#: -Y row and the shell runs to +Y (``footprints._USB_C16_PADS_MM``); the
+#: barrel jack's pins are at the rear and its barrel at +Y
+#: (``footprints._BARREL_PADS_MM``) -- and KiCad +Y is the solver's bottom
+#: edge, which the enclosure calls the front. The 2026-09-14 demo board put
+#: its USB-C receptacle in the middle of the board, mouth facing a resistor:
+#: no plug could ever go in, and neither DRC nor parity can see that.
+#:
+#: A module with a PCB antenna faces its antenna. Espressif's ESP32 hardware
+#: design guidelines put the WROOM antenna at the board edge with no copper
+#: beneath it; the footprint's own docstring (``footprints.esp32_wroom_32e``)
+#: notes the antenna is its y < 0 end -- KiCad -Y, the solver's top -- and
+#: that nothing enforced it. On the demo board the module sat mid-board with
+#: traces around its antenna. (The copper keep-out under the antenna is still
+#: not enforced; the edge is.)
+EDGE_FACING: dict[str, str] = {
+    "USB_C_Receptacle_Power": "bottom",
+    "USB_C_Receptacle_USB2.0_16P": "bottom",
+    "Barrel_Jack_5.5x2.1mm": "bottom",
+    "ESP32-WROOM-32E": "top",
+}
 
 
 def build_board(
@@ -731,12 +1190,23 @@ def build_board(
             pin_nets,
             kind=device.kind,
             package=device.package,
+            symbol=device.symbol,
         )
         pad_problems = _pad_errors(device, fp)
         if pad_problems:
             raise UnsupportedPackage(" ".join(pad_problems))
         ref = ref_of[device.name]
-        placed.append(PlacedPart(ref=ref, footprint=fp, value=device.name))
+        pads = {pad.number for pad in fp.pads}
+        no_connects = {
+            str(number): kicad_unconnected_net(ref, name, str(number))
+            for name, number in _schematic_pins(device)
+            if str(number) not in pin_nets and str(number) in pads
+        }
+        placed.append(
+            PlacedPart(
+                ref=ref, footprint=fp, value=device.name, no_connects=no_connects
+            )
+        )
         spacing_of[ref] = IC_SPACING_NM
 
     for passive in spec.passives:
@@ -771,6 +1241,9 @@ def build_board(
             ),
             ref=p.ref,
             must_be_on_edge=p.ref in (edge_refs or set()),
+            edge_side=(
+                EDGE_FACING.get(p.footprint.name) or _library_edge_side(p.footprint)
+            ),
             allow_rotation=p.ref in (rotatable_refs or set()),
             layer=Layer.EITHER if two_sided and p.ref.startswith(("C", "R"))
             else Layer.TOP,
@@ -779,30 +1252,33 @@ def build_board(
     ]
     index_of = {p.ref: i for i, p in enumerate(placed)}
 
+    def terminal(endpoint: str) -> tuple[int, tuple[int, int]] | None:
+        part_name, _, pin = endpoint.rpartition(".")
+        ref = ref_of.get(part_name)
+        if ref is None:
+            return None
+        idx = index_of[ref]
+        fp = placed[idx].footprint
+        number = pin
+        device = next((d for d in spec.devices if d.name == part_name), None)
+        if device is not None:
+            number = str(device.pins.get(pin, pin))
+        pad = fp.pad_by_number(number)
+        # Offsets are measured from the bottom-left corner of the box the
+        # solver places, which is the courtyard's corner pushed out by the
+        # reservation on that side.
+        return idx, solver_pad_offset(fp, pad, reserve_of[ref])
+
     pack_nets: list[PackNet] = []
     for conn in spec.connections:
         terminals: list[tuple[int, tuple[int, int]]] = []
         seen: set[int] = set()
         for endpoint in conn.endpoints:
-            part_name, _, pin = endpoint.rpartition(".")
-            ref = ref_of.get(part_name)
-            if ref is None:
+            term = terminal(endpoint)
+            if term is None or term[0] in seen:
                 continue
-            idx = index_of[ref]
-            if idx in seen:
-                continue
-            seen.add(idx)
-            fp = placed[idx].footprint
-            number = pin
-            device = next((d for d in spec.devices if d.name == part_name), None)
-            if device is not None:
-                number = str(device.pins.get(pin, pin))
-            pad = fp.pad_by_number(number)
-            # Offsets are measured from the bottom-left corner of the box the
-            # solver places, which is the courtyard's corner pushed out by
-            # the reservation on that side.
-            reserve = reserve_of[ref]
-            terminals.append((idx, solver_pad_offset(fp, pad, reserve)))
+            seen.add(term[0])
+            terminals.append(term)
         if len(terminals) >= 2:
             pack_nets.append(
                 PackNet(
@@ -810,6 +1286,21 @@ def build_board(
                     name=conn.net,
                     weight=0.25 if _is_power(conn.net) else 1.0,
                 )
+            )
+    # A rail's bounding box lets its decoupling caps sit anywhere inside it
+    # for free; a pin-to-cap pair makes distance from the pin cost something.
+    for dec in decoupling_caps(spec):
+        pairs = [(dec.rail_endpoint, dec.pin_endpoint, DECOUPLING_WEIGHT)]
+        if dec.ground_pin_endpoint is not None:
+            pairs.append(
+                (dec.ground_endpoint, dec.ground_pin_endpoint, DECOUPLING_GROUND_WEIGHT)
+            )
+        for a, b, weight in pairs:
+            ta, tb = terminal(a), terminal(b)
+            if ta is None or tb is None or ta[0] == tb[0]:
+                continue
+            pack_nets.append(
+                PackNet(terminals=(ta, tb), name=f"decouple:{a}", weight=weight)
             )
 
     result = pack(
@@ -835,6 +1326,13 @@ def build_board(
                 part.y_nm = placement.y_nm + reserve.bottom
             part.rotated = placement.rotated
             part.layer = placement.layer
+            # Not flushed to the outline yet (_flush_to_edge): measured
+            # 2026-09-14, a flush USB-C receptacle made the default case fail
+            # `headroom` (the lid lip lands over the connector) and skewed the
+            # enclosure's hole mapping (the keep-out overhangs the outline).
+            # Flush has to land together with enclosure support for it.
+
+    from .signals import diff_pairs
 
     return BoardResult(
         parts=placed,
@@ -844,7 +1342,85 @@ def build_board(
         solver_status=result.status.value,
         wirelength_nm=result.wirelength_nm,
         warnings=list(result.warnings),
+        priority_nets=[
+            n for pair in diff_pairs(spec) for n in (pair.positive, pair.negative)
+        ],
     )
+
+
+#: How far silkscreen stops short of an edge-facing part's mating side, in nm.
+EDGE_SILK_GAP_NM = mm(0.5)
+
+
+def part_silk_segments(part: PlacedPart) -> list[tuple[int, int, int, int]]:
+    """The part's body outline strokes, minus its mating edge when flush.
+
+    An edge-facing part (:data:`EDGE_FACING`) now meets the board outline with
+    its body, so the outline's stroke on that side would lie on -- or past --
+    the board edge: KiCad reports "Silkscreen clipped by board edge". KiCad's
+    own USB-C receptacle footprints draw no silkscreen across the mouth, so
+    that edge is dropped and the two side strokes end ``EDGE_SILK_GAP_NM``
+    short of it. Footprint-local and KiCad Y-down, like
+    :func:`footprints.silk_segments`; both emitters (this module's
+    ``.kicad_pcb`` and ``fab.py``'s legend Gerber) draw what this returns.
+    """
+    segments = silk_segments(part.footprint)
+    side = EDGE_FACING.get(part.footprint.name)
+    if side is None or part.rotated:
+        return segments
+    fp = part.footprint
+    # Solver side -> the local axis and sign of the mating edge (Y-down).
+    axis, edge = {
+        "bottom": ("y", fp.body_h_nm),
+        "top": ("y", -fp.body_h_nm),
+        "left": ("x", -fp.body_w_nm),
+        "right": ("x", fp.body_w_nm),
+    }[side]
+    limit = abs(edge) - EDGE_SILK_GAP_NM
+    out = []
+    for x0, y0, x1, y1 in segments:
+        a0, a1 = (y0, y1) if axis == "y" else (x0, x1)
+        if a0 == a1 == edge:
+            continue  # the stroke along the mating edge itself
+        if a0 != a1:  # a side stroke running towards the edge: stop short
+            sign = 1 if edge > 0 else -1
+            a0 = sign * min(sign * a0, limit)
+            a1 = sign * min(sign * a1, limit)
+            if a0 == a1:
+                continue
+            if axis == "y":
+                y0, y1 = a0, a1
+            else:
+                x0, x1 = a0, a1
+        out.append((x0, y0, x1, y1))
+    return out
+
+
+def _flush_to_edge(part: PlacedPart, side: str, width: int, height: int) -> None:
+    """Move an edge-facing part outward until its *body* meets the outline.
+
+    The placer puts the part's reserved box against the packing rectangle, but
+    the outline is ``DEFAULT_BOARD_MARGIN_NM`` further out, the reserve adds
+    room on that side, and the courtyard itself runs past the body (a USB-C
+    receptacle's courtyard is 1.08 mm beyond its shell). Together that left
+    about 3 mm of board in front of the receptacle's mouth -- enough for a
+    plug's overmold, which sits below the top of the board, to hit the lip.
+    Only the edge-facing part enters the margin, and only outward: nothing
+    else was placed there, so nothing can collide. Measured from the body
+    (``Footprint.body_*``), which is where the mating face is.
+    """
+    fp = part.footprint
+    m = DEFAULT_BOARD_MARGIN_NM
+    ch, bh = fp.courtyard_h_nm, fp.body_h_nm
+    cw, bw = fp.courtyard_w_nm, fp.body_w_nm
+    if side == "bottom":
+        part.y_nm = min(part.y_nm, -m - (ch - bh))
+    elif side == "top":
+        part.y_nm = max(part.y_nm, height + m - ch - bh)
+    elif side == "left":
+        part.x_nm = min(part.x_nm, -m - (cw - bw))
+    elif side == "right":
+        part.x_nm = max(part.x_nm, width + m - cw - bw)
 
 
 def placed_half_extents(part: PlacedPart) -> tuple[int, int]:
@@ -887,6 +1463,51 @@ def rotate_offset(x_nm: int, y_nm: int, *, rotated: bool) -> tuple[int, int]:
     if not rotated:
         return x_nm, y_nm
     return y_nm, -x_nm
+
+
+#: Copper keep-outs a footprint needs beyond its pads, footprint-local and in
+#: the pads' frame (anchor-centred, KiCad Y-down): ``(centre x, centre y,
+#: width, height)`` in nm. The ESP32-WROOM-32E antenna is the module's y < 0
+#: end (``footprints.esp32_wroom_32e``): the whole 18 mm width, from the body's
+#: top edge (y -12.75) down to just above the first castellated pad (pin 1 at
+#: y -5.26, 0.9 mm tall). Espressif's hardware design guidelines want no
+#: copper under the antenna on any layer.
+ANTENNA_KEEPOUTS_NM: dict[str, tuple[int, int, int, int]] = {
+    "ESP32-WROOM-32E": (0, -mm(9.35), mm(18.0), mm(6.8)),
+}
+
+
+def board_keepouts(board: BoardResult) -> list[RoutePad]:
+    """Copper-free regions as netless through-hole obstacles for the router.
+
+    A netless pad is an obstacle and nothing else to :func:`routing.route`, and
+    a through-hole one is reserved on every copper layer with no via allowed in
+    it -- exactly the antenna rule. Kept apart from :func:`board_pads`, which
+    lists real pads that other code measures one by one.
+    """
+    keepouts: list[RoutePad] = []
+    for part in board.parts:
+        box = ANTENNA_KEEPOUTS_NM.get(part.footprint.name)
+        if box is None:
+            continue
+        cx, cy, w, h = box
+        anchor_x, anchor_y = part_anchor(part)
+        ox, oy = rotate_offset(cx, cy, rotated=part.rotated)
+        w, h = (h, w) if part.rotated else (w, h)
+        keepouts.append(
+            RoutePad(
+                net="",
+                x_nm=anchor_x + ox,
+                y_nm=anchor_y - oy,
+                w_nm=w,
+                h_nm=h,
+                layer=part.layer,
+                through_hole=True,
+                ref=part.ref,
+                number="antenna keep-out",
+            )
+        )
+    return keepouts
 
 
 def board_pads(board: BoardResult) -> list[RoutePad]:
@@ -939,9 +1560,18 @@ def route_board(
     *,
     margin_nm: int = DEFAULT_BOARD_MARGIN_NM,
     two_layer: bool = True,
+    ground_fill: bool = True,
     **kwargs,
 ) -> RouteResult:
     """Route ``board`` in place, filling its tracks, vias and unrouted nets.
+
+    ``ground_fill`` (the default) gives every ground-class net a copper pour
+    on both layers instead of tracks -- what nearly every two-layer board
+    does, and what the 2026-09-15 ESP32 demo showed the maze router cannot
+    do on its own (GND ran out of search budget behind 36 signal nets). The
+    pour is drawn by :func:`emit_kicad_pcb` and filled by KiCad
+    (:func:`write_board`); the router treats those nets as done and lists
+    them in ``RouteResult.filled``.
 
     Placement and routing are separate calls, not one, so the placed board can
     be written out and inspected before any copper exists. That is the step the
@@ -954,21 +1584,571 @@ def route_board(
     definition of where a part sits, and the emitter and this function both
     read it.
     """
-    result = route(
-        board_pads(board),
-        min_x_nm=-margin_nm,
-        min_y_nm=-margin_nm,
-        max_x_nm=board.width_nm + margin_nm,
-        max_y_nm=board.height_nm + margin_nm,
-        two_layer=two_layer,
-        **kwargs,
+    ground = (
+        [n for n in dict.fromkeys(board.nets) if n and _is_ground(n)]
+        if ground_fill
+        else []
     )
-    board.tracks = list(result.tracks)
-    board.vias = list(result.vias)
+    obstacles = board_pads(board) + board_keepouts(board)
+    # Fan the ground pads out to vias *before* any signal is routed, and hand
+    # the fan-outs to the router as copper it must keep clear of. That is
+    # FreeRouting's order (``AutorouteBatchLoop.java`` calls
+    # ``BatchFanout.fanoutBoard`` before the routing passes, 60336be; GPL,
+    # read for the design only): fanned out after routing, a ground pad the
+    # signals had boxed in had nowhere left to put its via (measured
+    # 2026-09-16, two isolated pour islands on the ESP32 eval board).
+    fanout_vias: list[Via] = []
+    fanout_tracks: list[Track] = []
+    if ground:
+        fanout_vias, fanout_tracks = plan_fanout(board, ground[0], obstacles)
+    nets = board.priority_nets
+    pairs = list(zip(nets[0::2], nets[1::2], strict=False))
+
+    bounds = {
+        "min_x_nm": -margin_nm,
+        "min_y_nm": -margin_nm,
+        "max_x_nm": board.width_nm + margin_nm,
+        "max_y_nm": board.height_nm + margin_nm,
+    }
+
+    def attempt(flip: bool) -> tuple[RouteResult, list[Track], list[CoupledRoute]]:
+        joins, seen_by_router = plan_pair_joins(obstacles, pairs, flip=flip)
+        # Each pair is laid as one coupled route before any other signal:
+        # constant gap from breakout to breakout, the way a layout engineer
+        # routes USB, and its copper is fixed for everything after it.
+        coupled, seen_by_router, notes = plan_coupled_pairs(
+            seen_by_router, pairs,
+            tracks=fanout_tracks + joins, vias=fanout_vias, **bounds,
+        )
+        laid = [t for c in coupled for t in c.tracks]
+        done = [n for c in coupled for n in (c.positive, c.negative)]
+        # A live view hears the coupled copper first, as it was laid.
+        if kwargs.get("on_net") is not None:
+            for net in done:
+                kwargs["on_net"]("committed", net,
+                                 [t for t in laid if t.net == net], [])
+        result = route(
+            seen_by_router
+            + _as_obstacles(fanout_vias, fanout_tracks)
+            + _as_obstacles([], _off_pads(joins, obstacles), net="")
+            + _as_obstacles([], laid, net=""),
+            filled_nets=ground,
+            first_nets=[n for n in board.priority_nets if n not in done],
+            two_layer=two_layer,
+            **bounds,
+            **kwargs,
+        )
+        result.tracks = list(result.tracks) + laid
+        result.routed = done + [n for n in result.routed if n not in done]
+        result.warnings.extend(notes)
+        return result, joins, coupled
+
+    result, joins, coupled = attempt(False)
+    if joins and (set(result.unrouted) & set(board.priority_nets)
+                  or len(coupled) * 2 < len(board.priority_nets)):
+        # The other side for each loop; keep whichever couples more pairs,
+        # then whichever leaves fewer nets.
+        flipped, flipped_joins, flipped_coupled = attempt(True)
+        if (len(flipped_coupled), -len(flipped.unrouted)) > (
+            len(coupled), -len(result.unrouted)
+        ):
+            result, joins, coupled = flipped, flipped_joins, flipped_coupled
+    board.coupled_pairs = [c.as_dict() for c in coupled]
+    board.tracks = list(result.tracks) + fanout_tracks + joins
+    board.vias = list(result.vias) + fanout_vias
     board.unrouted_nets = dict(result.unrouted)
     board.routed_nets = list(result.routed)
+    board.filled_nets = list(result.filled)
     board.warnings.extend(result.warnings)
+    if board.filled_nets:
+        stitch_filled_nets(board)
+        board.stitching_vias += len(fanout_vias)
     return result
+
+
+def plan_fanout(
+    board: BoardResult,
+    net: str,
+    obstacles: list[RoutePad],
+    *,
+    clearance_nm: int | None = None,
+    diameter_nm: int = DEFAULT_VIA_DIAMETER_NM,
+    drill_nm: int = DEFAULT_VIA_DRILL_NM,
+    track_width_nm: int = DEFAULT_TRACK_WIDTH_NM,
+) -> tuple[list[Via], list[Track]]:
+    """A via and a short straight track for every surface pad of ``net``.
+
+    Run before routing, so only pads, keep-outs and earlier fan-outs are in
+    the way. Orthogonal moves only: the router takes the result as
+    rectangular obstacles, and an axis-aligned track is exactly one
+    rectangle. A pad stacked on another of the same net (a USB-C GND pair
+    shares one land) fans out once.
+    """
+    clearance = STITCH_CLEARANCE_NM if clearance_nm is None else clearance_nm
+    radius = diameter_nm / 2
+    edge = DEFAULT_EDGE_CLEARANCE_NM + radius
+    probe = replace(board, tracks=[], vias=[])
+    vias: list[Via] = []
+    tracks: list[Track] = []
+    seen: set[tuple[int, int]] = set()
+    for pad in obstacles:
+        if pad.net != net or pad.through_hole or (pad.x_nm, pad.y_nm) in seen:
+            continue
+        seen.add((pad.x_nm, pad.y_nm))
+        spot = _fanout_spot(probe, obstacles, vias, tracks, pad, radius, clearance,
+                            edge, track_width_nm, directions=_FANOUT_DIRECTIONS[:4])
+        if spot is None:
+            continue
+        vx, vy = spot
+        vias.append(Via(vx, vy, net, diameter_nm, drill_nm))
+        tracks.append(Track(pad.x_nm, pad.y_nm, vx, vy, pad.layer, net, track_width_nm))
+    return vias, tracks
+
+
+def plan_pair_joins(
+    pads: list[RoutePad],
+    pairs: list[tuple[str, str]],
+    *,
+    flip: bool = False,
+    clearance_nm: int | None = None,
+    track_width_nm: int = DEFAULT_TRACK_WIDTH_NM,
+) -> tuple[list[Track], list[RoutePad]]:
+    """Join a reversible connector's duplicated pair pins at the connector.
+
+    A USB-C receptacle carries D+ and D- twice, interleaved in one row
+    (``B7 A6 A7 B6``: D-, D+, D-, D+), and the two copies of each must be
+    tied together. Left to the router, the first leg routed took the only
+    channel through the row and the other could never reach its pins
+    (measured 2026-09-16 on the ESP32 eval board, whichever leg went first).
+    Layouts do it the same way every time: one net loops round the pin
+    ends on one side of the row, the other net on the opposite side. This
+    draws those two loops before routing; the router then connects each net
+    once, from the copy whose open side the other loop leaves free, and
+    sees the other copy and both loops as obstacles.
+
+    Returns the loop tracks (full copper, pad centre to pad centre) and the
+    pad list the router should use. A pair whose pins are not two-and-two in
+    one interleaved row, or whose loop would pass too close to another pad,
+    is left to the router untouched. ``flip`` swaps which net takes which
+    side.
+    """
+    clearance = STITCH_CLEARANCE_NM if clearance_nm is None else clearance_nm
+    tracks: list[Track] = []
+    hidden: set[int] = set()
+    by_ref: dict[str, list[RoutePad]] = {}
+    for pad in pads:
+        if pad.ref and not pad.through_hole:
+            by_ref.setdefault(pad.ref, []).append(pad)
+    for pos_net, neg_net in pairs:
+        for members in by_ref.values():
+            legs = {}
+            for net in (pos_net, neg_net):
+                spots = {}
+                for pad in members:
+                    if pad.net == net:
+                        spots.setdefault((pad.x_nm, pad.y_nm), pad)
+                legs[net] = sorted(spots.values(), key=lambda p: p.x_nm)
+            row = legs[pos_net] + legs[neg_net]
+            if len(legs[pos_net]) != 2 or len(legs[neg_net]) != 2:
+                continue
+            if len({(p.y_nm, p.h_nm) for p in row}) != 1:
+                continue
+            xs = sorted(row, key=lambda p: p.x_nm)
+            if [p.net for p in xs][0::2] != [xs[0].net] * 2:
+                continue  # not interleaved: the router needs no help
+            up, down = (neg_net, pos_net) if not flip else (pos_net, neg_net)
+            plan = _pair_loops(members, legs[up], legs[down], clearance, track_width_nm)
+            if plan is None:
+                continue
+            loop_tracks, hide = plan
+            tracks.extend(loop_tracks)
+            hidden.update(id(p) for p in hide)
+    seen = [replace(p, net="") if id(p) in hidden else p for p in pads]
+    return tracks, seen
+
+
+def _pair_loops(
+    members: list[RoutePad],
+    up_pads: list[RoutePad],
+    down_pads: list[RoutePad],
+    clearance_nm: int,
+    track_width_nm: int,
+) -> tuple[list[Track], list[RoutePad]] | None:
+    y, half = up_pads[0].y_nm, up_pads[0].h_nm // 2
+    reach = half + clearance_nm + track_width_nm // 2
+    up_y, down_y = y + reach, y - reach
+    ends = {id(p) for p in (*up_pads, *down_pads)}
+    need = clearance_nm + track_width_nm / 2
+    loops: list[Track] = []
+    for pads, loop_y in ((up_pads, up_y), (down_pads, down_y)):
+        a, b = pads
+        layer = a.layer
+        net = a.net
+        for x in range(a.x_nm, b.x_nm + 1, mm(0.05)):
+            for other in members:
+                if id(other) in ends or other.net == net:
+                    continue
+                if _box_gap_nm(x, loop_y, other) < need:
+                    return None
+        loops += [
+            Track(a.x_nm, y, a.x_nm, loop_y, layer, net, track_width_nm),
+            Track(a.x_nm, loop_y, b.x_nm, loop_y, layer, net, track_width_nm),
+            Track(b.x_nm, loop_y, b.x_nm, y, layer, net, track_width_nm),
+        ]
+    # Each net keeps, as its one terminal, the copy the other loop does not
+    # cover; the other copy is already joined and becomes an obstacle.
+    up_span = (up_pads[0].x_nm, up_pads[1].x_nm)
+    down_span = (down_pads[0].x_nm, down_pads[1].x_nm)
+    up_open = [p for p in up_pads if not down_span[0] <= p.x_nm <= down_span[1]]
+    down_open = [p for p in down_pads if not up_span[0] <= p.x_nm <= up_span[1]]
+    if not up_open or not down_open:
+        return None
+    hide = [p for p in up_pads if p is not up_open[0]]
+    hide += [p for p in down_pads if p is not down_open[0]]
+    # The pads that share a land with a hidden copy are hidden with it.
+    spots = {(p.x_nm, p.y_nm) for p in hide}
+    hide += [p for p in members if (p.x_nm, p.y_nm) in spots and p not in hide
+             and p.net in (up_pads[0].net, down_pads[0].net)]
+    return loops, hide
+
+
+def _off_pads(tracks: list[Track], pads: list[RoutePad]) -> list[Track]:
+    """``tracks`` with every end that sits on a pad pulled back to the pad's edge.
+
+    What the router must avoid is the copper *outside* the pad: modelled from
+    the pad centre, a join's leg covered the very pad the router was meant to
+    start from, and the pad could not reach the lattice at all.
+    """
+    out: list[Track] = []
+    for t in tracks:
+        sx, sy, ex, ey = t.start_x_nm, t.start_y_nm, t.end_x_nm, t.end_y_nm
+        for pad in pads:
+            if pad.net != t.net:
+                continue
+            half = pad.h_nm // 2
+            if (sx, sy) == (pad.x_nm, pad.y_nm) and sx == ex:
+                sy += half if ey > sy else -half
+            if (ex, ey) == (pad.x_nm, pad.y_nm) and sx == ex:
+                ey += half if sy > ey else -half
+        if (sx, sy) != (ex, ey):
+            out.append(
+                replace(t, start_x_nm=sx, start_y_nm=sy, end_x_nm=ex, end_y_nm=ey)
+            )
+    return out
+
+
+def plan_coupled_pairs(
+    pads: list[RoutePad],
+    pairs: list[tuple[str, str]],
+    *,
+    tracks: list[Track],
+    vias: list[Via],
+    **bounds: int,
+) -> tuple[list[CoupledRoute], list[RoutePad], list[str]]:
+    """Route every pair whose nets each have two terminals as a coupled pair.
+
+    Returns the routes, the pad list with each coupled pair's terminals made
+    plain obstacles (the router must not route those nets again), and one
+    note per pair that could not be coupled, saying why -- such a pair falls
+    back to the ordinary router, routed first but not coupled.
+    """
+    routes: list[CoupledRoute] = []
+    notes: list[str] = []
+    hidden: set[int] = set()
+    laid: list[Track] = list(tracks)
+    for pos_net, neg_net in pairs:
+        ends = {}
+        for net in (pos_net, neg_net):
+            spots: dict[tuple[int, int], RoutePad] = {}
+            for pad in pads:
+                if pad.net == net:
+                    spots.setdefault((pad.x_nm, pad.y_nm), pad)
+            ends[net] = list(spots.values())
+        p, n = ends[pos_net], ends[neg_net]
+        if len(p) != 2 or len(n) != 2:
+            notes.append(
+                f"{pos_net}/{neg_net} not routed as a coupled pair: each net needs "
+                f"exactly two terminals, found {len(p)} and {len(n)}"
+            )
+            continue
+        # Match the ends by part: P's first terminal sits on the same part as
+        # N's first, so the pair leaves one part together and arrives at the
+        # other together.
+        if p[0].ref != n[0].ref:
+            n = n[::-1]
+        if p[0].ref != n[0].ref or p[1].ref != n[1].ref:
+            notes.append(
+                f"{pos_net}/{neg_net} not routed as a coupled pair: its two nets "
+                "do not run between the same two parts"
+            )
+            continue
+        found = route_pair(
+            (p[0], p[1]), (n[0], n[1]),
+            pads=[x for x in pads if id(x) not in hidden],
+            tracks=laid, vias=vias, **bounds,
+        )
+        if isinstance(found, PairFailure):
+            notes.append(
+                f"{pos_net}/{neg_net} not routed as a coupled pair: {found.reason}"
+            )
+            continue
+        routes.append(found)
+        laid.extend(found.tracks)
+        hidden.update(id(x) for x in pads if x.net in (pos_net, neg_net))
+    seen = [replace(x, net="") if id(x) in hidden else x for x in pads]
+    return routes, seen, notes
+
+
+#: Step between the square obstacles a diagonal track is modelled by.
+_DIAGONAL_SAMPLE_NM = mm(0.05)
+
+
+def _as_obstacles(
+    vias: list[Via], tracks: list[Track], *, net: str | None = None
+) -> list[RoutePad]:
+    """Pre-planned copper as the rectangles the router already knows how to
+    avoid. ``net`` overrides each item's own net (``""``: a plain obstacle).
+
+    An axis-aligned track is exactly one rectangle. A diagonal one is a row
+    of track-width squares along its centreline: its bounding box would
+    fence off a whole triangle of free board.
+    """
+    out = [
+        RoutePad(net=v.net if net is None else net, x_nm=v.x_nm, y_nm=v.y_nm,
+                 w_nm=v.diameter_nm, h_nm=v.diameter_nm, through_hole=True,
+                 ref="fanout")
+        for v in vias
+    ]
+    for t in tracks:
+        if t.start_x_nm != t.end_x_nm and t.start_y_nm != t.end_y_nm:
+            steps = max(1, math.ceil(t.length_nm / _DIAGONAL_SAMPLE_NM))
+            for k in range(steps + 1):
+                out.append(
+                    RoutePad(
+                        net=t.net if net is None else net,
+                        x_nm=t.start_x_nm + (t.end_x_nm - t.start_x_nm) * k // steps,
+                        y_nm=t.start_y_nm + (t.end_y_nm - t.start_y_nm) * k // steps,
+                        w_nm=t.width_nm,
+                        h_nm=t.width_nm,
+                        layer=t.layer,
+                        ref="fanout",
+                    )
+                )
+            continue
+        out.append(
+            RoutePad(
+                net=t.net if net is None else net,
+                x_nm=(t.start_x_nm + t.end_x_nm) // 2,
+                y_nm=(t.start_y_nm + t.end_y_nm) // 2,
+                w_nm=abs(t.end_x_nm - t.start_x_nm) + t.width_nm,
+                h_nm=abs(t.end_y_nm - t.start_y_nm) + t.width_nm,
+                layer=t.layer,
+                ref="fanout",
+            )
+        )
+    return out
+
+
+#: Pitch of the ground stitching grid. 2.54 mm is the default of the most
+#: used KiCad stitching plugin (jsreynaud/kicad-action-scripts
+#: ``ViaStitching/FillArea.py`` ``SetStepMM(2.54)`` at 5743b9f; GPL, read for
+#: the design only). Dense enough that a pour island on one layer almost
+#: always sits over a via to the other layer's pour.
+STITCH_PITCH_NM = mm(2.54)
+
+#: Copper-to-copper spacing a stitching via keeps from anything that is not
+#: its own pour: the pour's own clearance (``connect_pads (clearance 0.3)``
+#: in :func:`emit_kicad_pcb`), which is the larger of it and the router's.
+STITCH_CLEARANCE_NM = mm(0.3)
+
+
+#: Where a fan-out via is tried around a pad, in order: the four sides,
+#: then the four corners.
+_FANOUT_DIRECTIONS: tuple[tuple[float, float], ...] = (
+    (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, 1), (1, -1), (-1, -1),
+)
+
+
+def _box_gap_nm(px: int, py: int, pad: RoutePad) -> float:
+    """Distance from a point to a pad's rectangle (0 inside it)."""
+    dx = max(abs(px - pad.x_nm) - pad.w_nm / 2, 0)
+    dy = max(abs(py - pad.y_nm) - pad.h_nm / 2, 0)
+    return (dx * dx + dy * dy) ** 0.5
+
+
+def _segment_gap_nm(px: int, py: int, t: Track) -> float:
+    """Distance from a point to a track's centreline."""
+    ax, ay, bx, by = t.start_x_nm, t.start_y_nm, t.end_x_nm, t.end_y_nm
+    vx, vy = bx - ax, by - ay
+    span = vx * vx + vy * vy
+    along = ((px - ax) * vx + (py - ay) * vy) / span if span else 0.0
+    u = max(0.0, min(1.0, along))
+    cx, cy = ax + u * vx, ay + u * vy
+    return ((px - cx) ** 2 + (py - cy) ** 2) ** 0.5
+
+
+def stitch_filled_nets(
+    board: BoardResult,
+    *,
+    pitch_nm: int = STITCH_PITCH_NM,
+    clearance_nm: int = STITCH_CLEARANCE_NM,
+    diameter_nm: int = DEFAULT_VIA_DIAMETER_NM,
+    drill_nm: int = DEFAULT_VIA_DRILL_NM,
+    track_width_nm: int = DEFAULT_TRACK_WIDTH_NM,
+) -> int:
+    """Drop a grid of through vias on the first filled net, tying its two pours.
+
+    A two-layer ground pour is only one net if the two layers meet: signal
+    copper splits the top pour into islands, and KiCad reports each island
+    as unconnected (measured 2026-09-16 on the ESP32 eval board: three
+    ``GND_F`` islands). Stitching vias are how two-layer boards join them --
+    the grid-and-clearance design of ViaStitching's ``FillArea.py``: a via
+    on every grid point whose copper keeps ``clearance_nm`` from every pad,
+    track, other via and the board edge. Runs after routing, so it never
+    takes a channel a signal wanted. Returns how many vias it added and
+    records the count on ``board.stitching_vias``.
+    """
+    if not board.filled_nets:
+        return 0
+    net = board.filled_nets[0]
+    radius = diameter_nm / 2
+    edge = DEFAULT_EDGE_CLEARANCE_NM + radius
+    obstacles = board_pads(board) + board_keepouts(board)
+    added: list[Via] = []
+    fanout: list[Track] = []
+    # First, a fan-out at every surface pad of the net: a short track from
+    # the pad to a via just outside it. A pad whose pour island is cut off by
+    # signal copper (the 2026-09-16 ESP32 board had two such slivers, around
+    # the USB-C shield pins and a decoupling cap) then still reaches the
+    # other layer's pour through its own copper, not through the island.
+    # Candidates ring the pad at growing distances, sides before corners,
+    # and the first whose via and track are both clear wins.
+    fanned = {(t.start_x_nm, t.start_y_nm) for t in board.tracks if t.net == net}
+    for pad in obstacles:
+        if pad.net != net or pad.through_hole or (pad.x_nm, pad.y_nm) in fanned:
+            continue
+        fanned.add((pad.x_nm, pad.y_nm))
+        spot = _fanout_spot(board, obstacles, added, fanout, pad, radius,
+                            clearance_nm, edge, track_width_nm)
+        if spot is None:
+            continue
+        vx, vy = spot
+        added.append(Via(vx, vy, net, diameter_nm, drill_nm))
+        fanout.append(Track(pad.x_nm, pad.y_nm, vx, vy, pad.layer, net, track_width_nm))
+    board.tracks.extend(fanout)
+    y = pitch_nm // 2
+    while y <= board.height_nm - edge:
+        x = pitch_nm // 2
+        while x <= board.width_nm - edge:
+            if x >= edge and y >= edge and _stitch_clear(
+                board, obstacles, added, x, y, radius, clearance_nm
+            ):
+                added.append(Via(x, y, net, diameter_nm, drill_nm))
+            x += pitch_nm
+        y += pitch_nm
+    board.vias.extend(added)
+    board.stitching_vias = len(added)
+    return len(added)
+
+
+#: How far out, in multiples of the tightest ring, a fan-out via is tried.
+_FANOUT_RINGS: tuple[float, ...] = (1.0, 1.5, 2.0, 3.0)
+
+
+def _fanout_spot(
+    board: BoardResult,
+    pads: list[RoutePad],
+    added: list[Via],
+    fanout: list[Track],
+    pad: RoutePad,
+    radius: float,
+    clearance_nm: int,
+    edge: float,
+    track_width_nm: int,
+    directions: tuple[tuple[float, float], ...] = _FANOUT_DIRECTIONS,
+) -> tuple[int, int] | None:
+    base_x = pad.w_nm / 2 + clearance_nm + radius
+    base_y = pad.h_nm / 2 + clearance_nm + radius
+    for ring in _FANOUT_RINGS:
+        for dx, dy in directions:
+            vx = round(pad.x_nm + dx * base_x * ring)
+            vy = round(pad.y_nm + dy * base_y * ring)
+            if not (edge <= vx <= board.width_nm - edge
+                    and edge <= vy <= board.height_nm - edge):
+                continue
+            if not _stitch_clear(board, pads, added, vx, vy, radius, clearance_nm,
+                                 extra_tracks=fanout):
+                continue
+            if _fanout_track_clear(board, pads, added, fanout, pad, vx, vy,
+                                   track_width_nm, clearance_nm):
+                return vx, vy
+    return None
+
+
+def _fanout_track_clear(
+    board: BoardResult,
+    pads: list[RoutePad],
+    added: list[Via],
+    fanout: list[Track],
+    origin: RoutePad,
+    vx: int,
+    vy: int,
+    track_width_nm: int,
+    clearance_nm: int,
+) -> bool:
+    """The pad-to-via track keeps ``clearance_nm`` from foreign copper.
+
+    Checked by sampling the centreline every 0.1 mm against every pad but
+    its own (the track starts inside it), every track and every via but the
+    one it ends on; copper of the same net may touch, as KiCad allows.
+    """
+    need = track_width_nm / 2 + clearance_nm
+    length = ((vx - origin.x_nm) ** 2 + (vy - origin.y_nm) ** 2) ** 0.5
+    steps = max(1, int(length // mm(0.1)))
+    for k in range(steps + 1):
+        px = origin.x_nm + (vx - origin.x_nm) * k / steps
+        py = origin.y_nm + (vy - origin.y_nm) * k / steps
+        for p in pads:
+            if p is origin or p.net == origin.net:
+                continue
+            if _box_gap_nm(round(px), round(py), p) < need:
+                return False
+        for t in (*board.tracks, *fanout):
+            if t.net == origin.net:
+                continue
+            if _segment_gap_nm(round(px), round(py), t) < need + t.width_nm / 2:
+                return False
+        for v in (*board.vias, *added):
+            if v.net == origin.net:
+                continue
+            gap = ((px - v.x_nm) ** 2 + (py - v.y_nm) ** 2) ** 0.5
+            if gap < need + v.diameter_nm / 2:
+                return False
+    return True
+
+
+def _stitch_clear(
+    board: BoardResult,
+    pads: list[RoutePad],
+    added: list[Via],
+    x: int,
+    y: int,
+    radius: float,
+    clearance_nm: int,
+    extra_tracks: list[Track] = (),
+) -> bool:
+    need = radius + clearance_nm
+    for pad in pads:
+        # Even a pad of the stitched net: a via in a pad wicks solder away.
+        if _box_gap_nm(x, y, pad) < need:
+            return False
+    for t in (*board.tracks, *extra_tracks):
+        if _segment_gap_nm(x, y, t) < need + t.width_nm / 2:
+            return False
+    for v in (*board.vias, *added):
+        if ((x - v.x_nm) ** 2 + (y - v.y_nm) ** 2) ** 0.5 < need + v.diameter_nm / 2:
+            return False
+    return True
 
 
 def _uuid(seed: str) -> str:
@@ -989,6 +2169,11 @@ def emit_kicad_pcb(
     for name in dict.fromkeys(board.nets):
         if name and name not in net_names:
             net_names.append(name)
+    # No-connect pads last, so every real net keeps the index it always had.
+    for part in board.parts:
+        for name in part.no_connects.values():
+            if name not in net_names:
+                net_names.append(name)
     net_index = {name: i for i, name in enumerate(net_names)}
 
     out: list[str] = []
@@ -1033,6 +2218,13 @@ def emit_kicad_pcb(
         # the B layers; KiCad renders it mirrored from the same coordinates.
         bottom = part.layer is Layer.BOTTOM
         side = "B" if bottom else "F"
+        if fp.library is not None and not part.rotated and not bottom:
+            out.append(
+                _library_footprint_block(
+                    part, anchor_x, anchor_y, net_index, frozenset(board.filled_nets)
+                )
+            )
+            continue
         out.append(f'  (footprint "silkscreen:{fp.name}"')
         out.append(f'    (layer "{side}.Cu")')
         out.append(f'    (uuid "{_uuid(part.ref)}")')
@@ -1094,7 +2286,7 @@ def emit_kicad_pcb(
         # rectangle put ink on every pad the body edge touches (see
         # footprints.silk_segments), and ink on a pad is a solderability
         # defect a fab will clip or flag.
-        for i, (sx, sy, ex, ey) in enumerate(silk_segments(fp)):
+        for i, (sx, sy, ex, ey) in enumerate(part_silk_segments(part)):
             out.append(
                 f"    (fp_line (start {f(sx)} {f(sy)}) (end {f(ex)} {f(ey)})"
                 f' (stroke (width 0.12) (type solid)) (layer "{side}.SilkS")'
@@ -1123,8 +2315,9 @@ def emit_kicad_pcb(
             )
 
         for pad_index, pad in enumerate(fp.pads):
-            idx = net_index.get(pad.net, 0)
-            net_decl = f' (net {idx} "{pad.net}")' if idx else ""
+            pad_net = pad.net or part.no_connects.get(pad.number, "")
+            idx = net_index.get(pad_net, 0)
+            net_decl = f' (net {idx} "{pad_net}")' if idx else ""
             # Seeded by position, not number: a SOT-223 tab shares pin 2's
             # number, and two pads with one uuid is a file KiCad repairs
             # silently on load.
@@ -1147,12 +2340,19 @@ def emit_kicad_pcb(
                     f' (uuid "{uuid}"))'
                 )
             else:
+                # A surface pad on a poured net joins the pour solidly
+                # (KiCad's pad ``zone_connect`` 2). A thermal relief on a
+                # small SMD pad leaves one spoke where KiCad's DRC asks for
+                # two (``starved_thermal``, five of them on the 2026-09-16
+                # ESP32 eval board); reflow does not need the relief that
+                # hand-soldering a through-hole pin does, so holes keep it.
+                solid = " (zone_connect 2)" if pad_net in board.filled_nets else ""
                 out.append(
                     f'    (pad "{pad.number}" smd roundrect'
                     f" (at {f(pad.x_nm)} {f(pad.y_nm)})"
                     f" (size {f(pad.w_nm)} {f(pad.h_nm)})"
                     f' (layers "{side}.Cu" "{side}.Paste" "{side}.Mask")'
-                    f" (roundrect_rratio 0.25){net_decl}"
+                    f" (roundrect_rratio 0.25){net_decl}{solid}"
                     f' (uuid "{uuid}"))'
                 )
         out.append("  )")
@@ -1183,13 +2383,121 @@ def emit_kicad_pcb(
             f' (uuid "{_uuid(f"via{index}:{via.net}")}"))'
         )
 
+    # Copper pours for the filled nets: one zone per layer over the whole
+    # board, thermal reliefs to pads, KiCad's default 0.3 mm clearance and
+    # 0.25 mm minimum width. Unfilled here on purpose -- a fill polygon is
+    # KiCad's to compute (write_board asks kicad-cli to refill and save).
+    for net in board.filled_nets:
+        idx = net_index.get(net)
+        if not idx:
+            continue
+        pts = " ".join(f"(xy {f(x)} {f(y)})" for x, y in corners)
+        for layer in ("F.Cu", "B.Cu"):
+            out.append(
+                f'  (zone (net {idx}) (net_name "{net}") (layer "{layer}")'
+                f' (uuid "{_uuid(f"zone:{net}:{layer}")}") (name "{net}_{layer[0]}")'
+                f" (hatch edge 0.5) (connect_pads (clearance 0.3))"
+                f" (min_thickness 0.25) (filled_areas_thickness no)"
+                f" (fill yes (thermal_gap 0.5) (thermal_bridge_width 0.5))"
+                f" (polygon (pts {pts})))"
+            )
+
     out.append(")")
     return "\n".join(out) + "\n"
 
 
+def live_copper(board: BoardResult, tracks, vias) -> dict[str, list[dict[str, Any]]]:
+    """``tracks`` and ``vias`` as the KiCad file would carry them, for a
+    watcher drawing them into an open editor while the router runs.
+
+    Millimetres in KiCad's Y-down frame with the layer named the KiCad way --
+    the same numbers :func:`emit_kicad_pcb` writes, through the same flip,
+    which is the only place the router's Y-up frame crosses into KiCad's.
+    Sending a watcher solver-frame copper and letting it flip would be a
+    second flip, and two flips is how a mirrored board happens.
+    """
+
+    def f(nm: int) -> float:
+        return round(nm / NM_PER_MM, 6)
+
+    def flip_y(y_nm: int) -> int:
+        return board.height_nm - y_nm
+
+    return {
+        "segments": [
+            {
+                "layer": "B.Cu" if t.layer is Layer.BOTTOM else "F.Cu",
+                "x0_mm": f(t.start_x_nm), "y0_mm": f(flip_y(t.start_y_nm)),
+                "x1_mm": f(t.end_x_nm), "y1_mm": f(flip_y(t.end_y_nm)),
+                "width_mm": f(t.width_nm), "net": t.net,
+            }
+            for t in tracks
+        ],
+        "vias": [
+            {
+                "x_mm": f(v.x_nm), "y_mm": f(flip_y(v.y_nm)),
+                "size_mm": f(v.diameter_nm), "drill_mm": f(v.drill_nm), "net": v.net,
+            }
+            for v in vias
+        ],
+    }
+
+
 def write_board(board: BoardResult, path: str | Path) -> Path:
-    """Write the board to ``path`` and return it."""
+    """Write the board to ``path`` and return it.
+
+    A board with ``filled_nets`` carries its ground pours as *unfilled*
+    zones, on purpose: KiCad fills a zone the moment it opens the file (or on
+    ``B``), and ``kicad-cli pcb drc --refill-zones`` checks connectivity with
+    the fill computed, which is how :func:`silkscreen.verify.kicad.drc` runs
+    it. Asking KiCad to fill and *save* here was tried (2026-09-15) and
+    reverted: the save rewrites the file in the installed KiCad's own format
+    version, which this engine's ``kiutils`` readers, the KiCad bridge and
+    the two-driver byte-parity test can no longer read. The 20240108 file
+    this writes stays the one every tool in the tree understands.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(emit_kicad_pcb(board), encoding="utf-8")
     return path
+
+
+def _connector_families() -> list[str]:
+    from .kicadlib.connectors import FAMILIES
+
+    return list(FAMILIES)
+
+
+def _connector_symbol(package: str, device) -> str | None:
+    """KiCad's generic connector symbol for a library connector family, so the
+    schematic draws Conn_01xNN with the footprint's own pin numbers."""
+    from .kicadlib.connectors import is_connector_spec, resolve
+
+    if getattr(device, "kind", "") != "connector" or not is_connector_spec(package):
+        return None
+    found = resolve(package, _package_pin_count(device.pins))
+    return found.symbol if found is not None else None
+
+
+def _library_edge_side(fp: Footprint) -> str | None:
+    """The edge a horizontal KiCad library connector must face, or None.
+
+    A ``*_Horizontal`` wire-to-board part takes its plug parallel to the board,
+    so it only works at an edge with its mouth outward -- the rule
+    :data:`EDGE_FACING` states for the engine's USB-C and barrel jack. Which
+    side is read from the footprint: the pads sit at the back and the body runs
+    toward the mouth (Phoenix MSTBA: pads at local -Y, mouth +Y, the solver's
+    bottom; AMASS XT60PW: pads at +Y, mouth -Y, the solver's top).
+    """
+    wire_to_board = ("PhoenixContact", "AMASS", "JST", "Molex", "TerminalBlock")
+    if (
+        fp.library is None
+        or not fp.name.endswith("_Horizontal")
+        or not fp.name.startswith(wire_to_board)
+    ):
+        return None
+    pads = [p for p in fp.pads if not str(p.number).startswith("MP")]
+    if not pads:
+        return None
+    mean_y = sum(p.y_nm for p in pads) / len(pads)
+    return "bottom" if mean_y < 0 else "top"

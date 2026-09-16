@@ -5,8 +5,8 @@ grounded in a file in this repository (or the named branch/release); where
 something is pending or modest, it says so. Do not improve on these answers by
 rounding up.
 
-Naming, once: the product and desktop app are **Hardy** (formerly Hardy; repo
-`machmoon/Hardy`, app v0.3.1; the spoken wake word is still "Hardy"). The engine package is still `silkscreen` — that is the engine's
+Naming, once: the product and desktop app are **Ada** (formerly Ada; repo
+`machmoon/Ada`, app v0.3.1; the spoken wake word is still "Ada"). The engine package is still `silkscreen` — that is the engine's
 name, and it is fine to say both.
 
 ---
@@ -139,11 +139,11 @@ and we say so if asked.
 
 ## "What's the licensing story for the desktop app?"
 
-The desktop overlay (**Hardy**, v0.3.1) is a fork of Pluely, a GPL-3.0 Tauri
+The desktop overlay (**Ada**, v0.3.1) is a fork of Pluely, a GPL-3.0 Tauri
 app. The rest of the repository is MIT. The boundary that keeps those
 compatible is **process separation**:
 
-- Hardy talks to the engine over HTTP against the documented `/generate`,
+- Ada talks to the engine over HTTP against the documented `/generate`,
   `/generate/stream`, `/transcribe`, and `/healthz` surface — exactly as a
   browser does. Two programs communicating, not one program in two languages.
   No code crosses the boundary in either direction, and the engine is
@@ -186,7 +186,7 @@ the KiCad formats directly (`kiutils`, pure Python; format `20240108`, KiCad
 7–8, which KiCad 10 opens fine), so it is headless-native, CI-native,
 cross-platform with identical behavior, and — the part we care most about —
 **fully testable**: the entire suite runs with no network, no API key, and no
-KiCad install. When you *do* have KiCad, Hardy's post-save **Open in KiCad**
+KiCad install. When you *do* have KiCad, Ada's post-save **Open in KiCad**
 button hands the project straight to it.
 
 Two supporting points that preempt the obvious follow-ups:
@@ -237,7 +237,7 @@ Two supporting points that preempt the obvious follow-ups:
   completed one full board generation over the public URL (2026-08-31). One
   passing smoke is one passing smoke — claim it as verified, not as load
   tested.
-- **Voice.** Hardy speaks the review digest aloud (ElevenLabs with a key, system
+- **Voice.** Ada speaks the review digest aloud (ElevenLabs with a key, system
   voice otherwise — automatic fallback, degrades to silence rather than
   crashing a run) and takes spoken intent through the engine's `/transcribe`
   endpoint. The web SPA's mic button remains deliberately inert on `main`
@@ -282,5 +282,5 @@ Two supporting points that preempt the obvious follow-ups:
 - **"Who did the third-party code disclosure?"** `vendor/mudriknow/` (MIT,
   unmodified, reference-only for the guided-pointer design — the in-app
   pointer in `frontend/src/lib/guide.js` reimplements its consent-gate design,
-  not its code) and the Pluely fork behind Hardy (GPL-3.0, `app/NOTICE.md`).
+  not its code) and the Pluely fork behind Ada (GPL-3.0, `app/NOTICE.md`).
   Both are disclosed in DEVPOST.

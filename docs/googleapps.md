@@ -153,14 +153,14 @@ code reflecting it.
 
 ## 7. From the desktop overlay
 
-The Hardy overlay's step mode (`service/steps.py`) shows a "Send it on" panel
+The Ada overlay's step mode (`service/steps.py`) shows a "Send it on" panel
 under the step list once the board is routed. It uses three service routes
 (`service/deliver.py`) over the same package:
 
 - `GET /deliver/config` — what is configured, with the exact fix for each
   gap; never a secret. Reports `oauth_client` / `signed_in` so the panel can
   offer a consent button when the OAuth client is set but no token exists.
-- `POST /deliver/auth/start` — returns `{auth_url}`; Hardy opens it with Tauri
+- `POST /deliver/auth/start` — returns `{auth_url}`; Ada opens it with Tauri
   (the service often cannot open a browser from a worker thread).
 - `POST /deliver/auth` with `{client_opens: true}` — waits for the loopback
   redirect and returns a fresh config. Without `client_opens`, the service
@@ -174,8 +174,8 @@ under the step list once the board is routed. It uses three service routes
 The service does **not** read `.env`: export `GOOGLEAPPS_CHAT_WEBHOOK`,
 `GOOGLEAPPS_CLIENT_ID`, `GOOGLEAPPS_CLIENT_SECRET` (and `GOOGLEAPPS_TOKEN_PATH`
 if not the default) into the environment that launches `python -m service.app`.
-With the client id and secret set, press **Sign in with Google** in Hardy's Send
-panel — Hardy opens the consent tab. (`python -m googleapps auth` remains a CLI
+With the client id and secret set, press **Sign in with Google** in Ada's Send
+panel — Ada opens the consent tab. (`python -m googleapps auth` remains a CLI
 fallback.) Chat still needs only the webhook; it does not use the OAuth token.
 
 ## Security properties, enforced by test

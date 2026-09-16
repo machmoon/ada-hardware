@@ -16,13 +16,13 @@
       "identifier": "core:event:allow-listen",
       "allow": [
         {
-          "event": "hardy-wake"
+          "event": "ada-wake"
         },
         {
-          "event": "hardy-wake-error"
+          "event": "ada-wake-error"
         },
         {
-          "event": "tray-hardy-toggle"
+          "event": "tray-ada-toggle"
         },
         {
           "event": "kaleo-setup-changed"
@@ -149,6 +149,7 @@
     "notification:allow-request-permission",
     "store:allow-load",
     "store:allow-get",
-    "store:allow-set"
+    "store:allow-set",
+    "store:allow-entries"
   ]
 }

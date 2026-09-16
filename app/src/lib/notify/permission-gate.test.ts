@@ -40,7 +40,7 @@ describe("the permission gate", () => {
     enableNotifications.mockResolvedValue({
       enabled: false,
       permission: "denied",
-      message: "macOS has notifications turned off for Hardy.",
+      message: "macOS has notifications turned off for Ada.",
     });
     const result = await sendTestNotification();
     expect(result.sent).toBe(false);

@@ -15,7 +15,11 @@ import wave
 
 import pytest
 from silkscreen.agents.model import CHEAP_MODEL, GeminiModel, ModelError, ScriptedModel
-from silkscreen.agents.transcribe import transcribe_audio
+from silkscreen.agents.transcribe import (
+    VOCABULARY_MAX_CHARS,
+    transcribe_audio,
+    vocabulary_hint,
+)
 
 requires_api_key = pytest.mark.skipif(
     not os.getenv("GOOGLE_API_KEY"),
@@ -59,6 +63,32 @@ def test_language_hint_reaches_the_prompt_only_when_given():
     model = scripted()
     transcribe_audio(model, b"x", "audio/wav", language="de")
     assert "most likely in this language: de" in model.calls[0]["prompt"]
+
+
+def test_vocabulary_reaches_the_prompt_in_order_and_only_when_given():
+    # 2026-09-14: "ESP32" came back as "S32" twice from gemini-3.5-flash-lite.
+    model = scripted()
+    transcribe_audio(
+        model, b"x", "audio/wav", vocabulary=["ESP32-WROOM-32E", "AMS1117-3.3"]
+    )
+    prompt = model.calls[0]["prompt"]
+    assert "ESP32-WROOM-32E, AMS1117-3.3." in prompt
+    assert "never add a name that was not said" in prompt
+
+    plain = scripted()
+    transcribe_audio(plain, b"x", "audio/wav")
+    assert "part numbers that may come up" not in plain.calls[0]["prompt"]
+
+
+def test_vocabulary_is_budgeted_deduplicated_and_cut_at_the_first_misfit():
+    names = ["U1", "u1", "  ESP32  "] + [f"PART-{i:04d}" for i in range(200)]
+    hint = vocabulary_hint(names)
+    listed = hint.split("written: ", 1)[1].split(". Use one", 1)[0]
+    assert len(listed) <= VOCABULARY_MAX_CHARS
+    parts = listed.split(", ")
+    assert parts[:3] == ["U1", "ESP32", "PART-0000"]  # order kept, dupes gone
+    assert parts == ["U1", "ESP32"] + [f"PART-{i:04d}" for i in range(len(parts) - 2)]
+    assert vocabulary_hint(["", "   "]) == ""
 
 
 def test_a_failed_call_raises_rather_than_returning_empty():

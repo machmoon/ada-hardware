@@ -1,5 +1,5 @@
 /**
- * The spoken Hardy path, as data: local wake → command clip → /transcribe →
+ * The spoken Ada path, as data: local wake → command clip → /transcribe →
  * this router → action or caption.
  *
  * The one honesty rule everything here bends around: a deictic sentence
@@ -17,7 +17,7 @@ import { wakeAction, type WakeAction, type WakeFlowInput } from "./wake-flow";
 const DESK_PREFIX = /^\[desk:[^\]]*\]\s*/i;
 
 export const NO_DESK_CAPTION =
-  "I heard you point at something, but I don’t have a real screenshot. Enable Screen Recording for Hardy, or name the part.";
+  "I heard you point at something, but I don’t have a real screenshot. Enable Screen Recording for Ada, or name the part.";
 
 export const DESK_FAILED_CAPTION =
   "I can see you pointed, but I couldn’t read the desk. Try the mic button or type it.";
@@ -72,7 +72,8 @@ export function wouldStartBoard(decision: AdaDecision): boolean {
  * Route one transcribed utterance.
  *
  * Deixis is decided before wakeAction, so a pointed "fix this" cannot become
- * a paid board. Non-deictic speech is wakeAction's, unchanged.
+ * a paid board. Non-deictic speech is wakeAction's: conversation, or a yes/no
+ * to a board the orchestrator proposed.
  */
 export function routeSpokenUtterance(input: AdaPathInput): AdaDecision {
   const utterance = stripDeskAnnotation(input.utterance);
@@ -89,6 +90,7 @@ export function routeSpokenUtterance(input: AdaPathInput): AdaDecision {
     utterance,
     busy: input.busy,
     stepsStatus: input.stepsStatus,
+    pendingProposal: input.pendingProposal,
   });
 }
 
@@ -98,7 +100,7 @@ export interface DeskResolveResult {
   target: { testid: string; attrs?: Record<string, string>; tab?: string } | null;
 }
 
-export interface FulfillHardyDeps {
+export interface FulfillAdaDeps {
   resolveDesk?: (
     utterance: string,
     snap: DeskSnapshot
@@ -111,9 +113,9 @@ export interface FulfillHardyDeps {
  * Resolve failures and abstentions stay captions. Nothing here can become
  * `start` — that is the /generate poison this module exists to stop.
  */
-export async function fulfillHardyDecision(
+export async function fulfillAdaDecision(
   decision: AdaDecision,
-  deps: FulfillHardyDeps = {}
+  deps: FulfillAdaDeps = {}
 ): Promise<AdaDecision> {
   if (decision.kind !== "desk") return decision;
   if (!deps.resolveDesk) {

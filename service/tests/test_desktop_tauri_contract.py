@@ -11,7 +11,7 @@ def test_tauri_shell_embeds_the_existing_svelte_bundle_with_a_real_csp():
     config = json.loads((TAURI / "tauri.conf.json").read_text())
     manifest = (TAURI / "Cargo.toml").read_text()
 
-    assert config["productName"] == "Hardy"
+    assert config["productName"] == "Ada"
     assert config["build"]["frontendDist"] == "../../frontend/dist"
     assert config["build"]["beforeBuildCommand"] == (
         "npm --prefix ../../frontend run build"

@@ -402,3 +402,112 @@ def test_a_proposal_error_from_the_board_tool_reaches_the_caller_unwrapped():
             generate=generate,
             emit=lambda e: None,
         )
+
+
+def propose_response(board_request: str) -> types.Content:
+    return types.Content(
+        role="model",
+        parts=[
+            types.Part.from_function_call(
+                name="propose_board", args={"board_request": board_request}
+            )
+        ],
+    )
+
+
+def test_confirm_mode_answers_a_non_board_message_without_any_tool():
+    """ "Can you hear me" is a question to answer, not a board to build."""
+    model = FakeLlm(
+        model="fake-orchestrator",
+        responses=[text_response("Yes, I can hear you.")],
+    )
+    generated = []
+
+    outcome = run_orchestrator(
+        message="ada can you hear me",
+        model=model,
+        session_id="hear-me",
+        generate=lambda: generated.append(True),
+        emit=lambda e: None,
+        confirm_before_build=True,
+    )
+
+    assert generated == []
+    assert outcome.result is None
+    assert outcome.proposal is None
+    assert outcome.assistant == "Yes, I can hear you."
+
+
+def test_confirm_mode_only_proposes_a_board_and_never_runs_the_generator():
+    events = []
+    model = FakeLlm(
+        model="fake-orchestrator",
+        responses=[
+            propose_response("A 3.3 V LDO board from USB 5 V"),
+            text_response("Want me to build a 3.3 V LDO board from USB 5 V?"),
+        ],
+    )
+    generated = []
+
+    outcome = run_orchestrator(
+        message="make me a 3.3 volt LDO board off USB",
+        model=model,
+        session_id="propose",
+        generate=lambda: generated.append(True),
+        emit=events.append,
+        debug=True,
+        confirm_before_build=True,
+    )
+
+    assert generated == []
+    assert outcome.result is None
+    assert outcome.proposal == "A 3.3 V LDO board from USB 5 V"
+    assert outcome.needs_clarification is False
+    assert outcome.assistant.startswith("Want me to build")
+    tools = [
+        str(tool)
+        for event in events
+        if event["event"] == "model.request"
+        for tool in [event["tools"]]
+    ]
+    assert "propose_board" in tools[0] and "generate_board" not in tools[0]
+    assert events[-1]["proposal"] == "A 3.3 V LDO board from USB 5 V"
+
+
+def test_confirm_mode_keeps_the_first_proposal_when_the_model_proposes_twice():
+    model = FakeLlm(
+        model="fake-orchestrator",
+        responses=[
+            propose_response("first"),
+            propose_response("second"),
+            text_response("Build it?"),
+        ],
+    )
+
+    outcome = run_orchestrator(
+        message="a board",
+        model=model,
+        session_id="twice",
+        generate=lambda: None,
+        emit=lambda e: None,
+        confirm_before_build=True,
+    )
+
+    assert outcome.proposal == "first"
+
+
+def test_default_mode_still_offers_only_the_generator():
+    events = []
+    model = FakeLlm(model="fake-orchestrator", responses=[text_response("Hi.")])
+
+    run_orchestrator(
+        message="hello",
+        model=model,
+        session_id="default-tools",
+        generate=lambda: None,
+        emit=events.append,
+        debug=True,
+    )
+
+    tools = str(events[0]["tools"])
+    assert "generate_board" in tools and "propose_board" not in tools

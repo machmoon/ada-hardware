@@ -45,7 +45,7 @@ describe("PermissionsStep", () => {
 
   it("a refusal shows the System Settings link, which opens the microphone pane", async () => {
     const requestMic = vi.fn(async () => {
-      throw new Error("Microphone permission was refused. Enable Hardy in System Settings → Privacy & Security → Microphone, then click the ear again.");
+      throw new Error("Microphone permission was refused. Enable Ada in System Settings → Privacy & Security → Microphone, then click the ear again.");
     });
     const openSettings = vi.fn(async () => undefined);
     render(<PermissionsStep setCard={vi.fn()} requestMic={requestMic} openSettings={openSettings} />);

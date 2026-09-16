@@ -122,22 +122,22 @@ def test_signed_in_lobby_joins_with_camera_off_and_mic_on(tmp_path):
     assert "signed-in account" in receipt.detail
     assert s.joined_as_guest is False
     assert state["cam"] is False
-    assert state["mic"] is True  # Hardy has to be heard
+    assert state["mic"] is True  # Ada has to be heard
     # Signed in, Meet shows the account name rather than the one asked for.
-    assert s.display_name == "Pat Liu (Hardy account)"
+    assert s.display_name == "Pat Liu (Ada account)"
 
 
 def test_guest_lobby_types_the_name_and_knocks_then_is_admitted(tmp_path):
     async def go(s):
         receipt = await s.join(
-            _url(lobby="guest", admit="knock", delay=400), display_name="Hardy"
+            _url(lobby="guest", admit="knock", delay=400), display_name="Ada"
         )
         return receipt, await s.page.evaluate("window.fakeState"), s
 
     receipt, state, s = _run(go, tmp_path)
     assert receipt.state == ADMITTED, receipt.detail
-    assert "guest" in receipt.detail and "'Hardy'" in receipt.detail
-    assert state["name"] == "Hardy"
+    assert "guest" in receipt.detail and "'Ada'" in receipt.detail
+    assert state["name"] == "Ada"
     assert s.joined_as_guest is True
 
 
@@ -187,7 +187,7 @@ def test_unanswered_knock_is_waiting_for_host_and_can_still_be_admitted(tmp_path
 
 def test_lingering_lobby_with_a_self_preview_tile_is_not_admitted(tmp_path):
     """Found live: the lobby's self-preview tile read as "admitted" in the gap
-    between the click and the waiting-room copy, so Hardy never listened."""
+    between the click and the waiting-room copy, so Ada never listened."""
     async def go(s):
         return await s.join(_url(admit="never", lag=400))
 

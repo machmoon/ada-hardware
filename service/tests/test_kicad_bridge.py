@@ -9,6 +9,7 @@ talk to, and which stage rides on which.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -140,7 +141,7 @@ def test_the_bridge_has_no_openscad_stage_left(monkeypatch, tmp_path):
 
 def test_the_viewer_rides_on_routing_and_nothing_else():
     # Opened before routing it would show a board with no copper on it.
-    assert steps._FOLLOW_STAGE == {"routing": "3d"}
+    assert steps._FOLLOW_STAGE == {"routing": "3d-open"}
     assert steps._BRIDGE_STAGE["route"] == "routing"
 
 
@@ -190,7 +191,7 @@ def test_the_viewer_follows_a_bridge_that_outlived_the_grace_period(
 
     monkeypatch.setattr(steps.subprocess, "Popen", record)
     steps._watch_bridge(FakeSession(), "routing", FakePopen())
-    assert spawned == ["3d"]
+    assert spawned == ["3d-open"]
 
 
 def test_a_bridge_that_failed_slowly_opens_no_viewer(monkeypatch, tmp_path):
@@ -273,3 +274,120 @@ def test_the_placed_board_the_placement_stage_opened_is_accepted(monkeypatch):
         "a-3-3v-ldo-board", timeout_s=2.0, socket_grace_s=0.0
     )
     assert board.name.endswith("a-3-3v-ldo-board.placed.kicad_pcb")
+
+
+def test_stream_draws_each_net_as_it_lands_and_takes_a_lifted_net_off(monkeypatch):
+    """The live show: a committed net's copper is created in the open board
+    the moment its line arrives, a lifted net's items are removed, and a
+    second commit of the same net replaces the first. Nothing is flipped
+    here: the coordinates are already in KiCad's frame."""
+    log: list[tuple] = []
+
+    class FakeItem:
+        def __init__(self, kind):
+            self.kind = kind
+
+    class FakeBoard:
+        name = "/tmp/a-toy-car.placed.kicad_pcb"
+
+        def get_nets(self):
+            return []
+
+        def get_tracks(self):
+            return []
+
+        def get_vias(self):
+            return []
+
+        def begin_commit(self):
+            return "c"
+
+        def push_commit(self, commit, message=""):
+            log.append(("commit", message))
+
+        def create_items(self, items):
+            log.append(("create", len(items)))
+            return [FakeItem(type(i).__name__) for i in items]
+
+        def remove_items(self, items):
+            log.append(("remove", len(items)))
+
+    class FakeKiCad:
+        def __init__(self, socket_path):
+            pass
+
+        def get_board(self):
+            return FakeBoard()
+
+    class _Vec:
+        @staticmethod
+        def from_xy(x, y):
+            return (x, y)
+
+    kipy = type(sys)("kipy")
+    kipy.KiCad = FakeKiCad
+    board_types = type(sys)("kipy.board_types")
+    board_types.BoardLayer = type("BL", (), {"BL_F_Cu": 0, "BL_B_Cu": 31})
+    board_types.Track = type("Track", (), {})
+    board_types.Via = type("Via", (), {})
+    geometry = type(sys)("kipy.geometry")
+    geometry.Vector2 = _Vec
+    proto = type(sys)("kipy.proto")
+    proto_board = type(sys)("kipy.proto.board")
+    pb2 = type(sys)("kipy.proto.board.board_types_pb2")
+    pb2.ViaType = type("VT", (), {"VT_THROUGH": 3})
+    for name, mod in [
+        ("kipy", kipy), ("kipy.board_types", board_types), ("kipy.geometry", geometry),
+        ("kipy.proto", proto), ("kipy.proto.board", proto_board),
+        ("kipy.proto.board.board_types_pb2", pb2),
+    ]:
+        monkeypatch.setitem(sys.modules, name, mod)
+    monkeypatch.setattr(kicad_live, "_pcbnew_pids", lambda: ["7"])
+    monkeypatch.setattr(kicad_live, "_pcbnew_sockets", lambda: ["ipc:///tmp/x.sock"])
+
+    seg = {"layer": "F.Cu", "x0_mm": 1.0, "y0_mm": 2.0, "x1_mm": 3.0, "y1_mm": 2.0,
+           "width_mm": 0.2, "net": "A"}
+    via = {"x_mm": 3.0, "y_mm": 2.0, "size_mm": 0.6, "drill_mm": 0.3, "net": "A"}
+    lines = [
+        json.dumps(
+            {"action": "committed", "net": "A", "segments": [seg], "vias": [via]}
+        ),
+        "not json at all",
+        json.dumps({"action": "committed", "net": "B", "segments": [seg], "vias": []}),
+        json.dumps({"action": "lifted", "net": "A"}),
+        json.dumps(
+            {"action": "committed", "net": "A", "segments": [seg, seg], "vias": []}
+        ),
+        json.dumps({"action": "end"}),
+        json.dumps({"action": "committed", "net": "C", "segments": [seg], "vias": []}),
+    ]
+    result = kicad_live.stream_copper("a-toy-car", lines, timeout_s=2.0)
+    assert result == {"created": 5, "removed": 2, "nets": 3, "bad": 1}
+    assert log == [
+        ("create", 2), ("commit", "silkscreen: A"),
+        ("create", 1), ("commit", "silkscreen: B"),
+        ("remove", 2), ("commit", "silkscreen: lift A"),
+        ("create", 2), ("commit", "silkscreen: A"),
+    ]
+
+
+def test_the_post_routing_viewer_never_reopens_the_board_underneath_itself(
+    monkeypatch, tmp_path
+):
+    """2026-09-14: the 3D viewer appeared and then vanished.
+
+    The rider asked for ``3d``, which opens the routed file first. ``open -a``
+    returns at once, so the viewer opened on the placed board that routing had
+    pushed copper into, and then pcbnew swapped in the routed file and closed
+    the viewer with the board it belonged to. ``3d-open`` asks for the viewer
+    on what is open; ``3d`` on its own still names the board.
+    """
+    asked: list = []
+    monkeypatch.setattr(
+        kicad_live, "show_3d", lambda pcb=None, **kw: asked.append(pcb) or "IPC"
+    )
+    pcb = tmp_path / "board.kicad_pcb"
+    assert kicad_live.main([str(pcb), "3d-open"]) == 0
+    assert kicad_live.main([str(pcb), "3d"]) == 0
+    assert asked[0] is None
+    assert asked[1] is not None and asked[1].name == "board.kicad_pcb"

@@ -3,7 +3,7 @@
 // The tray hook against a scripted `invoke` and `listen`. What this pins: the
 // menu bar is told the mic and window state on mount and on every change (and
 // nothing else — no report on an unrelated re-render); a click on the tray's
-// "Hardy listening" item reaches the *current* handler; the listener is removed
+// "Ada listening" item reaches the *current* handler; the listener is removed
 // on unmount; and a failed report is a warning, never a throw.
 
 import { renderHook } from "@testing-library/react";
@@ -74,7 +74,7 @@ describe("useTrayState", () => {
     await flush();
     expect(listen).toHaveBeenCalledTimes(1);
     expect(listen.mock.calls[0][0]).toBe(TRAY_TOGGLE_EVENT);
-    expect(TRAY_TOGGLE_EVENT).toBe("tray-hardy-toggle");
+    expect(TRAY_TOGGLE_EVENT).toBe("tray-ada-toggle");
 
     handlers.get(TRAY_TOGGLE_EVENT)?.();
     expect(first).toHaveBeenCalledTimes(1);

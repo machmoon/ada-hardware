@@ -73,6 +73,10 @@ class PackStatus(StrEnum):
     FALLBACK = "fallback"
 
 
+#: The four sides a part can be pinned to (``Part.edge_side``), solver frame.
+EDGE_SIDES = frozenset({"left", "right", "bottom", "top"})
+
+
 @dataclass(frozen=True)
 class Part:
     """A footprint to place.
@@ -87,6 +91,13 @@ class Part:
     ref: str = ""
     #: Force onto a board edge (USB connectors, antennas, mounting holes).
     must_be_on_edge: bool = False
+    #: Force onto one *named* edge, in the solver's Y-up frame: ``"bottom"``
+    #: (y = 0, KiCad's maximum Y), ``"top"``, ``"left"`` or ``"right"``. Any
+    #: edge is not enough for a part with a direction: a USB-C receptacle on
+    #: the left edge has its mouth facing along the edge, where no plug fits.
+    #: Implies ``must_be_on_edge``; incompatible with ``allow_rotation``,
+    #: because a turned part no longer faces the side it was pinned to.
+    edge_side: str | None = None
     #: Allow a 90-degree rotation. Off by default: rotating a part invalidates
     #: any silkscreen orientation the caller may care about.
     allow_rotation: bool = False
@@ -557,6 +568,7 @@ def pack(
                 box_w[i],
                 box_h[i],
                 part.must_be_on_edge,
+                part.edge_side,
                 part.allow_rotation,
             )
             groups.setdefault(key, []).append(i)
@@ -581,6 +593,26 @@ def pack(
     # Edge constraints. Every part is inside the board by construction, so
     # "on an edge" means flush with one of the four sides.
     for i, part in enumerate(parts):
+        if part.edge_side is not None:
+            if part.edge_side not in EDGE_SIDES:
+                raise ValueError(
+                    f"{part.ref or i}: edge_side {part.edge_side!r} is not one of "
+                    f"{sorted(EDGE_SIDES)}"
+                )
+            if part.allow_rotation:
+                raise ValueError(
+                    f"{part.ref or i}: a part pinned to the {part.edge_side} edge "
+                    "cannot also rotate -- turned, it would face another side"
+                )
+            if part.edge_side == "left":
+                model.Add(x[i] == 0)
+            elif part.edge_side == "bottom":
+                model.Add(y[i] == 0)
+            elif part.edge_side == "right":
+                model.Add(x[i] + eff_w[i] == w_used)
+            else:
+                model.Add(y[i] + eff_h[i] == h_used)
+            continue
         if not part.must_be_on_edge:
             continue
         b_left = model.NewBoolVar(f"edge_left[{i}]")
@@ -671,6 +703,34 @@ def pack(
 
     model.Minimize(cp_model.LinearExpr.Sum(objective_terms))
 
+    # Warm start. CP-SAT's first feasible answer on a large board is the loose
+    # one its domains allow, and a time-limited solve may never tighten it:
+    # measured 2026-09-14, 64 parts at 20 s gave a 277 x 352 mm board, and a
+    # live 80-part run shipped 146 x 439 mm with the parts in one corner. A
+    # compact next-fit shelf layout in the model's own cells is handed over as
+    # a solution hint (OR-Tools' documented warm start, CpModel.AddHint), so
+    # the search starts near a small board. A hint only guides: edge and layer
+    # constraints it ignores are repaired by the solver, never violated.
+    if not keepouts and not any(p.fixed_at_nm for p in parts):
+        order = sorted(range(n), key=lambda i: (-box_h[i], i))
+        total_cells = sum(box_w[i] * box_h[i] for i in range(n))
+        target = max(max(box_w), int(math.isqrt(total_cells) * 1.2))
+        cx = cy = row_h = 0
+        hint_w = hint_h = 0
+        for i in order:
+            if cx and cx + box_w[i] > target:
+                cy += row_h
+                cx = row_h = 0
+            model.AddHint(x[i], cx)
+            model.AddHint(y[i], cy)
+            if rot[i] is not None:
+                model.AddHint(rot[i], False)
+            cx += box_w[i]
+            row_h = max(row_h, box_h[i])
+            hint_w, hint_h = max(hint_w, cx), max(hint_h, cy + row_h)
+        model.AddHint(w_used, hint_w)
+        model.AddHint(h_used, hint_h)
+
     solver = cp_model.CpSolver()
     if time_limit_s is not None:
         solver.parameters.max_time_in_seconds = float(time_limit_s)
@@ -702,8 +762,8 @@ def pack(
         )
         # The fallback packs by size alone. Say so loudly rather than returning
         # a layout that quietly violates what the caller asked for.
-        if any(p.must_be_on_edge for p in parts):
-            edge_refs = [p.ref for p in parts if p.must_be_on_edge]
+        if any(p.must_be_on_edge or p.edge_side for p in parts):
+            edge_refs = [p.ref for p in parts if p.must_be_on_edge or p.edge_side]
             warnings.append(
                 f"Fallback ignores must_be_on_edge; {edge_refs} are NOT on an edge."
             )

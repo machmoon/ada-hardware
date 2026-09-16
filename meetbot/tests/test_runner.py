@@ -22,7 +22,7 @@ from meetbot.clarify import (
     parse_questions,
     wait_for_answer,
 )
-from meetbot.config import ConfigError, HardyConfig, parse_meet_url
+from meetbot.config import ConfigError, AdaConfig, parse_meet_url
 from meetbot.runner import MeetEngineClient, after_call, attend, idea_key, run
 from meetbot.types import (
     ADMITTED,
@@ -60,8 +60,8 @@ QUESTIONS = json.dumps(
 )
 
 
-def _config(**changes) -> HardyConfig:
-    base = HardyConfig(
+def _config(**changes) -> AdaConfig:
+    base = AdaConfig(
         google_api_key="k",
         slack_token="xoxb-test",
         slack_channel="UPAT",
@@ -89,7 +89,7 @@ class FakeSession:
     def add_init_script(self, js: str) -> None:
         self.scripts.append(js)
 
-    async def join(self, url: str, display_name: str = "Hardy") -> JoinReceipt:
+    async def join(self, url: str, display_name: str = "Ada") -> JoinReceipt:
         self.joined = (url, display_name)
         return self.receipt
 
@@ -102,7 +102,7 @@ class FakeSession:
 
 
 class Room:
-    """A kickoff: Pat states the board, voices doubt, hears Hardy, hangs up."""
+    """A kickoff: Pat states the board, voices doubt, hears Ada, hangs up."""
 
     def __init__(self, receipt: JoinReceipt | None = None):
         self.session = FakeSession(receipt or JoinReceipt(ADMITTED, "in the call"))
@@ -122,7 +122,7 @@ class Room:
         yield Utterance("Pat", "Kickoff time. " + REQUEST_LINE, 0, 1)
         yield Utterance("Pat", "Honestly I don't think this will work.", 1, 2)
         await asyncio.wait_for(self.heard_reply.wait(), 5)
-        yield Utterance("Hardy", self.said[-1], 2, 3, is_self=True)
+        yield Utterance("Ada", self.said[-1], 2, 3, is_self=True)
         yield Utterance("Pat", "Okay, great, talk soon.", 3, 4)
         session.ended.set()
 
@@ -244,7 +244,7 @@ def test_kickoff_speaks_asks_on_slack_folds_the_answer_in_and_hands_off():
         return report
 
     report = asyncio.run(go())
-    assert room.session.joined == (URL, "Hardy")
+    assert room.session.joined == (URL, "Ada")
     assert room.session.scripts == ["listen()", "speak()"]
     assert room.session.left
     assert report.ended.startswith("call_ended")
@@ -263,11 +263,11 @@ def test_kickoff_speaks_asks_on_slack_folds_the_answer_in_and_hands_off():
         clock=fake.clock,
     )
 
-    # Hardy's own line never reaches the extractor.
+    # Ada's own line never reaches the extractor.
     extract_prompt = next(
         c["prompt"] for c in worker.calls if EXTRACT_KEY in c["prompt"]
     )
-    assert "Hardy:" not in extract_prompt
+    assert "Ada:" not in extract_prompt
     assert [r.intent for r in report.considered] == [
         "A coin-cell powered soil moisture sensor board."
     ]
@@ -298,7 +298,7 @@ def test_kickoff_speaks_asks_on_slack_folds_the_answer_in_and_hands_off():
 
 
 def test_run_does_nothing_after_a_join_that_was_never_admitted():
-    room = Room(JoinReceipt(WAITING_FOR_HOST, "nobody admitted Hardy in 300 s"))
+    room = Room(JoinReceipt(WAITING_FOR_HOST, "nobody admitted Ada in 300 s"))
     worker, reply = _models()
     slack_rec, engine_rec = RecordedSlack(), RecordedEngine()
     slack, engine = _clients(slack_rec, engine_rec)
@@ -481,19 +481,19 @@ def test_wait_for_answer_ignores_bots_and_other_users():
 
 def test_config_names_every_missing_variable_at_once():
     with pytest.raises(ConfigError) as caught:
-        HardyConfig.from_env({})
+        AdaConfig.from_env({})
     message = str(caught.value)
     for name in ("GOOGLE_API_KEY", "SLACK_BOT_TOKEN", "HARDY_SLACK_CHANNEL"):
         assert name in message
-    config = HardyConfig.from_env({"GOOGLE_API_KEY": "k"}, require_slack=False)
+    config = AdaConfig.from_env({"GOOGLE_API_KEY": "k"}, require_slack=False)
     assert not config.slack_enabled and config.confidence_floor == 0.6
     with pytest.raises(ConfigError, match="HARDY_REPLY_COOLDOWN_S"):
-        HardyConfig.from_env(
+        AdaConfig.from_env(
             {"GOOGLE_API_KEY": "k", "HARDY_REPLY_COOLDOWN_S": "soon"},
             require_slack=False,
         )
     assert "xoxb" not in json.dumps(
-        HardyConfig.from_env(
+        AdaConfig.from_env(
             {
                 "GOOGLE_API_KEY": "k",
                 "SLACK_BOT_TOKEN": "xoxb-secret",

@@ -16,6 +16,10 @@ from silkscreen.mcp.server import (
 from silkscreen.spice.simulators import NgspiceSimulator
 
 CIRCUIT = {
+    # ``pins`` maps a pin *name* to its pad number (netlist.Device). This
+    # fixture once had the map backwards -- names "1".."3" on pads "GND",
+    # "VOUT", "VIN" -- and the board drew U1 with no net on any pad until
+    # board._pad_errors began refusing a pin with no pad to land on.
     "devices": {"U1": {"pins": {"GND": "1", "VOUT": "2", "VIN": "3"}}},
     "passives": {
         "C1": {"type": "capacitor", "value": "10uF"},
@@ -40,8 +44,14 @@ def call(name, arguments=None):
 
 
 def payload(response):
-    """The JSON a successful tool call carried back."""
-    content = response["result"]["content"][0]["text"]
+    """The JSON a successful tool call carried back.
+
+    A tool error is plain text, not JSON; say so with the text rather than
+    surfacing it as a JSONDecodeError that names nothing.
+    """
+    result = response["result"]
+    content = result["content"][0]["text"]
+    assert not result.get("isError"), f"tool call failed: {content}"
     return json.loads(content)
 
 
@@ -98,6 +108,23 @@ def test_validate_circuit_reports_every_error_at_once():
     body = payload(call("validate_circuit", bad))
     assert body["valid"] is False
     assert len(body["errors"]) >= 2, "all failures, not just the first"
+
+
+def test_validate_circuit_refuses_a_pin_with_no_pad_like_build_board_does():
+    """Pins keyed number-to-name (the old fixture's mistake) parse as names
+    "1".."3" on pads "GND"... which a SOT-223 does not have. validate_circuit
+    and build_board must give the same answer about that circuit."""
+    backwards = {
+        "devices": {"U1": {"pins": {"1": "GND", "2": "VOUT", "3": "VIN"}}},
+        "passives": {"C1": {"type": "capacitor", "value": "10uF"}},
+        "nets": {"VIN": ["U1.3", "C1.1"], "GND": ["U1.1", "C1.2"]},
+    }
+    body = payload(call("validate_circuit", backwards))
+    assert body["valid"] is False
+    assert any("has no pad for pin(s)" in e for e in body["errors"])
+    built = call("build_board", {"circuit": backwards, "time_limit_s": 2})
+    assert built["result"]["isError"] is True
+    assert "has no pad for pin(s)" in built["result"]["content"][0]["text"]
 
 
 def test_generate_footprint_returns_two_pads_for_a_chip_passive():

@@ -347,7 +347,7 @@ class _FakeKernel:
         self.export_calls: list[tuple] = []
         self.packet_calls: list[Path] = []
 
-    def build(self, spec, envelope):
+    def build(self, spec, envelope, *, on_stage=None):
         self.build_calls += 1
         outcome = self.builds.pop(0) if self.builds else _FakeBuilt()
         if isinstance(outcome, Exception):
@@ -1208,3 +1208,139 @@ def test_adk_driver_threads_the_rigorous_flag(tmp_path, offline_pdf_fetch):
     assert result.enclosure is None
     assert len([e for e in events if e["event"] == "enclosure.round"]) == 4
     assert (tmp_path / "board.kicad_pcb").exists()
+
+
+@needs_build123d
+def test_on_stage_hands_over_each_finished_solid_in_build_order(monkeypatch):
+    """The live seam: a watcher gets the board, then the base, then the lid,
+    each a real solid with volume, once per kernel build. Nothing between
+    them (sketches, cutters) is announced, and nothing at all without it."""
+    monkeypatch.setattr(agent_enclosure, "build_enclosure", _REAL_BUILD)
+    monkeypatch.setattr(agent_enclosure, "verify_model", _REAL_VERIFY)
+    seen: list[tuple[str, float]] = []
+    model = ScriptedModel(responses=[json.dumps(GOOD_ENCLOSURE)])
+    result = propose_enclosure(
+        model, _envelope(),
+        on_stage=lambda name, shape: seen.append((name, shape.volume)),
+    )
+    assert result.kernel is not None
+    assert [name for name, _ in seen] == ["board", "base", "lid"]
+    assert all(volume > 0 for _, volume in seen)
+    # The default is silent: the same build, nobody told.
+    quiet = propose_enclosure(
+        ScriptedModel(responses=[json.dumps(GOOD_ENCLOSURE)]), _envelope()
+    )
+    assert quiet.spec == result.spec
+
+
+@needs_build123d
+def test_enclosure_stage_live_writes_each_solid_as_step_and_says_so(
+    tmp_path, monkeypatch
+):
+    """``enclosure_stage(live=…)``: each finished solid lands as its own
+    STEP under ``<dir>/live``, an ``enclosure.stage`` event names it, and
+    the sink is handed the path -- in build order, files present. Without
+    ``live`` no such file and no such event exist."""
+    from silkscreen.agents.stages import enclosure_stage
+    from silkscreen.board import build_board
+    from silkscreen.netlist import parse_circuit_spec
+    from test_agents import GOOD_CIRCUIT
+
+    monkeypatch.setattr(agent_enclosure, "build_enclosure", _REAL_BUILD)
+    monkeypatch.setattr(agent_enclosure, "verify_model", _REAL_VERIFY)
+    from silkscreen.agents import stages as stage_mod
+    from silkscreen.enclosure import cad as real_cad
+
+    monkeypatch.setattr(stage_mod, "export_model", real_cad.export_model)
+    monkeypatch.setattr(stage_mod, "export_shape", real_cad.export_shape)
+    board = build_board(parse_circuit_spec(GOOD_CIRCUIT), time_limit_s=5.0)
+    model = ScriptedModel(responses=[json.dumps(GOOD_ENCLOSURE)])
+    seen: list[tuple[str, int, Path]] = []
+    events: list[dict] = []
+    result = enclosure_stage(
+        model, board, enclosure=True, enclosure_style="", output=None,
+        emit_stages=False, export_dir=tmp_path, stem="case",
+        emit=events.append, enter=lambda _s: None,
+        live=lambda name, seq, path: seen.append((name, seq, path)),
+    )
+    assert result is not None
+    assert [(n, s) for n, s, _ in seen] == [("board", 1), ("base", 2), ("lid", 3)]
+    for name, seq, path in seen:
+        assert path == tmp_path / "live" / f"case-{seq:02d}-{name}.step"
+        assert path.is_file()
+        assert path.read_text(encoding="utf-8").startswith("ISO-10303-21")
+    staged = [e for e in events if e["event"] == "enclosure.stage"]
+    assert [(e["name"], e["seq"], e["file"]) for e in staged] == [
+        ("board", 1, "case-01-board.step"), ("base", 2, "case-02-base.step"),
+        ("lid", 3, "case-03-lid.step"),
+    ]
+    assert all(e["stage"] == "enclosure" for e in staged)
+
+    quiet: list[dict] = []
+    enclosure_stage(
+        ScriptedModel(responses=[json.dumps(GOOD_ENCLOSURE)]), board, enclosure=True,
+        enclosure_style="", output=None, emit_stages=False, export_dir=tmp_path / "q",
+        stem="case", emit=quiet.append, enter=lambda _s: None,
+    )
+    assert not [e for e in quiet if e["event"] == "enclosure.stage"]
+    assert not (tmp_path / "q" / "live").exists()
+
+
+@needs_build123d
+def test_enclosure_edit_stage_rebuilds_with_no_model_and_names_the_edit(
+    tmp_path, monkeypatch
+):
+    """The direct-edit path: a changed wall is rebuilt and re-verified by the
+    kernel alone, the STEP, STLs and GLB land beside the board, the receipt
+    says which fields changed, and no model is anywhere in the call."""
+    from silkscreen.agents.stages import enclosure_edit_stage, enclosure_stage
+    from silkscreen.board import build_board
+    from silkscreen.enclosure.errors import EnclosureValidationError
+    from silkscreen.netlist import parse_circuit_spec
+    from test_agents import GOOD_CIRCUIT
+
+    monkeypatch.setattr(agent_enclosure, "build_enclosure", _REAL_BUILD)
+    monkeypatch.setattr(agent_enclosure, "verify_model", _REAL_VERIFY)
+    from silkscreen.agents import stages as stage_mod
+    from silkscreen.enclosure import cad as real_cad
+
+    monkeypatch.setattr(stage_mod, "export_model", real_cad.export_model)
+    monkeypatch.setattr(stage_mod, "export_shape", real_cad.export_shape)
+    board = build_board(parse_circuit_spec(GOOD_CIRCUIT), time_limit_s=5.0)
+    model = ScriptedModel(responses=[json.dumps(GOOD_ENCLOSURE)])
+    first = enclosure_stage(
+        model, board, enclosure=True, enclosure_style="", output=None,
+        emit_stages=False, export_dir=tmp_path, stem="case",
+        emit=lambda _e: None, enter=lambda _s: None,
+    )
+    assert first is not None and first.exports is not None
+    assert first.exports.glb is not None and first.exports.glb.is_file()
+    assert first.exports.glb.read_bytes()[:4] == b"glTF", "binary glTF header"
+    calls_before = len(model.calls)
+
+    events: list[dict] = []
+    edited = enclosure_edit_stage(
+        board, first, {"wall_mm": 3.0, "label": None},
+        export_dir=tmp_path, stem="case", emit=events.append, enter=lambda _s: None,
+    )
+    assert len(model.calls) == calls_before, "no model call on the edit path"
+    assert edited.spec.wall_nm == mm(3.0) and edited.spec.label is None
+    assert edited.repair_rounds == 0
+    assert edited.brief == "edited by hand: label, wall_mm"
+    assert edited.kernel is not None and edited.kernel.passed, edited.kernel.text()
+    assert edited.exports is not None and edited.exports.step.is_file()
+    done = next(e for e in events if e["event"] == "stage.done")
+    assert done["edit"] is True and done["changed"] == ["label", "wall_mm"]
+    assert done["wall_mm"] == 3.0
+
+    # An edit outside the bounds raises with the batch; the previous case is
+    # still on disk (the edit stage exports only after a successful build).
+    stamp = edited.exports.step.stat().st_mtime_ns
+    with pytest.raises(EnclosureValidationError) as caught:
+        enclosure_edit_stage(
+            board, edited, {"wall_mm": 0.2, "lid": "hinge"},
+            export_dir=tmp_path, stem="case", emit=lambda _e: None,
+            enter=lambda _s: None,
+        )
+    assert len(caught.value.errors) >= 2
+    assert edited.exports.step.stat().st_mtime_ns == stamp

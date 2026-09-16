@@ -1031,6 +1031,7 @@ def spec_as_dict(spec: CircuitSpec) -> dict[str, Any]:
                 if d.kind == "ic"
                 else {"kind": d.kind, "package": d.package, "pins": d.pins}
             )
+            | ({"no_connect": list(d.no_connect)} if d.no_connect else {})
             for d in spec.devices
         },
         "passives": {

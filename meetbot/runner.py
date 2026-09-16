@@ -56,7 +56,7 @@ from .clarify import (
     propose_questions,
     wait_for_answer,
 )
-from .config import HardyConfig, parse_meet_url
+from .config import AdaConfig, parse_meet_url
 from .types import JoinReceipt, SpokenReceipt, Utterance
 
 __all__ = [
@@ -223,7 +223,7 @@ def _default_init_scripts() -> list[str]:  # pragma: no cover - live
 
 async def attend(
     url: str,
-    config: HardyConfig,
+    config: AdaConfig,
     *,
     reply_model: Model,
     session_factory: SessionFactory | None = None,
@@ -247,7 +247,7 @@ async def attend(
         report.join = await session.join(url, display_name=config.display_name)
         if not report.join.admitted:
             report.warnings.append(
-                f"Hardy was not in the call ({report.join.state}): {report.join.detail}"
+                f"Ada was not in the call ({report.join.state}): {report.join.detail}"
             )
             return report
 
@@ -363,7 +363,7 @@ def idea_key(meeting_code: str, request: BoardRequest) -> str:
 
 def after_call(
     report: CallReport,
-    config: HardyConfig,
+    config: AdaConfig,
     *,
     model: Model,
     slack: ThreadClient | None,
@@ -509,7 +509,7 @@ def after_call(
     if status == 200:
         say("This one was already on your laptop's list; I'm not filing it twice.")
         return report
-    say("Handed to Hardy on your laptop — it'll start when the overlay picks it up.")
+    say("Handed to Ada on your laptop — it'll start when the overlay picks it up.")
     if config.follow and channel:
         bridge = bridge_factory(
             BridgeConfig(
@@ -532,7 +532,7 @@ def after_call(
 
 async def run(
     url: str,
-    config: HardyConfig,
+    config: AdaConfig,
     *,
     model: Model,
     reply_model: Model,

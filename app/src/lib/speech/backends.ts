@@ -1,4 +1,4 @@
-// The two ways Kaleo can turn text into sound, behind one interface.
+// The two ways Ada can turn text into sound, behind one interface.
 //
 // `webspeech` is the default because it costs nothing and needs nothing: the
 // webview's own `speechSynthesis`, which WKWebView (Tauri on macOS) and the
@@ -128,7 +128,7 @@ function voicesReady(synth: SpeechSynthesis): Promise<void> {
  *
  * macOS ships three grades of every system voice and hands `getVoices()`
  * whichever ones are installed. The default install has only *Compact* — the
- * formant-synthesis voice from the 2000s, and the reason Kaleo has sounded
+ * formant-synthesis voice from the 2000s, and the reason Ada has sounded
  * like a robot: nothing here ever asked for better, so the platform default
  * won. *Enhanced* and *Premium* are neural, sound like a person, and are a
  * free opt-in download (System Settings → Accessibility → Spoken Content →
@@ -320,7 +320,7 @@ export async function fetchElevenLabsAudio(
 //
 // The old path was `fetch` the whole mp3, then `new Audio(blobUrl)`. So
 // time-to-first-word was the time to download the LAST byte: a fifteen-second
-// digest is a fifteen-second file, and Hardy sat silent through all of it. The
+// digest is a fifteen-second file, and Ada sat silent through all of it. The
 // fix is progressive playback, and the design constraint is that Phase 1
 // replaces the transport (ElevenLabs' `stream-input` WebSocket, Flash v2.5,
 // multi-context, for barge-in) without replacing the player.

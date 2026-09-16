@@ -360,8 +360,8 @@ describe("StepPanel hierarchy", () => {
     render(<StepPanel run={waiting(["route"])} onDismiss={() => {}} />);
     // The case step was shown, so the headline names where it is.
     expect(screen.getByTestId("step-headline").textContent).toBe("Case is here.");
-    // Routing is the third of the seven stages.
-    expect(screen.getByText("3 of 7")).toBeTruthy();
+    // Routing is the fourth of the eight stages (plan comes first).
+    expect(screen.getByText("4 of 8")).toBeTruthy();
   });
 
   it("says so plainly when nothing is left to approve", () => {
@@ -995,6 +995,46 @@ describe("StepPanel review outcome", () => {
     expect(screen.queryAllByTestId("finding")).toHaveLength(0);
   });
 
+  it("prints a step's envelope warnings when no card of its own does", () => {
+    render(
+      <StepPanel
+        run={runOf([
+          step({
+            step: "propose",
+            next: ["place"],
+            warnings: ["datasheet cache unavailable: Firestore refused the connection"],
+          }),
+        ])}
+        onDismiss={() => {}}
+      />
+    );
+    const list = screen.getByTestId("envelope-warnings");
+    expect(list.getAttribute("data-step")).toBe("propose");
+    expect(screen.getByTestId("envelope-warning").textContent).toBe(
+      "datasheet cache unavailable: Firestore refused the connection"
+    );
+  });
+
+  it("prints the envelope's warnings on the review card, so a failed agenda is read", () => {
+    render(
+      <StepPanel
+        run={runOf([
+          {
+            ...reviewed,
+            spec_review: null,
+            warnings: ["the spec-review agenda could not be prepared: ModelError: 503"],
+          },
+        ])}
+        onDismiss={() => {}}
+      />
+    );
+    const warning = screen.getByTestId("review-warning");
+    expect(warning.textContent).toBe("the spec-review agenda could not be prepared: ModelError: 503");
+    expect(screen.getByTestId("review-outcome").contains(warning)).toBe(true);
+    // The generic envelope list stays out of it: review's card owns these lines.
+    expect(screen.queryByTestId("envelope-warnings")).toBeNull();
+  });
+
   it("settles into place with the shared motion vocabulary rather than popping", () => {
     render(<StepPanel run={runOf([reviewed])} onDismiss={() => {}} />);
     const card = screen.getByTestId("review-outcome");
@@ -1365,5 +1405,40 @@ describe("StepPanel case options", () => {
     fireEvent.click(screen.getByTestId("step-confirm"));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onConfirm.mock.calls[0][0]).toBeUndefined();
+  });
+});
+
+describe("StepPanel plan brief", () => {
+  it("shows the plan's questions with defaults and sends typed answers to propose", () => {
+    const approve = vi.fn();
+    const planned = step({
+      step: "plan",
+      stage: "planned",
+      next: ["propose"],
+      plan: {
+        ok: true,
+        warnings: [],
+        plan: {
+          building: "a 4-DOF desktop arm controller",
+          assumptions: [],
+          questions: [
+            { ask: "How many degrees of freedom?", default: "4 plus a gripper" },
+            { ask: "Budget?", default: "under $150" },
+          ],
+        },
+      },
+    });
+    render(
+      <StepPanel
+        run={{ ...runWith(planned), status: "waiting", available: ["propose"], approve }}
+        onDismiss={() => {}}
+      />
+    );
+    expect(screen.getByText("a 4-DOF desktop arm controller")).toBeTruthy();
+    const inputs = screen.getAllByTestId("plan-answer") as HTMLInputElement[];
+    expect(inputs.map((i) => i.placeholder)).toEqual(["Default: 4 plus a gripper", "Default: under $150"]);
+    fireEvent.change(inputs[0], { target: { value: "6 DOF" } });
+    fireEvent.click(document.querySelector("[data-testid=step-approve][data-step=propose]") as HTMLElement);
+    expect(approve).toHaveBeenCalledWith("propose", { answers: { "0": "6 DOF" } });
   });
 });

@@ -3,7 +3,7 @@ import { Button } from "@/components";
 
 /**
  * The overlay's drag handle. Upstream gated dragging behind an active
- * license and used this button to open a purchase popover; Kaleo has no
+ * license and used this button to open a purchase popover; Ada has no
  * licenses, so the handle is always just a handle.
  */
 export const DragButton = () => {

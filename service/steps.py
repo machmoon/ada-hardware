@@ -92,7 +92,7 @@ from silkscreen.agents.stages import (
     start_enclosure_stage,
     start_sourcing_stage,
 )
-from silkscreen.board import emit_kicad_pcb, write_board
+from silkscreen.board import emit_kicad_pcb, footprint_lib_id, write_board
 from silkscreen.schematic import build_schematic, write_project, write_schematic
 from silkscreen.sourcing import SourcingResult, bom_csv, bom_rows, grouped_bom_csv
 from silkscreen.units import to_mm
@@ -112,6 +112,28 @@ __all__ = [
 
 MAX_SESSIONS = 32
 MAX_EVENTS = 200
+
+#: Frames the steps sink also logs to stderr with their elapsed time.
+_TIMING_EVENTS = frozenset(
+    {
+        "stage.done",
+        "model.call",
+        "propose.round",
+        "propose.escalated",
+        "plan.round",
+        "plan.failed",
+    }
+)
+_TIMING_FIELDS = (
+    "stage",
+    "provider",
+    "model",
+    "elapsed_s",
+    "ok",
+    "round",
+    "errors",
+    "first_error",
+)
 MAX_ENCLOSURE_STYLE_CHARS = 500
 
 #: How many ``Idempotency-Key``s ``start`` remembers, and how long a key may
@@ -135,7 +157,7 @@ PRIOR_ART_TRANSPORT = None
 #: Also the order `next` lists them in, and the desktop draws the first as the
 #: primary button: once copper exists the case is the natural next step, and
 #: review is a choice beside it rather than the default.
-STEPS = ("place", "route", "case", "review", "sourcing", "order")
+STEPS = ("propose", "place", "route", "case", "review", "sourcing", "order")
 
 #: What each step needs to have happened first. ``review`` and ``order`` read
 #: the routed board and do not change it, so they may run in any order once
@@ -143,6 +165,7 @@ STEPS = ("place", "route", "case", "review", "sourcing", "order")
 #: is irrelevant to a case, and to a part number), so they open as soon as
 #: placement lands. Each runs at most once.
 _REQUIRES = {
+    "propose": "planned",
     "place": "proposed",
     "route": "placed",
     "review": "routed",
@@ -153,10 +176,12 @@ _REQUIRES = {
 
 #: The bridge stage name for each step that has something to show.
 #:
-#: ``case`` is deliberately absent. The enclosure is a STEP assembly now, and
-#: nothing in this repo launches a CAD GUI to show it: the desktop hands the
-#: file to whatever owns ``.step``. The OpenSCAD live window that used to sit
-#: here went with the v1 emitter on 2026-09-08.
+#: ``case`` is deliberately absent *here*: this table is the KiCad bridge,
+#: and the enclosure is not KiCad's to show. The case has its own path --
+#: :func:`open_in_freecad` when it lands, and the FreeCAD live show
+#: (:class:`_FreeCADLive`) that swaps each finished solid into an open
+#: FreeCAD while the case is being designed. The OpenSCAD live window that
+#: used to sit here went with the v1 emitter on 2026-09-08.
 _BRIDGE_STAGE = {
     "propose": "schematic",
     "place": "placement",
@@ -174,8 +199,10 @@ VIEW_3D = "view3d"
 #: end of the board, so that is where the 3D viewer belongs: opened any
 #: earlier it shows a board with no copper on it. The follow-up is advisory --
 #: it opens a window, it does not produce the board -- so it can fail without
-#: making the stage that earned it read as "not shown".
-_FOLLOW_STAGE = {"routing": "3d"}
+#: making the stage that earned it read as "not shown". It is ``3d-open``, the
+#: viewer on the board routing just pushed copper into, never ``3d``, which
+#: reopens the routed file underneath the viewer and closes it again.
+_FOLLOW_STAGE = {"routing": "3d-open"}
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -186,6 +213,18 @@ class StepNotFound(LookupError):
 
 class StepOrderError(RuntimeError):
     """The step cannot run yet, or already ran."""
+
+
+class StartInFlightError(StepOrderError):
+    """A start under this ``Idempotency-Key`` is still running.
+
+    Unlike every other :class:`StepOrderError` this one is worth retrying: the
+    same request will be answered with the original body once the first one
+    finishes. The route marks it ``should_retry`` so a client can tell it from
+    "route before place", which retrying can never fix -- Stripe's split
+    between a conflict and ``Stripe-Should-Retry`` (stripe-python
+    ``_http_client.py::_should_retry``).
+    """
 
 
 @dataclass
@@ -212,7 +251,16 @@ class Session:
     #: ran. Kept so the overlay can show what the board was designed against
     #: -- a brief the engineer never sees is a brief they cannot correct.
     plan: Any = None
+    #: Held from start for a ``plan_first`` session's later ``propose``.
+    prior_art: Any = None
+    research: bool = False
+    max_repairs: int = 1
+    cache_warnings: list[str] = field(default_factory=list)
     spec: Any = None
+    #: The FreeCAD live show for this session's case (:class:`_FreeCADLive`),
+    #: started at ``place`` with the background design; None when the
+    #: session never asked to be shown.
+    freecad_live: Any = None
     board: Any = None
     route: Any = None
     findings: list[Any] = field(default_factory=list)
@@ -326,10 +374,20 @@ def reset_sessions() -> None:
 
 
 def _register(session: Session) -> None:
+    """Make ``session`` addressable; idempotent for an id already registered.
+
+    Eviction prefers a session no step is running (``lock`` free), oldest
+    first, and takes the oldest running one only when every session is busy
+    -- ``service/runs.py::new_run``'s rule. Evicting by age alone deleted a
+    session mid-step: its envelope then named an id the next press 404'd on.
+    """
     with _REGISTRY_LOCK:
+        if session.id in _SESSIONS:
+            return
         while len(_SESSIONS) >= MAX_SESSIONS:
-            oldest = min(_SESSIONS.values(), key=lambda s: s.created)
-            del _SESSIONS[oldest.id]
+            idle = [s for s in _SESSIONS.values() if not s.lock.locked()]
+            victim = min(idle or _SESSIONS.values(), key=lambda s: s.created)
+            del _SESSIONS[victim.id]
         _SESSIONS[session.id] = session
 
 
@@ -685,6 +743,93 @@ def open_case_in_freecad(session_id: str) -> dict[str, Any]:
     return {"opened": opened, "detail": detail}
 
 
+#: Seconds FreeCAD gets to start and run the HardyLive macro before the first
+#: solid is due. A cold FreeCAD on this Mac takes ten to twenty seconds to a
+#: window; the board solid is the first thing the kernel finishes and the
+#: model call before it usually covers the wait.
+FREECAD_LIVE_READY_S = 45.0
+
+
+def _freecad_client_factory():
+    """The ``desktop/freecad_live.FreeCADLive`` class, imported from the
+    checkout (``desktop/`` is not a package the service depends on; like
+    ``kicad_live`` it is reached by path). A module-level seam so the tests
+    can hand in a recorder."""
+    import importlib
+
+    desktop = str(_REPO_ROOT / "desktop")
+    if desktop not in sys.path:
+        sys.path.insert(0, desktop)
+    return importlib.import_module("freecad_live").FreeCADLive
+
+
+class _FreeCADLive:
+    """The case, drawn into an open FreeCAD as the kernel builds it.
+
+    Started at ``place`` alongside the background case design: FreeCAD is
+    launched running ``desktop/freecad/HardyLive.FCMacro`` (an XML-RPC
+    server on the loopback, see that file), and each finished solid the
+    stage exports -- board, base, lid, and again on a repair round -- is
+    swapped in with ``replace_shape``. ``send`` runs on the enclosure worker
+    thread; the first call waits for FreeCAD to answer, once, up to
+    ``FREECAD_LIVE_READY_S``.
+
+    Every failure is one sentence in ``detail`` and stops the show; none
+    reaches the design. FreeCAD not installed, the macro missing, a window
+    that never answered, a solid it refused -- the case step reports which,
+    and falls back to opening the finished STEP the ordinary way.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+        self.detail: str | None = None
+        self.solids = 0
+        self.client = None
+        self._ready = False
+        self._lock = threading.Lock()
+        app = freecad_app()
+        if app is None:
+            configured = os.environ.get(FREECAD_APP_ENV, "").strip()
+            self.detail = (
+                f"{FREECAD_APP_ENV}={configured!r} does not exist"
+                if configured
+                else FREECAD_NOT_INSTALLED
+            )
+            return
+        try:
+            client = _freecad_client_factory()()
+            if client.ready():
+                self._ready = True
+            else:
+                client.launch(app)
+        except Exception as exc:  # noqa: BLE001 - one sentence, never the design
+            self.detail = f"FreeCAD live show could not start: {exc}"
+            return
+        self.client = client
+
+    @property
+    def active(self) -> bool:
+        return self.client is not None and self.detail is None
+
+    def send(self, name: str, seq: int, path: Path) -> None:
+        """``stages.LiveCase``: one finished solid, in build order."""
+        with self._lock:
+            if not self.active:
+                return
+            try:
+                if not self._ready:
+                    self.client.wait_ready(FREECAD_LIVE_READY_S)
+                    self._ready = True
+                self.client.replace_shape(path, name)
+                self.solids += 1
+            except Exception as exc:  # noqa: BLE001 - reported on the case step
+                self.detail = f"FreeCAD live show stopped at {name}: {exc}"
+                sys.stderr.write(f"freecad live: {self.detail}\n")
+
+    def report(self) -> dict[str, Any]:
+        return {"shown": self.solids > 0, "solids": self.solids, "detail": self.detail}
+
+
 def _follow(session: Session, stage: str) -> None:
     """Spawn the stage that rides on ``stage``, if any. Never raises.
 
@@ -778,6 +923,18 @@ def _events_sink(
         event = dict(event)
         event["t_s"] = round(time.monotonic() - started, 3)
         events.append(event)
+        # One stderr line per timing-relevant frame, so "why did the draft take
+        # 250 s" is answered from the service log rather than a client that
+        # already discarded the envelope. Names and counts only, no content.
+        name = str(event.get("event", ""))
+        if name in _TIMING_EVENTS:
+            detail = " ".join(
+                f"{k}={str(event[k])[:160]!r}"
+                for k in _TIMING_FIELDS
+                if event.get(k) is not None
+            )
+            line = f"[steps {event['t_s']:7.1f}s] {name} {detail}"
+            print(line, file=sys.stderr, flush=True)
 
     tap = None if model is None else EventingModel(model, emit)
     cheap_tap = (
@@ -802,9 +959,7 @@ def _events_sink(
 def _write_schematic(session: Session) -> None:
     footprints = None
     if session.board is not None:
-        footprints = {
-            p.ref: f"silkscreen:{p.footprint.name}" for p in session.board.parts
-        }
+        footprints = {p.ref: footprint_lib_id(p) for p in session.board.parts}
     sheet = build_schematic(session.spec, footprints=footprints)
     if session.board is not None:
         session.board.warnings.extend(sheet.warnings)
@@ -818,7 +973,9 @@ def _write_schematic(session: Session) -> None:
         )
     )
     session.files["project"] = str(
-        write_project(session.path(".kicad_pro"), project_name=session.stem)
+        write_project(
+            session.path(".kicad_pro"), project_name=session.stem, spec=session.spec
+        )
     )
 
 
@@ -841,6 +998,9 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
     research = payload.get("research", payload.get("prior_art", False))
     if not isinstance(research, bool):
         raise ValueError("'research' must be a boolean")
+    plan_first = payload.get("plan_first", False)
+    if not isinstance(plan_first, bool):
+        raise ValueError("'plan_first' must be a boolean")
     # The thinking level, validated before anything spends time or quota and
     # never defaulted on a bad name -- ``/generate``'s rule, for the same
     # reason: a session that answers a 'thorough' request at 'fast' while
@@ -886,6 +1046,13 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
         time_limit_s=time_limit_s,
         effort=str(profile.level),
     )
+    # Addressable from the first model call, not after the last one. A start
+    # is a fifteen-minute request on a slow model (measured 2026-09-16: 870 s,
+    # then a broken pipe, then a session registered to nobody), and a session
+    # that exists only once propose has finished cannot be polled, cancelled
+    # or found by anything while the money is being spent. ``_get`` answers
+    # stage ``new`` with an empty ``next`` until the start lands.
+    _register(session)
     # Built from the model the request handed in, so the receipt names the
     # cheap tier only when this model family actually offers one -- the
     # pipeline's rule, and the reason the receipt has both ``cheap_stages``
@@ -972,15 +1139,58 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
         enter=enter,
     )
     session.plan = plan_result
+    session.prior_art = prior_art_result
+    session.research = research
+    session.max_repairs = max_repairs
+    session.cache_warnings = cache_warnings
+    if plan_first:
+        # Stop at the brief: its questions go to the engineer before the
+        # expensive propose call (gpt-engineer's clarify-then-generate order,
+        # gpt_engineer/tools/custom_steps.py::clarified_gen). `propose` takes
+        # the answers; skipping them designs against the stated defaults.
+        session.stage = "planned"
+        _register(session)
+        return _envelope(
+            session,
+            step="plan",
+            events=events,
+            started=started,
+            body={"plan": plan_result.as_dict() if plan_result else None},
+        )
+    session.done.add("propose")
+    return _propose_and_draw(session, tapped, events, emit, enter, started)
+
+
+def _propose(session: Session, payload: dict[str, Any], *, model) -> dict[str, Any]:
+    """Propose the circuit against the plan, with the engineer's answers."""
+    answers = payload.get("answers", {})
+    if not isinstance(answers, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in answers.items()
+    ):
+        raise ValueError("'answers' must be an object of question -> answer strings")
+    plan_result = session.plan
+    if plan_result is not None and plan_result.plan is not None and answers:
+        from dataclasses import replace
+
+        session.plan = replace(plan_result, plan=plan_result.plan.with_answers(answers))
+    started = time.monotonic()
+    events, emit, enter, tapped, _ = _events_sink(started, model, session)
+    return _propose_and_draw(session, tapped, events, emit, enter, started)
+
+
+def _propose_and_draw(
+    session: Session, tapped, events, emit, enter, started
+) -> dict[str, Any]:
+    prior_art_result = session.prior_art
     session.spec, attempts = propose_stage(
         tapped,
-        intent=intent,
+        intent=session.intent,
         facts=session.facts,
         # The same text generate_pcb hands propose: the plan's brief, then the
         # cited prior art, so the two drivers cannot design against different
         # context.
-        brief=design_brief(plan_result, prior_art_result),
-        max_repairs=max_repairs,
+        brief=design_brief(session.plan, prior_art_result),
+        max_repairs=session.max_repairs,
         emit=emit,
         enter=enter,
         propose_on_event=emit,
@@ -1001,13 +1211,13 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
             {"part": f.part_number, "pins": len(f.pins)} for f in session.facts
         ],
     }
-    if research:
+    if session.research:
         # Present only when asked for, so a plain start's body is unchanged.
         body["prior_art"] = (
             None if prior_art_result is None else prior_art_result.as_dict()
         )
-    if cache_warnings:
-        body["warnings"] = cache_warnings
+    if session.cache_warnings:
+        body["warnings"] = session.cache_warnings
     return _envelope(
         session,
         step="propose",
@@ -1089,6 +1299,14 @@ def _prefetch_case(session: Session, model) -> None:
         started, model, session=session, cheap=_cheap_for(session, model, "enclosure")
     )
     session.case_events = events
+    # The FreeCAD live show rides the background design: one window,
+    # started now, that the board, base and lid are swapped into as the
+    # kernel finishes each. Only for a session that asked to be shown, and
+    # only when FreeCAD is here -- otherwise the show is a sentence on the
+    # case step and the finished STEP opens the ordinary way.
+    if session.kicad_live and session.freecad_live is None:
+        session.freecad_live = _FreeCADLive(session)
+    live = session.freecad_live
     session.case_job = start_enclosure_stage(
         cheap if cheap is not None else tapped,
         session.board,
@@ -1102,6 +1320,11 @@ def _prefetch_case(session: Session, model) -> None:
         emit=emit,
         enter=enter,
         daemon=True,
+        live=live.send if live is not None and live.active else None,
+        # The case is designed, not just sized (agents/enclosure_style.py):
+        # the proposal may run on the cheap lane, the design pass does not.
+        restyle=True,
+        style_model=tapped,
     )
 
 
@@ -1295,10 +1518,102 @@ def _collect_sourcing(session: Session) -> tuple[SourcingResult, list[str]]:
     return session.sourcing, warnings
 
 
+class _LiveStream:
+    """The ``stream`` bridge: copper drawn into the open pcbnew as the router
+    lays it, one JSON line per net down the bridge's stdin.
+
+    Started before the router runs and closed after; the step then still
+    spawns the ordinary ``routing`` bridge through ``_envelope`` -> ``_show``,
+    which re-reads the file and skips every item already on the board, so
+    a stream that died half-way is completed from the file rather than left
+    short, and a stream that finished costs one no-op pass. A bridge that
+    refused (API server off, no pcbnew) is reported through
+    ``session.shown_detail`` in its own words; a broken pipe stops the feed
+    and says so once, and never fails the step -- the copper on disk is the
+    product, the live view is the show.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+        self.proc: subprocess.Popen | None = None
+        self.failed: str | None = None
+        argv = bridge_command(session.path(".kicad_pcb"), "stream")
+        if argv is None:
+            self.failed = NO_BRIDGE_DETAIL
+            return
+        try:
+            self.proc = subprocess.Popen(
+                argv,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            self.failed = (
+                "live routing was not shown in KiCad: the bridge failed to start "
+                f"({exc})"
+            )
+
+    def send(self, action: str, net: str, copper: dict[str, Any]) -> None:
+        if self.proc is None or self.failed or self.proc.stdin is None:
+            return
+        line = json.dumps({"action": action, "net": net, **copper})
+        try:
+            self.proc.stdin.write(line + "\n")
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError) as exc:
+            self.failed = f"live routing stopped reaching KiCad: {exc}"
+
+    def finish(self) -> None:
+        """Say ``end``, wait for the bridge, and record how it went."""
+        if self.proc is not None and not self.failed:
+            self.send("end", "", {})
+        if self.proc is not None:
+            # ``communicate`` closes stdin itself (and would raise on one
+            # already closed), so nothing here closes it first. Whatever the
+            # bridge does, this returns: the step's answer is the copper on
+            # disk, not the show.
+            try:
+                try:
+                    _, err = self.proc.communicate(timeout=BRIDGE_GRACE_S)
+                except subprocess.TimeoutExpired:
+                    self.proc.kill()
+                    _, err = self.proc.communicate()
+                    self.failed = self.failed or (
+                        "live routing was not shown in KiCad: the bridge did not finish"
+                    )
+                else:
+                    if self.proc.returncode != 0 and not self.failed:
+                        self.failed = _bridge_failure(
+                            "live routing", err, self.proc.returncode
+                        )
+            except (OSError, ValueError) as exc:
+                self.failed = self.failed or f"live routing bridge: {exc}"
+        if self.failed:
+            sys.stderr.write(f"kicad_live bridge: {self.failed}\n")
+            if self.session.shown_detail is None:
+                self.session.shown_detail = self.failed
+
+
 def _route(session: Session, payload: dict[str, Any], *, model) -> dict[str, Any]:
     started = time.monotonic()
     events, emit, enter, _, _ = _events_sink(started, session=session)
-    session.route = route_stage(session.board, route=True, emit=emit, enter=enter)
+    # Live only when the session asked to be shown in KiCad: the stream is a
+    # bridge process per route step and a JSON line per net, and a session
+    # that never wanted an editor open gets neither.
+    stream = _LiveStream(session) if session.kicad_live else None
+    try:
+        session.route = route_stage(
+            session.board, route=True, emit=emit, enter=enter,
+            live=(
+                stream.send if stream is not None and stream.proc is not None else None
+            ),
+        )
+    finally:
+        if stream is not None:
+            stream.finish()
     session.files["board"] = str(write_board(session.board, session.path(".kicad_pcb")))
     session.stage = "routed"
     route = session.route
@@ -1679,6 +1994,7 @@ def _case(session: Session, payload: dict[str, Any], *, model) -> dict[str, Any]
         # the session directory under the board's stem, so ``<stem>.step``,
         # ``<stem>-base.stl`` and ``<stem>-lid.stl`` land beside the board.
         events, emit, enter, tapped, _ = _events_sink(started, model, session=session)
+        live = session.freecad_live
         session.enclosure = enclosure_stage(
             tapped,
             session.board,
@@ -1691,6 +2007,8 @@ def _case(session: Session, payload: dict[str, Any], *, model) -> dict[str, Any]
             stem=session.stem,
             emit=emit,
             enter=enter,
+            live=live.send if live is not None and live.active else None,
+            restyle=True,
         )
     else:
         # Collect the design started at ``place``, waiting if it is still
@@ -1731,17 +2049,36 @@ def _case(session: Session, payload: dict[str, Any], *, model) -> dict[str, Any]
         # Desktop mode shows each stage in the tool that reads it: KiCad for
         # the board, FreeCAD for the case. Pressing ``case`` is the ask.
         if session.kicad_live:
-            opened, detail = open_in_freecad(step_path)
-            body["opened_in_freecad"] = opened
-            body["freecad_detail"] = detail
-            if not opened and detail:
-                note = f"the case was not opened in FreeCAD: {detail}"
+            live = session.freecad_live
+            # "Shown" only when the show ran to the end: a window holding one
+            # solid of three is not the case, so the finished STEP opens too.
+            shown_live = live is not None and live.solids > 0 and live.detail is None
+            body["freecad_live"] = None if live is None else live.report()
+            if live is not None and live.detail:
+                # The show stopped, or never started: said here in the
+                # bridge's words, and the finished case still opens below.
+                note = f"the case was not shown live in FreeCAD: {live.detail}"
                 warnings.append(note)
-                # The case panel reads the enclosure block's own warnings, so
-                # the sentence goes there too rather than only on the envelope.
                 block = body.get("enclosure")
                 if isinstance(block, dict):
                     block.setdefault("warnings", []).append(note)
+            if shown_live:
+                # The window already holds the finished solids; a second
+                # ``open -n`` would be a second FreeCAD with the same case.
+                body["opened_in_freecad"] = True
+                body["freecad_detail"] = None
+            else:
+                opened, detail = open_in_freecad(step_path)
+                body["opened_in_freecad"] = opened
+                body["freecad_detail"] = detail
+                if not opened and detail:
+                    note = f"the case was not opened in FreeCAD: {detail}"
+                    warnings.append(note)
+                    # The case panel reads the enclosure block's own warnings,
+                    # so the sentence goes there too, not only on the envelope.
+                    block = body.get("enclosure")
+                    if isinstance(block, dict):
+                        block.setdefault("warnings", []).append(note)
     else:
         warnings.append(NO_CASE_WARNING)
     if warnings:
@@ -1752,6 +2089,7 @@ def _case(session: Session, payload: dict[str, Any], *, model) -> dict[str, Any]
 
 
 _RUNNERS = {
+    "propose": _propose,
     "place": _place,
     "route": _route,
     "review": _review,
@@ -1791,7 +2129,7 @@ def advance(
 
 
 def _reached(stage: str) -> set[str]:
-    order = ["new", "proposed", "placed", "routed"]
+    order = ["new", "planned", "proposed", "placed", "routed"]
     return set(order[: order.index(stage) + 1]) if stage in order else set(order)
 
 
@@ -1926,7 +2264,7 @@ def start_once(
         if idempotency_key in _STARTED:
             answered = _STARTED[idempotency_key]
             if answered is None:
-                raise StepOrderError(
+                raise StartInFlightError(
                     "a run with this Idempotency-Key is already starting; "
                     "it was not started again. Ask for it once it has finished."
                 )

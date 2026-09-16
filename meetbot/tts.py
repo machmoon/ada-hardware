@@ -1,4 +1,4 @@
-"""Hardy's voice for the Meet bot: text in, one complete mono WAV out.
+"""Ada's voice for the Meet bot: text in, one complete mono WAV out.
 
 Which voice answered is part of the answer. Every successful call returns a
 :class:`Synthesis` whose ``source`` names the path that actually produced the

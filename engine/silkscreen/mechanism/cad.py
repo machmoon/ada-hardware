@@ -47,7 +47,14 @@ from . import rules
 from .errors import MechanismBuildError
 from .ir import MechanismSpec
 from .kinematics import Mat, link_frames
-from .layout import Layout, ServoPlacement, dowel_hole_nm, housing_dims, layout_for, seat_bore_nm
+from .layout import (
+    Layout,
+    ServoPlacement,
+    dowel_hole_nm,
+    housing_dims,
+    layout_for,
+    seat_bore_nm,
+)
 
 __all__ = [
     "MechanismPart",

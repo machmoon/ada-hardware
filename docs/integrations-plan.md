@@ -244,7 +244,7 @@ and is the one half that could plausibly be exercised live first.
 
 ## Contract 5 — structured spec review
 
-The product idea: instead of returning a wall of text after a run, Kaleo books
+The product idea: instead of returning a wall of text after a run, Ada books
 time and shows up. The review's blockers become an agenda, the agenda becomes
 a calendar hold with a Meet link, and the humans decide the open questions in
 the meeting.

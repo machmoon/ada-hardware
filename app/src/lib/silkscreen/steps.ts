@@ -21,6 +21,7 @@ import type {
 
 /** Every step the engine can take, in pipeline order. */
 export const STEP_ORDER: readonly StepName[] = Object.freeze([
+  "plan",
   "propose",
   "place",
   "route",
@@ -41,6 +42,7 @@ export interface StepDescriptor {
 }
 
 export const STEP_DESCRIPTORS: Record<StepName, StepDescriptor> = {
+  plan: { id: "plan", label: "Plan", action: "Plan the design", where: "overlay" },
   propose: { id: "propose", label: "Schematic", action: "Propose circuit", where: "kicad" },
   place: { id: "place", label: "Placement", action: "Place parts", where: "kicad" },
   route: { id: "route", label: "Routing", action: "Route copper", where: "kicad" },
@@ -770,6 +772,13 @@ export const REVIEW_CLEAN_LINE = "The critic found nothing to flag.";
 export interface ReviewDetails extends ReviewOutcomeState {
   findings: Finding[];
   blockers: number;
+  /**
+   * The step envelope's own warnings: a critic that produced no verdict, an
+   * agenda that could not be prepared. They ride beside the findings because
+   * a `spec_review: null` with one of these is a failure, not "nothing to
+   * propose", and the card is the only place that can say so.
+   */
+  warnings: string[];
 }
 
 export function reviewDetails(response: StepResponse | undefined): ReviewDetails | null {
@@ -783,7 +792,40 @@ export function reviewDetails(response: StepResponse | undefined): ReviewDetails
         a.index - b.index
     )
     .map(({ finding }) => finding);
-  return { ...outcome, findings, blockers: response.blockers?.length ?? 0 };
+  return {
+    ...outcome,
+    findings,
+    blockers: response.blockers?.length ?? 0,
+    warnings: stringsOf(response.warnings),
+  };
+}
+
+// ---------------------------------------------------------------- envelope warnings
+
+/**
+ * Steps whose detail parser already folds the envelope's `warnings` into
+ * what its card renders. Everything else drops them on the floor unless the
+ * panel shows them through `envelopeWarnings` -- which is how a datasheet
+ * cache failure on `propose`, a "no FreeCAD" on `case` and a distributor
+ * outage on `sourcing` all went unseen until 2026-09-13.
+ */
+const ENVELOPE_WARNINGS_IN_DETAILS: ReadonlySet<StepName> = new Set<StepName>([
+  "place",
+  "route",
+  "order",
+  "review",
+]);
+
+/**
+ * The envelope warnings a step's own card does not already show. Empty for
+ * the steps in `ENVELOPE_WARNINGS_IN_DETAILS`, so nothing is printed twice;
+ * the engine's words otherwise, unfiltered, because every one of them is a
+ * sentence the engine chose to send instead of failing.
+ */
+export function envelopeWarnings(response: StepResponse | undefined): string[] {
+  if (!response || isUnreceivedStep(response)) return [];
+  if (ENVELOPE_WARNINGS_IN_DETAILS.has(response.step)) return [];
+  return stringsOf(response.warnings);
 }
 
 // ---------------------------------------------------------------- case
@@ -1025,6 +1067,7 @@ export interface HeadlineInput {
 
 /** What the strip says it is doing, in the first person, while a step runs. */
 const STEP_GERUND: Record<StepName, string> = {
+  plan: "planning the design",
   propose: "drafting the schematic",
   place: "placing the parts",
   route: "routing copper",
@@ -1313,6 +1356,7 @@ export function armCommand(command: StepCommand, source: string): ArmedCommand |
  * hits and "border" does not; "go" and friends mean "whatever is next".
  */
 const STEP_WORDS: Record<StepName, readonly string[]> = {
+  plan: ["plan", "brief", "requirements"],
   propose: ["propose", "schematic", "circuit"],
   place: ["place", "placement", "placed", "layout"],
   route: ["route", "routing", "copper", "traces", "tracks"],
@@ -1588,6 +1632,7 @@ export function stageCalls(response: StepResponse | undefined): number | null {
  * the placer may not use its seconds, which is why nothing here is a fraction.
  */
 export const METHOD_LINE: Record<StepName, string> = {
+  plan: "asks the model for a brief: power, rails, blocks, and the requirements to settle",
   propose: "asks the model for a circuit, validates it, repairs in batches",
   place: "CP-SAT over courtyards, wirelength and area, deterministic",
   route: "A* over a 0.25 mm grid, one net at a time",

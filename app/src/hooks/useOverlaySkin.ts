@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { KALEO_STORAGE_KEYS } from "@/config/kaleo.constants";
 import {
   getSkin,
-  getTerminalHardy,
+  getTerminalAda,
   setSkin as persistSkin,
   type SkinId,
 } from "@/lib/overlay-skin";
@@ -20,11 +20,11 @@ import {
  */
 export function useOverlaySkin(): {
   skin: SkinId;
-  hardyInTerminal: boolean;
+  adaInTerminal: boolean;
   setSkin: (id: SkinId) => void;
 } {
   const [skin, setSkin] = useState<SkinId>(() => getSkin());
-  const [hardyInTerminal, setHardy] = useState<boolean>(() => getTerminalHardy());
+  const [adaInTerminal, setAda] = useState<boolean>(() => getTerminalAda());
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -32,11 +32,11 @@ export function useOverlaySkin(): {
       // than leaving the overlay on a skin that no longer exists.
       if (event.key === null) {
         setSkin(getSkin());
-        setHardy(getTerminalHardy());
+        setAda(getTerminalAda());
         return;
       }
       if (event.key === KALEO_STORAGE_KEYS.OVERLAY_SKIN) setSkin(getSkin());
-      if (event.key === KALEO_STORAGE_KEYS.TERMINAL_ADA) setHardy(getTerminalHardy());
+      if (event.key === KALEO_STORAGE_KEYS.TERMINAL_ADA) setAda(getTerminalAda());
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -49,5 +49,5 @@ export function useOverlaySkin(): {
     setSkin(id);
   };
 
-  return { skin, hardyInTerminal, setSkin: choose };
+  return { skin, adaInTerminal, setSkin: choose };
 }

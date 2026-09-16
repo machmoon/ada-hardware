@@ -47,7 +47,8 @@ from google.adk.models.llm_response import LlmResponse
 from pydantic import Field, PrivateAttr
 
 from .. import resilience as _resilience
-from ..model import CHEAP_MODEL, FALLBACK_MODEL, ModelError
+from ..claude import CLAUDE_CHEAP_MODEL, claude_primary_model, is_claude_model
+from ..model import CHEAP_MODEL, FALLBACK_MODEL, ModelError, primary_model
 from ..resilience import provider_is_down, quota_cooldown_s
 
 __all__ = ["FailoverLlm", "orchestrator_ladder", "build_failover_llm"]
@@ -59,12 +60,50 @@ __all__ = ["FailoverLlm", "orchestrator_ladder", "build_failover_llm"]
 DEFAULT_ATTEMPTS = (2, 2, 1)
 
 
-def orchestrator_ladder(model: str) -> list[str]:
-    """``model``, then the full-Flash tier, then flash-lite, de-duplicated."""
+def _providers() -> list[str]:
+    """The configured provider order, or Gemini alone when nothing is.
+
+    With nothing configured the root keeps its old behaviour -- Gemini tiers
+    that fail at call time with Gemini's own "GOOGLE_API_KEY is not set" --
+    because the chat route has always reported that as a run error rather
+    than refusing before the stream opens.
+    """
+    from ..providers import provider_order
+
+    try:
+        return provider_order()
+    except ModelError:
+        return ["gemini"]
+
+
+def orchestrator_ladder(model: str, providers: list[str] | None = None) -> list[str]:
+    """The requested model's provider first, then every other configured one.
+
+    Gemini's tiers are ``model`` (or the primary), the full-Flash tier, then
+    flash-lite; Claude's are ``model`` (or the reasoning tier), then the cheap
+    tier. Picking a Gemini model in the web client leads with Gemini and keeps
+    Claude behind it, and the reverse -- the provider the person chose is the
+    one asked first. De-duplicated.
+    """
+    order = list(providers) if providers is not None else _providers()
+    owner = "claude" if is_claude_model(model) else "gemini"
+    order = [owner] + [p for p in order if p != owner]
     ladder: list[str] = []
-    for model_id in (model, FALLBACK_MODEL, CHEAP_MODEL):
-        if model_id and model_id not in ladder:
-            ladder.append(model_id)
+    for provider in order:
+        if provider == "claude":
+            ids = (
+                model if owner == "claude" else claude_primary_model(),
+                CLAUDE_CHEAP_MODEL,
+            )
+        else:
+            ids = (
+                model if owner == "gemini" else primary_model(),
+                FALLBACK_MODEL,
+                CHEAP_MODEL,
+            )
+        for model_id in ids:
+            if model_id and model_id not in ladder:
+                ladder.append(model_id)
     return ladder
 
 
@@ -178,13 +217,27 @@ def build_failover_llm(
     on_retry: Callable[[dict[str, Any]], None] | None = None,
     before_attempt: Callable[[], None] | None = None,
 ) -> FailoverLlm:
-    """The live ladder for one requested root model id."""
+    """The live ladder for one requested root model id.
+
+    Gemini tiers are ADK's native ``Gemini``; Claude tiers are ADK's own
+    ``AnthropicLlm`` adapter (:mod:`.claude_llm`). A Claude tier only appears
+    when Claude is configured, so a Google-key-only service builds exactly
+    the three Gemini tiers it did before.
+    """
     from google.adk.models import Gemini
 
     ladder = orchestrator_ladder(model)
+    tiers: list[BaseLlm] = []
+    for model_id in ladder:
+        if is_claude_model(model_id):
+            from .claude_llm import build_claude_llm
+
+            tiers.append(build_claude_llm(model_id))
+        else:
+            tiers.append(Gemini(model=model_id))
     return FailoverLlm(
         model=model,
-        tiers=[Gemini(model=model_id) for model_id in ladder],
+        tiers=tiers,
         on_retry=on_retry,
         before_attempt=before_attempt,
     )

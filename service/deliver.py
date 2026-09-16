@@ -7,8 +7,8 @@ attached, a review on the calendar -- and ``python -m googleapps run`` cannot
 do that for a run that already happened. These two routes can:
 
     GET  /deliver/config          what is configured; never a secret
-    POST /deliver/auth/start      consent URL for Hardy to open (client opens it)
-    POST /deliver/auth            finish Hardy sign-in, or all-in-one server open
+    POST /deliver/auth/start      consent URL for Ada to open (client opens it)
+    POST /deliver/auth            finish Ada sign-in, or all-in-one server open
     POST /steps/<id>/deliver      send the named session to Chat / Gmail / Calendar,
                                   or book a spec review (agenda + Meet link)
 
@@ -283,13 +283,13 @@ def config_report(config: Any | None = None) -> dict[str, Any]:
     if status == "missing":
         if oauth:
             hints.append(
-                "Gmail and Calendar: sign in with Google from Hardy's Send panel "
+                "Gmail and Calendar: sign in with Google from Ada's Send panel "
                 f"(or run `python -m googleapps auth`; token at {config.token_path})"
             )
     elif not auth.token_file_is_private(config.token_path):
         hints.append(
             f"the token file {config.token_path} is not mode 0600; "
-            "sign in again from Hardy's Send panel to rewrite it"
+            "sign in again from Ada's Send panel to rewrite it"
         )
 
     signed_in = oauth and status != "missing"
@@ -347,7 +347,7 @@ def start_auth() -> dict[str, Any]:
     the same shape as :func:`config_report` so the panel can refresh in one
     round-trip.
 
-    Prefer :func:`begin_auth` + :func:`finish_auth` from Hardy: the overlay
+    Prefer :func:`begin_auth` + :func:`finish_auth` from Ada: the overlay
     opens the consent URL itself (Tauri ``openUrl``), which is reliable when
     the service process cannot open a browser from a worker thread.
     """
@@ -382,7 +382,7 @@ SIGN_OUT_NOTE = (
 
 @dataclass
 class AuthJob:
-    """One Hardy sign-in: URL first, then the finished config -- or the error.
+    """One Ada sign-in: URL first, then the finished config -- or the error.
 
     Kept after it finishes, until the next :func:`begin_auth`, so a poll that
     arrives after the redirect still sees ``connected`` (or ``failed`` with
@@ -481,7 +481,7 @@ def sign_out(config: Any | None = None) -> dict[str, Any]:
 
 
 def begin_auth() -> dict[str, Any]:
-    """Start OAuth and return the consent URL for Hardy to open.
+    """Start OAuth and return the consent URL for Ada to open.
 
     Does not open a browser here — the overlay calls Tauri ``openUrl`` on
     ``auth_url``, then :func:`finish_auth` to wait for the redirect.
@@ -516,7 +516,7 @@ def begin_auth() -> dict[str, Any]:
 
     def worker() -> None:
         try:
-            # Hardy opens the URL; a no-op here avoids a second, failing attempt
+            # Ada opens the URL; a no-op here avoids a second, failing attempt
             # from the service thread.
             auth.run_auth_flow(
                 config,
@@ -546,7 +546,7 @@ def begin_auth() -> dict[str, Any]:
 
 
 def finish_auth() -> dict[str, Any]:
-    """Wait for the Hardy-opened consent redirect and return a fresh config.
+    """Wait for the Ada-opened consent redirect and return a fresh config.
 
     The job is kept afterwards: a second call returns the same report (or
     raises the same error) rather than "no sign-in in progress".
@@ -850,7 +850,7 @@ def handle_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     if route == "/deliver/auth/start":
         return begin_auth()
     if route == "/deliver/auth":
-        # Hardy finishes with client_opens after /start; bare POST keeps the
+        # Ada finishes with client_opens after /start; bare POST keeps the
         # all-in-one server-side browser open for CLI-style callers.
         if payload.get("client_opens"):
             return finish_auth()

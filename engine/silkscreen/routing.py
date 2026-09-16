@@ -9,7 +9,14 @@ the end of the line.
 This is a two-layer grid maze router: A* over a uniform lattice with an
 explicit via cost, nets routed one at a time, each net grown from its first
 terminal outward so later terminals connect to the nearest point of the tree
-already laid rather than back to the first pad.
+already laid rather than back to the first pad. The move set is
+**octilinear** (since 2026-09-13): four orthogonal steps and four diagonals,
+priced 12 to 17 so a diagonal is cheaper than the two orthogonals it
+replaces, which is how every corner whose inside node is free comes out as
+a 45-degree chamfer rather than a right angle. The two rules a diagonal obeys
+-- no corner cutting, no acute turn -- and the prior art for them are stated
+at ``_MOVES`` and in :func:`_astar`. Schematic wires are untouched: they
+stay orthogonal by convention, and this module never reaches them.
 
 **It is not a competitive autorouter and does not pretend to be.** A uniform
 grid does not land on the pins of a fine-pitch package, and the two ways that
@@ -43,7 +50,7 @@ from __future__ import annotations
 
 import heapq
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 
 from .packing import Layer
@@ -106,9 +113,34 @@ DEFAULT_EDGE_CLEARANCE_NM = mm(0.5)
 DEFAULT_VIA_DIAMETER_NM = mm(0.6)
 DEFAULT_VIA_DRILL_NM = mm(0.3)
 
-#: What a layer change costs, in grid steps. High enough that the router keeps
-#: a net on one layer when it can, low enough that it will hop to get through.
-_VIA_COST_STEPS = 12
+#: Step costs of the octilinear move set, in cost units. An orthogonal grid
+#: step costs 12 and a diagonal one 17: 17/12 = 1.4167, the closest small
+#: integer ratio to sqrt(2) (1.4142), so a diagonal is priced a hair *above*
+#: its true length and never wins a tie it should not, while a diagonal plus
+#: an orthogonal (29) still beats the two orthogonals (24) plus the corner it
+#: replaces only where the geometry allows it. Integers, because determinism
+#: needs exact cost ties to resolve the same way every run.
+#:
+#: Prior art for the move set: HOG2's ``environments/Map2DEnvironment.cpp``
+#: (Sturtevant), the reference grid-search environment, which admits a
+#: diagonal only when both orthogonal neighbours are passable ("no corner
+#: cutting") and prices it at ``DIAGONAL_COST = ROOT_TWO`` against 1 for an
+#: orthogonal step, with the octile heuristic ``min * DIAGONAL_COST + (max -
+#: min)``. Prior art for the 45-degree restriction on a PCB router:
+#: FreeRouting's ``AngleRestriction.FORTYFIVE_DEGREE``
+#: (``src/main/java/app/freerouting/board/model/structure/AngleRestriction.java``),
+#: the mode every board it ships routes in, with ``PullTightAlgo45`` tidying
+#: corners into 45-degree chamfers afterwards. This router gets the chamfers
+#: from the move set itself: with diagonals priced below two orthogonals,
+#: A* takes the diagonal across every corner whose inside node is free, so a
+#: right angle survives only where a pad or a foreign track sits on that node.
+_ORTHO_COST = 12
+_DIAG_COST = 17
+
+#: What a layer change costs, in the cost units above (twelve orthogonal grid
+#: steps). High enough that the router keeps a net on one layer when it can,
+#: low enough that it will hop to get through.
+_VIA_COST_STEPS = 12 * _ORTHO_COST
 
 #: Refuse rather than grind: a lattice this size means the grid is far too fine
 #: for the board, and searching it would take minutes for a worse result.
@@ -155,10 +187,11 @@ DEFAULT_MAX_RIPUPS = 8
 _MAX_RIPS_PER_NET = 2
 
 #: What standing on another net's committed copper costs in a rip-up probe,
-#: in grid steps per node. High enough that the probe prefers a clean detour
-#: of many millimetres over crossing a channel, low enough that it still
-#: finds the crossing when no detour exists.
-_RIP_COST_STEPS = 25
+#: per node, in the cost units above (twenty-five orthogonal grid steps).
+#: High enough that the probe prefers a clean detour of many millimetres over
+#: crossing a channel, low enough that it still finds the crossing when no
+#: detour exists.
+_RIP_COST_STEPS = 25 * _ORTHO_COST
 
 #: How far a pad-escape stub may reach, in grid steps of Manhattan distance.
 #:
@@ -184,6 +217,21 @@ _LAYERS: tuple[Layer, ...] = (Layer.TOP, Layer.BOTTOM)
 
 #: Marks a node no net may use, where two nets' pad clearances overlap.
 _CONTESTED = "\x00contested"
+
+#: The octilinear move set as ``(di, dj, cost)``, in a fixed order: the four
+#: orthogonal steps first, then the four diagonals. The order is part of the
+#: determinism contract -- equal-cost successors enter the heap in this
+#: sequence and the monotonic tie counter keeps them there.
+_MOVES: tuple[tuple[int, int, int], ...] = (
+    (1, 0, _ORTHO_COST),
+    (-1, 0, _ORTHO_COST),
+    (0, 1, _ORTHO_COST),
+    (0, -1, _ORTHO_COST),
+    (1, 1, _DIAG_COST),
+    (1, -1, _DIAG_COST),
+    (-1, 1, _DIAG_COST),
+    (-1, -1, _DIAG_COST),
+)
 
 
 @dataclass(frozen=True)
@@ -229,8 +277,12 @@ class Track:
 
     @property
     def length_nm(self) -> int:
-        return abs(self.end_x_nm - self.start_x_nm) + abs(
-            self.end_y_nm - self.start_y_nm
+        """Euclidean, rounded to the nanometre: a 45-degree run is its real
+        length, not the sum of its projections (which over-reported every
+        diagonal by 41 percent and would have made ``constraints`` verify a
+        matched-length pair against copper that is not there)."""
+        return round(
+            math.hypot(self.end_x_nm - self.start_x_nm, self.end_y_nm - self.start_y_nm)
         )
 
 
@@ -251,6 +303,10 @@ class RouteResult:
     vias: list[Via] = field(default_factory=list)
     #: Nets fully connected by the tracks above.
     routed: list[str] = field(default_factory=list)
+    #: Nets a copper pour connects instead of tracks (a ground fill on
+    #: both layers): not routed, not unrouted, and named so a summary
+    #: never reads them as either.
+    filled: list[str] = field(default_factory=list)
     #: Nets left as ratsnest, each with the reason it could not be finished.
     unrouted: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -267,9 +323,10 @@ class RouteResult:
         return 1.0 if total == 0 else len(self.routed) / total
 
     def summary(self) -> str:
+        filled = f", {len(self.filled)} by copper fill" if self.filled else ""
         return (
-            f"{len(self.routed)}/{len(self.routed) + len(self.unrouted)} nets routed, "
-            f"{len(self.tracks)} tracks, {len(self.vias)} vias, "
+            f"{len(self.routed)}/{len(self.routed) + len(self.unrouted)} nets routed"
+            f"{filled}, {len(self.tracks)} tracks, {len(self.vias)} vias, "
             f"{self.routed_length_nm / 1_000_000:.1f} mm of copper"
         )
 
@@ -375,6 +432,143 @@ def _terminal_counts(pads: list[RoutePad]) -> dict[str, int]:
     return counts
 
 
+def _within(t: Track, x: int, y: int) -> bool:
+    """Whether ``(x, y)`` is inside the track's bounding box (ends included)."""
+    lo_x, hi_x = sorted((t.start_x_nm, t.end_x_nm))
+    lo_y, hi_y = sorted((t.start_y_nm, t.end_y_nm))
+    return lo_x <= x <= hi_x and lo_y <= y <= hi_y
+
+
+def split_at_junctions(tracks: list[Track]) -> list[Track]:
+    """Split each run where another track of the net ends on its interior.
+
+    The router merges collinear steps into long runs, so a branch can join a
+    run mid-segment. That is real copper contact, but KiCad's connectivity joins
+    tracks only where endpoints coincide, so DRC reports the branch end as
+    ``track_dangling`` (measured 2026-09-14: a 0.25 mm B.Cu tail whose end lay
+    exactly on a diagonal run). Splitting the run at that point gives KiCad the
+    shared endpoint it looks for; the copper is unchanged.
+    """
+    tracks = list(tracks)
+    changed = True
+    while changed:
+        changed = False
+        points = {
+            (x, y, t.layer)
+            for t in tracks
+            for x, y in ((t.start_x_nm, t.start_y_nm), (t.end_x_nm, t.end_y_nm))
+        }
+        for i, t in enumerate(tracks):
+            dx, dy = t.end_x_nm - t.start_x_nm, t.end_y_nm - t.start_y_nm
+            for x, y, layer in points:
+                if layer is not t.layer or (x, y) in (
+                    (t.start_x_nm, t.start_y_nm),
+                    (t.end_x_nm, t.end_y_nm),
+                ):
+                    continue
+                if dx * (y - t.start_y_nm) - dy * (x - t.start_x_nm) != 0:
+                    continue
+                if not _within(t, x, y):
+                    continue
+                first = Track(
+                    t.start_x_nm, t.start_y_nm, x, y, t.layer, t.net, t.width_nm
+                )
+                second = Track(
+                    x, y, t.end_x_nm, t.end_y_nm, t.layer, t.net, t.width_nm
+                )
+                tracks[i : i + 1] = [first, second]
+                changed = True
+                break
+            if changed:
+                break
+    return tracks
+
+
+def prune_dangling(
+    tracks: list[Track],
+    vias: list[Via],
+    pads: list[RoutePad],
+    layers: tuple[Layer, ...],
+) -> tuple[list[Track], list[Via]]:
+    """Remove one net's copper that leads nowhere, until none is left.
+
+    KiCad's own cleanup, ``TRACKS_CLEANER::deleteDanglingTracks`` in
+    ``pcbnew/tracks_cleaner.cpp``: a track with an endpoint that touches no
+    other track, via or pad is deleted, and the pass repeats "because a track
+    connected to the deleted track now perhaps is not connected". A via is kept
+    only while two things still meet at it. The rip-up pass could leave a dead
+    branch behind -- measured 2026-09-14, a 0.25 mm B.Cu tail off a via that
+    KiCad's DRC reported as ``track_dangling`` -- and a dead branch is copper
+    with no electrical purpose and an antenna on a signal net. Nothing that
+    completes a connection is ever removed: only an end that touches nothing.
+    """
+    tracks = list(tracks)
+    vias = list(vias)
+
+    def on_track(x: int, y: int, layer: Layer, own: Track, pool: list[Track]) -> bool:
+        # A branch can meet a longer merged run mid-segment, where no endpoint
+        # is; octilinear integer geometry makes collinearity an exact test.
+        for t in pool:
+            if t is own or t.layer is not layer:
+                continue
+            dx, dy = t.end_x_nm - t.start_x_nm, t.end_y_nm - t.start_y_nm
+            if dx * (y - t.start_y_nm) - dy * (x - t.start_x_nm) != 0:
+                continue
+            if _within(t, x, y):
+                return True
+        return False
+
+    def on_pad(x: int, y: int, layer: Layer) -> bool:
+        return any(
+            layer in pad.copper_layers(layers)
+            and abs(x - pad.x_nm) * 2 <= pad.w_nm
+            and abs(y - pad.y_nm) * 2 <= pad.h_nm
+            for pad in pads
+        )
+
+    while True:
+        ends: dict[tuple[int, int, Layer], int] = {}
+        for t in tracks:
+            for key in (
+                (t.start_x_nm, t.start_y_nm, t.layer),
+                (t.end_x_nm, t.end_y_nm, t.layer),
+            ):
+                ends[key] = ends.get(key, 0) + 1
+        via_at = {(v.x_nm, v.y_nm) for v in vias}
+        keep = []
+        for t in tracks:
+            both = True
+            for x, y in ((t.start_x_nm, t.start_y_nm), (t.end_x_nm, t.end_y_nm)):
+                if not (
+                    ends.get((x, y, t.layer), 0) > 1
+                    or (x, y) in via_at
+                    or on_pad(x, y, t.layer)
+                    or on_track(x, y, t.layer, t, tracks)
+                ):
+                    both = False
+                    break
+            if both:
+                keep.append(t)
+        kept_vias = []
+        for v in vias:
+            # A via earns its keep by joining copper on two layers -- a track
+            # or a pad it sits in on each. A via inside an SMD pad connects
+            # that pad's layer (via-in-pad); the first version credited only
+            # through-hole pads, removed such vias and cut eight pads loose.
+            meets = sum(
+                1
+                for layer in layers
+                if ends.get((v.x_nm, v.y_nm, layer), 0) > 0
+                or on_track(v.x_nm, v.y_nm, layer, None, tracks)
+                or on_pad(v.x_nm, v.y_nm, layer)
+            )
+            if meets >= 2:
+                kept_vias.append(v)
+        if len(keep) == len(tracks) and len(kept_vias) == len(vias):
+            return keep, kept_vias
+        tracks, vias = keep, kept_vias
+
+
 def route(
     pads: list[RoutePad],
     *,
@@ -392,8 +586,18 @@ def route(
     max_expansions: int = DEFAULT_MAX_EXPANSIONS,
     max_expansions_per_net: int = DEFAULT_MAX_EXPANSIONS_PER_NET,
     max_ripups: int = DEFAULT_MAX_RIPUPS,
+    on_net: OnNet | None = None,
+    filled_nets: Collection[str] = (),
+    first_nets: Collection[str] = (),
 ) -> RouteResult:
     """Route every multi-terminal net over the placed pads.
+
+    ``first_nets`` are routed before every other net, in the usual order
+    among themselves: the differential pairs :func:`silkscreen.board.build_board`
+    records. Left to the shortest-first order, the two legs of a USB pair
+    fought each other for one channel through the connector's pin row and
+    one lost (measured 2026-09-16: ``USB_DM`` ripped up for ``USB_DP`` and
+    never re-routed on the ESP32 eval board).
 
     Args:
         pads: Every pad on the board, absolute, in the solver's Y-up frame.
@@ -420,6 +624,17 @@ def route(
             single hopeless net cannot starve the ones behind it.
         max_ripups: Rip-up-and-retry rounds allowed after the first pass. Zero
             disables the pass entirely, which is the pre-rip-up router.
+        on_net: A live narration of the copper as it is laid, for a caller
+            showing the board in an editor while the search runs. Called
+            ``("committed", net, tracks, vias)`` each time a net's copper is
+            committed -- its escapes, tracks and vias, the same objects the
+            result will carry -- and ``("lifted", net, [], [])`` when rip-up
+            lifts a net that was on the board, so a watcher never keeps
+            copper the final file does not contain. A lifted net that
+            re-routes is committed again. Survivors replayed onto the base
+            state during a rip are *not* re-announced: their copper did not
+            change. None (the default) costs nothing and changes nothing,
+            which is what keeps the offline tests' event streams fixed.
 
     Returns:
         A :class:`RouteResult` whose ``unrouted`` names every net that did not
@@ -428,6 +643,13 @@ def route(
         module is written to avoid.
     """
     result = RouteResult(track_width_nm=track_width_nm)
+    # ``filled_nets`` are connected by a copper pour the emitter draws over
+    # the whole board on both layers (a ground fill), the way nearly every
+    # real two-layer board carries its ground. Their pads stay obstacles for
+    # every other net; they are never escaped, routed or reported unrouted,
+    # and the result names them so 36/40 cannot read as 36/36.
+    filled = frozenset(n for n in filled_nets if n)
+    result.filled = sorted({p.net for p in pads if p.net in filled})
 
     # Every net that would have been routed had the run got that far. Refusing
     # to route is still a result about these nets, and a refusal that named
@@ -436,7 +658,7 @@ def route(
     # Naming them here is the same contract the per-net failures keep.
     def refuse(reason: str) -> RouteResult:
         for net, count in _terminal_counts(pads).items():
-            if count >= 2:
+            if count >= 2 and net not in filled:
                 result.unrouted[net] = reason
         result.warnings.append(reason)
         return result
@@ -923,7 +1145,7 @@ def route(
         return count
 
     for pad in pads:
-        if not pad.net:
+        if not pad.net or pad.net in filled:
             continue
         on = pad.copper_layers(layers)
         if not on:
@@ -1087,25 +1309,31 @@ def route(
     # Shortest and simplest first. Sequential routers are order-dependent and
     # this order is a heuristic, not an optimum -- but it is deterministic,
     # which matters more here: the same design must route the same way twice.
-    def net_key(net: str) -> tuple[int, int, str]:
+    first = set(first_nets)
+
+    def net_key(net: str) -> tuple[int, int, int, str]:
         nodes = [node for group in ports[net] for node in group]
         extent = max(n[1] for n in nodes) - min(n[1] for n in nodes) + (
             max(n[2] for n in nodes) - min(n[2] for n in nodes)
         )
-        return (len(ports[net]), extent, net)
+        return (0 if net in first else 1, len(ports[net]), extent, net)
 
     # A net one of whose pads could not escape is not routed round that pad --
     # it is not routed at all. Dropping the pad and connecting the rest is the
     # silent-disconnection bug this whole module exists to avoid: the run would
     # report the net routed and the board would come back with one pin dead.
     routable = sorted(
-        (n for n, p in ports.items() if len(p) >= 2 and n not in escape_failures),
+        (
+            n
+            for n, p in ports.items()
+            if len(p) >= 2 and n not in escape_failures and n not in filled
+        ),
         key=net_key,
     )
     result.unrouted.update(escape_failures)
     pads_per_net = _terminal_counts(pads)
     for net, groups in sorted(ports.items()):
-        if net in escape_failures:
+        if net in escape_failures or net in filled:
             continue
         if len(groups) < 2:
             # One reachable terminal is not a connection to make -- but there
@@ -1136,6 +1364,44 @@ def route(
 
     committed: dict[str, list[list[_Node]]] = {}
     commit_order: list[str] = []
+    #: True while a rip replays survivors, whose copper has not changed and
+    #: must not be announced again through ``on_net``.
+    replaying = False
+    pads_of: dict[str, list[RoutePad]] = {}
+    for pad in pads:
+        if pad.net:
+            pads_of.setdefault(pad.net, []).append(pad)
+
+    def net_copper(net: str) -> tuple[list[Track], list[Via]]:
+        """The copper ``net`` has on the board right now: its escapes first
+        (so a reader meets a net where it leaves its pad), then the tracks
+        and vias of its committed paths, dangling ends pruned and junctions
+        split. The one definition, used both for the live narration and for
+        the result at the end."""
+        tracks: list[Track] = []
+        vias: list[Via] = []
+        for _node, stub in sorted(
+            stubs.items(), key=lambda kv: (kv[0][0].value, kv[0][1], kv[0][2])
+        ):
+            if stub.net != net:
+                continue
+            for x0, y0, x1, y1 in stub.legs():
+                if (x0, y0) == (x1, y1):
+                    continue
+                tracks.append(
+                    Track(
+                        start_x_nm=x0, start_y_nm=y0,
+                        end_x_nm=x1, end_y_nm=y1,
+                        layer=stub.layer, net=net, width_nm=stub.width_nm,
+                    )
+                )
+        for path in committed[net]:
+            tracks.extend(_to_tracks(path, net, node_x, node_y, track_width_nm))
+            vias.extend(
+                _to_vias(path, net, node_x, node_y, via_diameter_nm, via_drill_nm)
+            )
+        tracks, vias = prune_dangling(tracks, vias, pads_of.get(net, []), layers)
+        return split_at_junctions(tracks), vias
 
     def commit_net(net: str, paths: list[list[_Node]]) -> None:
         committed[net] = paths
@@ -1152,6 +1418,8 @@ def route(
                 nx=nx,
                 ny=ny,
             )
+        if on_net is not None and not replaying:
+            on_net("committed", net, *net_copper(net))
 
     def rip(nets: list[str]) -> None:
         """Lift ``nets`` and rebuild the maps by replaying the survivors.
@@ -1161,9 +1429,12 @@ def route(
         net's halo can subtract a node another net still needs. A replay
         cannot get that wrong.
         """
+        nonlocal replaying
         for net in nets:
             del committed[net]
             commit_order.remove(net)
+            if on_net is not None:
+                on_net("lifted", net, [], [])
         order = list(commit_order)
         commit_order.clear()
         for layer in layers:
@@ -1172,8 +1443,12 @@ def route(
             copper[layer].clear()
             via_nodes[layer].clear()
         survivors = {net: committed.pop(net) for net in order}
-        for net in order:
-            commit_net(net, survivors[net])
+        replaying = True
+        try:
+            for net in order:
+                commit_net(net, survivors[net])
+        finally:
+            replaying = False
 
     def attempt(net: str, rip_cost: int | None = None):
         return _route_net(
@@ -1291,35 +1566,16 @@ def route(
         queue.sort(key=net_key)
 
     # ---- emit ------------------------------------------------------------
+    # Only nets that actually routed: a stub emitted for an unrouted net would
+    # be copper hanging off a pad connected to nothing, which is exactly the
+    # "looks routed where you happen to look" failure this module refuses to
+    # produce. ``net_copper`` is the same function the live narration used,
+    # so what a watcher saw committed is what the result carries.
     for net in commit_order:
         result.routed.append(net)
-        # The escapes first, so a reader of the track list meets a net where it
-        # leaves its pad. Only for nets that actually routed: a stub emitted
-        # for an unrouted net would be copper hanging off a pad connected to
-        # nothing, which is exactly the "looks routed where you happen to look"
-        # failure this module refuses to produce.
-        for _node, stub in sorted(
-            stubs.items(), key=lambda kv: (kv[0][0].value, kv[0][1], kv[0][2])
-        ):
-            if stub.net != net:
-                continue
-            for x0, y0, x1, y1 in stub.legs():
-                if (x0, y0) == (x1, y1):
-                    continue
-                result.tracks.append(
-                    Track(
-                        start_x_nm=x0, start_y_nm=y0,
-                        end_x_nm=x1, end_y_nm=y1,
-                        layer=stub.layer, net=net, width_nm=stub.width_nm,
-                    )
-                )
-        for path in committed[net]:
-            result.tracks.extend(
-                _to_tracks(path, net, node_x, node_y, track_width_nm)
-            )
-            result.vias.extend(
-                _to_vias(path, net, node_x, node_y, via_diameter_nm, via_drill_nm)
-            )
+        tracks, vias = net_copper(net)
+        result.tracks.extend(tracks)
+        result.vias.extend(vias)
 
     if result.unrouted:
         result.warnings.append(
@@ -1331,6 +1587,10 @@ def route(
 
 
 _Node = tuple[Layer, int, int]
+
+#: The ``on_net`` callback: ``(action, net, tracks, vias)`` with ``action``
+#: one of ``"committed"`` / ``"lifted"``.
+OnNet = Callable[[str, str, list[Track], list[Via]], None]
 #: One terminal: every node a pad's copper touches. A single node for an SMD
 #: pad, the same (i, j) on both layers for a plated hole.
 _Port = tuple[_Node, ...]
@@ -1494,9 +1754,31 @@ def _astar(
 ) -> list[_Node] | None:
     """Shortest path from any node in ``sources`` to any node of ``goal``.
 
-    Costs are in grid steps; a layer change costs ``via_cost`` of them. The
-    heuristic is Manhattan distance in steps, which never overestimates because
-    every move costs at least one step and a via costs more.
+    The move set is octilinear: four orthogonal steps at ``_ORTHO_COST``,
+    four diagonal steps at ``_DIAG_COST``, and a layer change at ``via_cost``.
+    The heuristic is the octile distance in the same units (HOG2's
+    ``Map2DEnvironment::HCost``), which is exact on an empty grid and so
+    never overestimates; ``penalty`` only adds, so it stays admissible in
+    probe mode too.
+
+    Two rules govern a diagonal step, both stated rather than assumed:
+
+    * **No corner cutting** (HOG2): ``(i, j) -> (i+1, j+1)`` is legal only
+      when ``(i+1, j)`` and ``(i, j+1)`` are both passable for this net. Node
+      discs are what enforce clearance, and a diagonal's copper runs between
+      nodes; at the defaults (0.25 mm grid, 0.2 mm track, 0.2 mm clearance)
+      the two endpoint discs already cover it, but at a coarser grid or a
+      tighter clearance they do not, and this rule is what keeps two nets'
+      diagonals from crossing one cell centre-to-centre with neither node
+      marked. ``_commit`` marks both corner nodes for the same reason.
+    * **No acute turn**: a heading change of more than 90 degrees between
+      consecutive steps is refused, so the path can never fold back on
+      itself into a corner sharper than 45 degrees (``audit/rules.py``'s
+      acute-angle rule). This is read from ``came`` rather than carried in
+      the state, which keeps the state space at one entry per node and
+      layer; the price is that a node first reached on a heading that later
+      forbids the needed turn is not re-opened on another heading. Measured
+      on every routing fixture, that costs no completion.
 
     Clearance is enforced here, against ``copper``, rather than by trusting the
     halo an earlier net wrote into ``reserved``. The halo cannot claim a node
@@ -1634,7 +1916,17 @@ def _astar(
         )
 
     def h(i: int, j: int) -> int:
-        return abs(i - gi) + abs(j - gj)
+        di, dj = abs(i - gi), abs(j - gj)
+        lo, hi = (di, dj) if di < dj else (dj, di)
+        return lo * _DIAG_COST + (hi - lo) * _ORTHO_COST
+
+    def heading_of(node: _Node) -> tuple[int, int] | None:
+        """The step that reached ``node`` on its layer, or None at a source
+        or right after a layer change (a via has no direction)."""
+        prev = came.get(node)
+        if prev is None or prev[0] is not node[0]:
+            return None
+        return (node[1] - prev[1], node[2] - prev[2])
 
     open_heap: list[tuple[int, int, int, _Node]] = []
     best: dict[_Node, int] = {}
@@ -1662,12 +1954,22 @@ def _astar(
             path.reverse()
             return path
         layer, i, j = node
-        moves: list[tuple[_Node, int]] = [
-            ((layer, i + 1, j), 1),
-            ((layer, i - 1, j), 1),
-            ((layer, i, j + 1), 1),
-            ((layer, i, j - 1), 1),
-        ]
+        prior = heading_of(node)
+        moves: list[tuple[_Node, int]] = []
+        for di, dj, step in _MOVES:
+            if prior is not None and prior[0] * di + prior[1] * dj < 0:
+                continue  # more than a 90-degree turn: an acute corner
+            nxt = (layer, i + di, j + dj)
+            if di and dj:
+                # No corner cutting: both orthogonal neighbours must be ours
+                # to pass, or the diagonal's copper runs between nodes no disc
+                # protects. In probe mode a foreign corner is paid for, the
+                # same way a foreign node on the path is.
+                c1, c2 = (layer, i + di, j), (layer, i, j + dj)
+                if not (passable(c1) and passable(c2)):
+                    continue
+                step += penalty(c1) + penalty(c2)
+            moves.append((nxt, step))
         if len(layers) > 1:
             fits = via_fits(i, j)
             # The probe may pay to drill through liftable copper, but a
@@ -1738,6 +2040,13 @@ def _crossed_nets(
             held = reserved[layer].get((i, j))
             if held is not None and held != net and held in committed:
                 victims.add(held)
+            # The corners a diagonal step cut across: the search charged
+            # ``penalty`` for each, so the owner it paid is a victim here.
+            for ci, cj in _corners(path, index):
+                held = reserved[layer].get((ci, cj))
+                if held is not None and held != net and held in committed:
+                    victims.add(held)
+                collect(copper, layer, ci, cj, track_disc)
             collect(copper, layer, i, j, track_disc)
             collect(via_nodes, layer, i, j, via_disc)
             changes_layer = (index and path[index - 1][0] is not layer) or (
@@ -1778,6 +2087,13 @@ def _commit(
         copper[layer][(i, j)] = net
         for dx, dy in track_disc:
             mark(layer, i + dx, j + dy)
+        # A diagonal step's copper passes the two corner nodes it cut across.
+        # They are reserved (never overwriting an owner), not marked copper:
+        # the search refused this step unless both were passable for this net,
+        # and reserving them is what makes the next net's search, its probe
+        # and ``_crossed_nets`` all see the same footprint this one claimed.
+        for ci, cj in _corners(path, index):
+            mark(layer, ci, cj)
         changes_layer = (index and path[index - 1][0] is not layer) or (
             index + 1 < len(path) and path[index + 1][0] is not layer
         )
@@ -1790,6 +2106,17 @@ def _commit(
                 via_nodes[other][(i, j)] = net
                 for dx, dy in via_disc:
                     mark(other, i + dx, j + dy)
+
+
+def _corners(path: list[_Node], index: int) -> tuple[tuple[int, int], ...]:
+    """The two corner nodes the step *into* ``path[index]`` cut across, on
+    that layer, when it was a diagonal; empty otherwise."""
+    if index == 0:
+        return ()
+    (pl, pi, pj), (layer, i, j) = path[index - 1], path[index]
+    if pl is not layer or pi == i or pj == j:
+        return ()
+    return ((pi, j), (i, pj))
 
 
 def _to_tracks(

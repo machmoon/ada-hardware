@@ -3,7 +3,7 @@
 One read-only, aggregated, always-200 view of every front end and optional
 tool the repo carries: the Workspace delivery routes, the Slack bot, the Meet
 / Zoom / Teams meeting front ends, the enclosure kernel, the sourcing BOM, the
-MCP server, SPICE and ``kicad-cli``. The desktop overlay renders it as a
+MCP server, SPICE, ``kicad-cli`` and the Anthropic (Claude) model provider. The desktop overlay renders it as a
 settings panel, so the contract is that it never fails and never lies.
 
 Four states, and the distinction is the whole point (a missing package, a
@@ -36,7 +36,7 @@ the nine integrations that were fine.
 
 The ``google`` entry is derived from :func:`service.deliver.config_report`
 rather than re-deriving it, so ``GET /integrations`` and ``GET
-/deliver/config`` cannot disagree about whether Hardy can send mail.
+/deliver/config`` cannot disagree about whether Ada can send mail.
 """
 
 from __future__ import annotations
@@ -67,6 +67,7 @@ INTEGRATION_IDS = (
     "mcp",
     "spice",
     "kicad",
+    "anthropic",
 )
 
 #: ``service/deliver.py`` owns this wording; borrowed rather than copied so the
@@ -166,6 +167,18 @@ _META: dict[str, tuple[str, str, str, str, bool]] = {
         "Exports the 3D model of an ordered board and runs DRC/ERC locally.",
         "docs/install.md",
         False,
+    ),
+    # ``design`` because the model provider is what designs the board; the
+    # desktop's ``IntegrationKind`` union is frozen at four words. Marked
+    # unverified: the key-gated live test exists, but nothing records it having
+    # run against a real key or a real Vertex project yet.
+    "anthropic": (
+        "Anthropic Claude",
+        "design",
+        "The primary model provider: Claude designs and reviews the board, "
+        "with Gemini as automatic fallback.",
+        "engine/silkscreen/agents/claude.py",
+        True,
     ),
 }
 
@@ -608,10 +621,16 @@ def _cad(env: Mapping[str, str], explicit: bool) -> dict[str, Any]:
 
 
 def _sourcing(env: Mapping[str, str], explicit: bool) -> dict[str, Any]:
+    from silkscreen.agents.claude import claude_configured
+
+    # Either provider's key is a model key; with Claude configured the Google
+    # key is optional here rather than a gap.
+    claude = claude_configured(env)
     settings = [
         _setting(
             env,
             "GOOGLE_API_KEY",
+            required=not claude,
             note="the sourcing stage is one model call per run",
         ),
         _setting(env, "SILKSCREEN_MODEL", required=False, secret=False),
@@ -751,6 +770,94 @@ def _kicad(env: Mapping[str, str], explicit: bool) -> dict[str, Any]:
     )
 
 
+def _anthropic(env: Mapping[str, str], explicit: bool) -> dict[str, Any]:
+    """Claude, on the Anthropic API or on Vertex AI.
+
+    ``ready`` when :func:`silkscreen.agents.claude.claude_backend` resolves a
+    backend -- the same function the worker ladder and the root ask, so this
+    card and a run cannot disagree about whether Claude leads. Either backend
+    satisfies it, which the required-rows helper cannot express, so the state
+    is computed here: a half-filled Vertex pair (project without region, or
+    the reverse) is ``partial``, not ``unconfigured``.
+    """
+    from silkscreen.agents.claude import (
+        API_KEY_ENV_VAR,
+        CLAUDE_BACKEND_ENV_VAR,
+        CLAUDE_EFFORT_ENV_VAR,
+        CLAUDE_MODEL_ENV_VAR,
+        VERTEX_PROJECT_ENV_VAR,
+        VERTEX_REGION_ENV_VAR,
+        claude_backend,
+        claude_missing,
+        claude_primary_model,
+    )
+    from silkscreen.agents.providers import PROVIDER_ENV_VAR, provider_order
+
+    settings = [
+        _setting(env, API_KEY_ENV_VAR, required=False,
+                 note="the Anthropic API; one of the two backends"),
+        _setting(env, VERTEX_PROJECT_ENV_VAR, required=False, secret=False,
+                 note="Claude on Vertex AI (billed to this GCP project)"),
+        _setting(env, VERTEX_REGION_ENV_VAR, required=False, secret=False,
+                 note="Vertex region for Claude, e.g. global"),
+        _setting(env, CLAUDE_BACKEND_ENV_VAR, required=False, secret=False,
+                 note="api or vertex; unset prefers a complete Vertex pair"),
+        _setting(env, CLAUDE_MODEL_ENV_VAR, required=False, secret=False),
+        _setting(env, CLAUDE_EFFORT_ENV_VAR, required=False, secret=False),
+        _setting(env, PROVIDER_ENV_VAR, required=False, secret=False,
+                 note="auto (Claude then Gemini), claude, gemini, or a list"),
+    ]
+    try:
+        import anthropic  # noqa: F401
+    except Exception as exc:  # noqa: BLE001
+        return _entry(
+            "anthropic",
+            state="unavailable",
+            detail="the anthropic SDK is not installed, so Claude cannot be called",
+            settings=settings,
+            hints=[
+                f"anthropic could not be imported ({type(exc).__name__}); "
+                "install the extra: pip install -e '.[anthropic]'"
+            ],
+        )
+    backend = claude_backend(env)
+    if backend is None:
+        started = any(s["set"] for s in settings[:4])
+        return _entry(
+            "anthropic",
+            state="partial" if started else "unconfigured",
+            detail="Claude is not configured; runs use Gemini alone",
+            settings=settings,
+            hints=[f"To use Claude, {claude_missing(env)} {_ENV_NOTE}."],
+        )
+    try:
+        order = provider_order(env)
+    except Exception as exc:  # noqa: BLE001 - e.g. a bad SILKSCREEN_PROVIDER
+        return _entry(
+            "anthropic",
+            state="partial",
+            detail=f"Claude is configured ({backend}) but the provider order is not",
+            settings=settings,
+            hints=[str(exc)],
+        )
+    where = "Claude on Vertex AI" if backend == "vertex" else "the Anthropic API"
+    if "claude" not in order:
+        role = f"configured but not used: {PROVIDER_ENV_VAR} leaves it out"
+    elif order[0] == "claude":
+        role = "leads" + (", with Gemini as fallback" if "gemini" in order else "")
+    else:
+        role = "is the fallback behind Gemini"
+    return _entry(
+        "anthropic",
+        state="ready",
+        detail=(
+            f"{claude_primary_model(env)} on {where} {role}. Configuration "
+            "only: no call has been made to check the credential"
+        ),
+        settings=settings,
+    )
+
+
 _PROBES = {
     "google": _google,
     "slack": _slack,
@@ -762,6 +869,7 @@ _PROBES = {
     "mcp": _mcp,
     "spice": _spice,
     "kicad": _kicad,
+    "anthropic": _anthropic,
 }
 
 

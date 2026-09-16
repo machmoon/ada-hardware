@@ -1,9 +1,17 @@
-"""Gemini model discovery for the same-origin web client.
+"""Model discovery for the same-origin web client: Claude and Gemini.
 
-The Gemini API is the authority on what the current key may call.  A small
-fallback catalog keeps the UI useful before a key is configured and during a
-transient discovery failure; it is a fallback, not a claim that those models
-are currently reachable.
+Each provider's API is the authority on what the current key may call.  A
+small fallback catalog keeps the UI useful before a key is configured and
+during a transient discovery failure; it is a fallback, not a claim that those
+models are currently reachable.
+
+Claude entries appear only when Claude is configured
+(:func:`silkscreen.agents.claude.claude_backend`), so a Google-key-only
+service answers exactly the catalog it always did. On the Anthropic API they
+come from the Models API (``client.models.list()``); Claude on Vertex AI has
+no Models API (Anthropic's platform-availability table lists it as not
+supported there), so Vertex gets the configured tiers, labelled
+``source: "claude-configured"`` rather than passed off as discovered.
 """
 
 from __future__ import annotations
@@ -135,7 +143,115 @@ def _clean_name(value: object) -> str:
     return name.removeprefix("models/")
 
 
+def _claude_entry(model_id: str, name: str, description: str, **limits: Any) -> dict[str, Any]:
+    return {
+        "id": model_id,
+        "name": name,
+        "description": description,
+        "input_token_limit": limits.get("input_token_limit"),
+        "output_token_limit": limits.get("output_token_limit"),
+        "thinking": None,
+        "legacy": False,
+        "provider": "claude",
+    }
+
+
+def _claude_configured_entries() -> list[dict[str, Any]]:
+    from silkscreen.agents.claude import CLAUDE_CHEAP_MODEL, claude_primary_model
+
+    entries: list[dict[str, Any]] = []
+    for model_id, label in (
+        (claude_primary_model(), "Reasoning Claude model"),
+        (CLAUDE_CHEAP_MODEL, "Economy Claude model"),
+    ):
+        if all(item["id"] != model_id for item in entries):
+            entries.append(
+                _claude_entry(model_id, label, "Configured by the Silkscreen service.")
+            )
+    return entries
+
+
+def _claude_models() -> tuple[list[dict[str, Any]], str | None, str | None]:
+    """``(entries, source, warning)``; no entries when Claude is not configured."""
+    from silkscreen.agents.claude import API_KEY_ENV_VAR, claude_backend
+
+    backend = claude_backend()
+    if backend is None:
+        return [], None, None
+    if backend == "vertex":
+        return _claude_configured_entries(), "claude-configured", None
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(
+            api_key=os.getenv(API_KEY_ENV_VAR, "").strip(), max_retries=0, timeout=15.0
+        )
+        entries = []
+        for raw in client.models.list():
+            model_id = str(getattr(raw, "id", "") or "")
+            if not model_id.startswith("claude-"):
+                continue
+            entries.append(
+                _claude_entry(
+                    model_id,
+                    str(getattr(raw, "display_name", None) or model_id),
+                    "",
+                    input_token_limit=getattr(raw, "max_input_tokens", None),
+                    output_token_limit=getattr(raw, "max_tokens", None),
+                )
+            )
+    except Exception as exc:  # discovery must never take the UI down
+        return (
+            _claude_configured_entries(),
+            "claude-configured",
+            f"Claude model discovery failed: {type(exc).__name__}: {exc}",
+        )
+    if not entries:
+        return _claude_configured_entries(), "claude-configured", "Claude returned no models."
+    entries.sort(key=lambda item: item["id"])
+    return entries, "claude", None
+
+
+def _auto_model() -> str:
+    """``SILKSCREEN_ORCHESTRATOR_MODEL``, else the leading provider's primary."""
+    explicit = os.getenv("SILKSCREEN_ORCHESTRATOR_MODEL")
+    if explicit:
+        return explicit
+    from silkscreen.agents.claude import claude_primary_model
+    from silkscreen.agents.providers import provider_order
+
+    try:
+        order = provider_order()
+    except Exception:  # noqa: BLE001 - nothing configured: the old default
+        return primary_model()
+    return claude_primary_model() if order[0] == "claude" else primary_model()
+
+
 def _live_catalog() -> dict[str, Any]:
+    """Claude's models (when configured) ahead of Gemini's (when configured).
+
+    With Claude unconfigured this is exactly the Gemini discovery it always
+    was, fallback catalog included.
+    """
+    claude, claude_source, claude_warning = _claude_models()
+    if not claude:
+        return _gemini_catalog()
+    has_gemini = bool(os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"))
+    try:
+        gemini = _gemini_catalog() if has_gemini else None
+    except Exception as exc:  # noqa: BLE001 - Claude still answers
+        gemini = _fallback(f"Model discovery failed: {type(exc).__name__}: {exc}")
+    warnings = [w for w in (claude_warning, (gemini or {}).get("warning")) if w]
+    return {
+        "default": "auto",
+        "auto_model": _auto_model(),
+        "source": claude_source if gemini is None else f"{claude_source}+{gemini['source']}",
+        "models": claude + list((gemini or {}).get("models", [])),
+        **({"warning": " ".join(warnings)} if warnings else {}),
+    }
+
+
+def _gemini_catalog() -> dict[str, Any]:
     from google import genai
 
     key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -202,7 +318,9 @@ def select_model(requested: object, catalog: dict[str, Any]) -> str:
         return str(catalog.get("auto_model") or primary_model())
     allowed = {str(item.get("id") or "") for item in catalog.get("models", [])}
     if choice not in allowed:
-        raise ValueError("'model' must be 'auto' or an available Gemini model")
+        raise ValueError(
+            "'model' must be 'auto' or an available Gemini model or Claude model"
+        )
     if not meets_version_floor(choice) and not _legacy_allowed():
         raise ValueError(
             f"'model' {choice} is below the Gemini 3.5 floor; choose 'auto' or a "

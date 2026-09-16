@@ -1,4 +1,4 @@
-// Allowlisted CLI tools Hardy may run on this machine (Tauri `run_cli`).
+// Allowlisted CLI tools Ada may run on this machine (Tauri `run_cli`).
 //
 // The Rust side owns the allowlist and never goes through a shell. This
 // module is the typed frontend seam: call `runCli("googleapps", ["auth"])`

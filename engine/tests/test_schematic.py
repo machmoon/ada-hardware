@@ -617,8 +617,10 @@ POWER_ENTRY = {
         "J_PWR": {
             "kind": "connector",
             "package": "Barrel_Jack_5.5x2.1mm",
-            # Pin 3 is the jack's switch contact and is deliberately on no net.
+            # Pin 3 is the jack's switch contact and is deliberately on no net,
+            # declared so: only a declared pin gets the no-connect flag.
             "pins": {"VIN": "1", "GND": "2", "SW": "3"},
+            "no_connect": ["SW"],
         },
         "J_I2C": {
             "kind": "connector",

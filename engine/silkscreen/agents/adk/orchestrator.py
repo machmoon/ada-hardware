@@ -1,9 +1,18 @@
 """A conversational ADK root agent over Silkscreen's deterministic pipeline.
 
-The LLM owns only the conversational decision: ask one necessary clarification
-or call ``generate_board``.  The tool retains the existing validated pipeline,
-so introducing a chat surface does not turn placement, repair, or review into
-free-form orchestration.
+The LLM owns only the conversational decision: answer a message that is not a
+board request, ask one necessary clarification, or call ``generate_board``.
+The tool retains the existing validated pipeline, so introducing a chat surface
+does not turn placement, repair, or review into free-form orchestration.
+
+There is no intent classifier in front of the model. "Can you hear me" and
+"make me a 3.3 V LDO board" reach the same agent, which decides whether a tool
+is warranted -- the shape OpenClaw's voice wake uses
+(``apps/macos/Sources/OpenClaw/VoiceWakeForwarder.swift`` forwards every
+transcript to the one main session). ``confirm_before_build`` is the Hermes
+Agent approval gate (``tools/approval.py``) applied to the one expensive tool:
+the model may only *propose* a board, the proposal comes back on the result,
+and the caller asks a human before anything is spent.
 """
 
 from __future__ import annotations
@@ -30,13 +39,19 @@ _USER_ID = "silkscreen"
 
 logging.getLogger("google_adk").setLevel(logging.CRITICAL)
 
-_INSTRUCTION = """You are Silkscreen's board-design orchestrator.
+_INSTRUCTION = """You are Ada, an AI hardware engineer and assistant at the
+engineer's bench.
 
-For each user request, take exactly one of these paths:
-1. If an electrically essential constraint is genuinely missing, ask one short,
-   concrete clarification question. Ask only when guessing could materially
-   change or damage the design. Do not call a tool in that response.
-2. Otherwise call generate_board exactly once. Never invent a board, component,
+For each message, take exactly one of these paths:
+1. If the message is not asking you to design a board -- a greeting, a check
+   such as "can you hear me", a question about electronics, KiCad, this app, or
+   anything else -- just answer it in one or two short, plain sentences that
+   read well aloud. Do not call a tool.
+2. If it asks for a board but an electrically essential constraint is genuinely
+   missing, ask one short, concrete clarification question. Ask only when
+   guessing could materially change or damage the design. Do not call a tool in
+   that response.
+3. Otherwise call generate_board exactly once. Never invent a board, component,
    validation result, or artifact yourself.
 
 If the message includes a clarification answer, do not ask another question;
@@ -48,6 +63,26 @@ reveal private chain-of-thought. The interface separately shows observable tool
 calls, prompts, responses, validation, and retry events for debugging.
 """
 
+_CONFIRM_INSTRUCTION = """You are Ada, an AI hardware engineer and assistant at
+the engineer's bench. Messages may arrive by
+voice through speech recognition, so some words can be misheard.
+
+For each message, take exactly one of these paths:
+1. If the message is not asking you to design a board -- a greeting, a check
+   such as "can you hear me", a question about electronics, KiCad, this app, or
+   anything else -- just answer it in one or two short, plain sentences that
+   read well aloud. Do not call a tool.
+2. If it clearly asks you to design or build a board, call propose_board
+   exactly once with a one-sentence board request in your own words that keeps
+   every constraint the engineer gave. Building costs real time and money, so
+   you never build directly: the engineer confirms first. After the tool
+   returns, ask in one short sentence whether to build it, naming the board.
+3. If it is unclear whether they want a board, ask one short question. Do not
+   call a tool.
+
+Never claim a board was built. Do not reveal private chain-of-thought.
+"""
+
 
 @dataclass(frozen=True)
 class OrchestratorResult:
@@ -55,6 +90,9 @@ class OrchestratorResult:
     result: dict[str, Any] | None
     needs_clarification: bool
     model: str
+    #: With ``confirm_before_build``: the board request the model wants to
+    #: build, awaiting a human yes. Never set when a board actually ran.
+    proposal: str | None = None
 
 
 def _dump(value: object) -> Any:
@@ -163,6 +201,7 @@ async def _run(
     emit: Callable[[dict[str, Any]], None],
     debug: bool,
     before_model_call: Callable[[], None] | None,
+    confirm_before_build: bool = False,
 ) -> OrchestratorResult:
     model_name = str(model if isinstance(model, str) else getattr(model, "model", ""))
     if isinstance(model, str):
@@ -191,6 +230,7 @@ async def _run(
     tool_failed = False
     pending: list[tuple[str, float]] = []
     full_result: dict[str, Any] | None = None
+    proposal: str | None = None
 
     def before_model(callback_context, llm_request):
         del callback_context
@@ -296,6 +336,27 @@ async def _run(
         full_result = generate()
         return _summary(full_result)
 
+    def propose_board(board_request: str) -> dict[str, Any]:
+        """Propose a PCB to build; it is built only after the engineer confirms.
+
+        Args:
+            board_request: One sentence describing the board, keeping every
+                constraint the engineer stated.
+        """
+        nonlocal proposal
+        text = str(board_request or "").strip()
+        if not text:
+            return {"status": "refused", "reason": "board_request was empty"}
+        # First proposal wins, for the reason generate_board keeps its first
+        # result: a second call in one turn is a model retry, not a new ask.
+        if proposal is None:
+            proposal = text
+        return {
+            "status": "awaiting_confirmation",
+            "board_request": proposal,
+            "note": "nothing has been built; ask the engineer to confirm",
+        }
+
     def before_tool(tool, args, tool_context):
         del tool_context
         nonlocal tool_seq
@@ -352,8 +413,8 @@ async def _run(
             "Clarifies a PCB request and invokes Silkscreen's validated generator."
         ),
         model=model,
-        instruction=_INSTRUCTION,
-        tools=[generate_board],
+        instruction=_CONFIRM_INSTRUCTION if confirm_before_build else _INSTRUCTION,
+        tools=[propose_board] if confirm_before_build else [generate_board],
         generate_content_config=types.GenerateContentConfig(
             max_output_tokens=2048,
             thinking_config=thinking_config,
@@ -378,7 +439,7 @@ async def _run(
         session_service=session_service,
     )
 
-    prompt = f"Board request:\n{message.strip()}"
+    prompt = f"Engineer's message:\n{message.strip()}"
     if clarification.strip():
         prompt += f"\n\nClarification answer:\n{clarification.strip()}"
     assistant = ""
@@ -414,6 +475,8 @@ async def _run(
                     f"{len(receipt.get('blockers') or [])} constraint checks block it; "
                     "the generated artifact is still available."
                 )
+    if proposal is not None and not assistant:
+        assistant = f"Want me to build this: {proposal}?"
     if not assistant:
         assistant = "I need one more detail before I can generate this board."
 
@@ -422,7 +485,7 @@ async def _run(
             f"{model_name} did not call generate_board after the clarification"
         )
 
-    needs_clarification = full_result is None
+    needs_clarification = full_result is None and proposal is None
     emit(
         {
             "event": "assistant.message",
@@ -430,6 +493,7 @@ async def _run(
             "model": served(),
             "text": assistant,
             "needs_clarification": needs_clarification,
+            "proposal": proposal,
         }
     )
     return OrchestratorResult(
@@ -437,6 +501,7 @@ async def _run(
         result=full_result,
         needs_clarification=needs_clarification,
         model=served(),
+        proposal=proposal,
     )
 
 
@@ -451,6 +516,7 @@ def run_orchestrator(
     emit: Callable[[dict[str, Any]], None],
     debug: bool = False,
     before_model_call: Callable[[], None] | None = None,
+    confirm_before_build: bool = False,
 ) -> OrchestratorResult:
     """Run one presentation turn from synchronous service code."""
     return asyncio.run(
@@ -464,5 +530,6 @@ def run_orchestrator(
             emit=emit,
             debug=debug,
             before_model_call=before_model_call,
+            confirm_before_build=confirm_before_build,
         )
     )

@@ -32,7 +32,7 @@ pub const WINDOW: usize = 25 * FRAME;
 pub const SAMPLE_RATE: u32 = 16_000;
 
 /// One on-device hit. Rust does not record the command — the page starts
-/// one short clip after `hardy-wake`.
+/// one short clip after `ada-wake`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WakeHit {
     pub phrase: String,
@@ -188,7 +188,7 @@ impl Spotter for MockSpotter {
     fn poll(&mut self) -> Result<Option<WakeHit>> {
         if self.fire.swap(false, std::sync::atomic::Ordering::SeqCst) {
             return Ok(Some(WakeHit {
-                phrase: "hardy".to_string(),
+                phrase: "ada".to_string(),
                 score: 1.0,
             }));
         }
@@ -229,13 +229,13 @@ mod tests {
         let mut spotter = MockSpotter::new(Arc::clone(&fire));
         assert_eq!(spotter.poll().unwrap(), None);
         fire.store(true, Ordering::SeqCst);
-        assert_eq!(spotter.poll().unwrap().expect("hit").phrase, "hardy");
+        assert_eq!(spotter.poll().unwrap().expect("hit").phrase, "ada");
         assert_eq!(spotter.poll().unwrap(), None);
     }
 
     #[test]
     fn nothing_is_scored_before_two_seconds_of_audio() {
-        let mut s = WindowSpotter::new(fake(&[1.0]), Trigger::new(0.5, 1, 0), "hey hardy");
+        let mut s = WindowSpotter::new(fake(&[1.0]), Trigger::new(0.5, 1, 0), "hey ada");
         s.push(&vec![0; WINDOW - 1]);
         assert_eq!(s.poll().unwrap(), None);
         assert!(s.scorer.seen.is_empty());
@@ -247,7 +247,7 @@ mod tests {
     /// newest contiguous 2 s, however much audio arrived while it was busy.
     #[test]
     fn a_late_poll_scores_the_newest_contiguous_window() {
-        let mut s = WindowSpotter::new(fake(&[]), Trigger::new(0.5, 1, 0), "hardy");
+        let mut s = WindowSpotter::new(fake(&[]), Trigger::new(0.5, 1, 0), "ada");
         let audio: Vec<i16> = (0..(WINDOW * 3) as i32).map(|i| (i % 30_000) as i16).collect();
         // Arrives in odd-sized callbacks, and nobody polls for 6 s of audio.
         for chunk in audio.chunks(170) {
@@ -287,10 +287,10 @@ mod tests {
 
     #[test]
     fn a_hit_clears_the_window_so_one_utterance_fires_once() {
-        let mut s = WindowSpotter::new(fake(&[0.9, 0.9]), Trigger::new(0.5, 1, 0), "hey hardy");
+        let mut s = WindowSpotter::new(fake(&[0.9, 0.9]), Trigger::new(0.5, 1, 0), "hey ada");
         s.push(&vec![0; WINDOW]);
         let hit = s.poll().unwrap().expect("hit");
-        assert_eq!(hit.phrase, "hey hardy");
+        assert_eq!(hit.phrase, "hey ada");
         s.push(&vec![0; FRAME]);
         assert_eq!(s.poll().unwrap(), None);
     }

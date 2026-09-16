@@ -2,7 +2,7 @@
 //
 // The Slack inbox poll, against a mocked Tauri fetch standing in for
 // service/inbox.py. The money rules are asserted directly: nothing is accepted
-// while Hardy is busy, a lost accept (409) never starts a run, one accepted idea
+// while Ada is busy, a lost accept (409) never starts a run, one accepted idea
 // starts exactly one run, and the session reported is the new run's, never
 // the one that was already on screen.
 
@@ -62,10 +62,10 @@ describe("useIdeaInbox", () => {
     expect(opts.onIdea).toHaveBeenCalledWith(IDEA);
     const accept = calls().find((c) => c.url.endsWith("/inbox/idea_1/accept"));
     expect(accept?.method).toBe("POST");
-    expect(String(accept?.body.claimant)).toMatch(/^hardy-desktop-/);
+    expect(String(accept?.body.claimant)).toMatch(/^ada-desktop-/);
   });
 
-  it("does not even look while Hardy is busy", async () => {
+  it("does not even look while Ada is busy", async () => {
     engine();
     const opts = options({ busy: true });
     renderHook(() => useIdeaInbox(opts));

@@ -1,4 +1,4 @@
-"""Hardy in the call: decide when to say something, and say one short thing.
+"""Ada in the call: decide when to say something, and say one short thing.
 
 Where the design comes from
 ---------------------------
@@ -12,7 +12,7 @@ read from source:
   mis-transcriptions (``NAME_PATTERNS``), then a ``difflib.SequenceMatcher``
   ratio over words and bigrams (``_fuzzy_name_match``). The model is never
   asked "should I talk?" about every sentence; captions mangle names, which is
-  why the fuzzy tier exists. :func:`addressed` is that ladder for "Hardy".
+  why the fuzzy tier exists. :func:`addressed` is that ladder for "Ada".
 * a cooldown between replies -- ``meeting_agent.py`` sets ``cooldown_until =
   time.time() + 30`` after answering, ``config.py::RESPONSE_COOLDOWN_SECONDS``
   says why: "prevents double-triggering".
@@ -81,9 +81,9 @@ log = logging.getLogger("meetbot.brain")
 #: on it (the ``SOURCING_MARKER`` convention).
 REPLY_MARKER = "HARDY-MEET-REPLY v1"
 
-#: Caption renderings of "Hardy" seen in speech recognisers. Exact-match tier,
+#: Caption renderings of "Ada" seen in speech recognisers. Exact-match tier,
 #: the attendance agent's ``NAME_PATTERNS``.
-NAME_VARIANTS = ("hardy", "hardie", "harty", "hearty", "hardey")
+NAME_VARIANTS = ("ada", "aida", "ayda", "adah", "eda")
 
 #: SequenceMatcher ratio at or above which a word counts as the name. The
 #: attendance agent's ``_FUZZY_THRESHOLD`` tier; 0.8 accepts one substituted
@@ -95,7 +95,7 @@ FUZZY_THRESHOLD = 0.8
 #: The attendance agent keeps the same list (``_IGNORE_LIST``) for the same
 #: reason: a fuzzy match on a common word makes the bot interrupt.
 _NOT_NAME = frozenset(
-    {"hard", "hardly", "harder", "hardware", "handy", "harry", "tardy", "lardy"}
+    {"adam", "nada", "adapt", "add", "data", "adds", "idea", "ado"}
 )
 
 #: Doubt and ideas, the second gate. Deliberately phrases, not single words:
@@ -152,14 +152,14 @@ def _words(text: str) -> list[str]:
     return re.findall(r"[a-z']+", text.casefold().replace("\u2019", "'"))
 
 
-def addressed(text: str, name: str = "Hardy") -> bool:
+def addressed(text: str, name: str = "Ada") -> bool:
     """Does this line name the bot? Exact, then variants, then fuzzy.
 
     The three tiers of the attendance agent's ``detect_keyword``; the spaced-
     letters tier is left out because captions do not spell names out.
     """
     target = name.casefold()
-    variants = {target, *NAME_VARIANTS} if target == "hardy" else {target}
+    variants = {target, *NAME_VARIANTS} if target == "ada" else {target}
     words = _words(text)
     if any(word in variants for word in words):
         return True
@@ -178,11 +178,11 @@ def voices_doubt(text: str) -> bool:
     return any(pattern.search(plain) for pattern in DOUBT_PATTERNS)
 
 
-def clean_reply(raw: str, *, name: str = "Hardy", max_chars: int = 240) -> str:
+def clean_reply(raw: str, *, name: str = "Ada", max_chars: int = 240) -> str:
     """Turn a model answer into one speakable line, or ``""`` for silence.
 
     Accepts the requested ``{"reply": ...}`` JSON and, as the attendance
-    agent's sanitiser does, a bare string. Strips a ``Hardy:`` prefix, quotes
+    agent's sanitiser does, a bare string. Strips a ``Ada:`` prefix, quotes
     and markdown; keeps at most two sentences; refuses an over-long answer by
     cutting at a sentence boundary rather than mid-word, so what is heard is
     always a whole sentence.
@@ -226,8 +226,8 @@ def transcript_text(utterances: list[Utterance], *, include_self: bool = False) 
 
 @dataclass(frozen=True)
 class BrainPolicy:
-    name: str = "Hardy"
-    #: Silence after the last human line before Hardy may start speaking.
+    name: str = "Ada"
+    #: Silence after the last human line before Ada may start speaking.
     quiet_s: float = 1.2
     #: Give up on a trigger if the room has not gone quiet within this long.
     max_wait_s: float = 12.0
@@ -339,7 +339,7 @@ class Brain:
         if not reason:
             return
         if self._speaking:
-            self.skipped.append(SkippedTrigger(u, "Hardy was already speaking"))
+            self.skipped.append(SkippedTrigger(u, "Ada was already speaking"))
             return
         if len(self.replies) >= self.policy.max_replies:
             self.skipped.append(
@@ -433,7 +433,7 @@ class Brain:
             # Someone started talking while the model thought, and kept going.
             self._pending = None
             self.skipped.append(
-                SkippedTrigger(u, "the conversation moved on before Hardy could reply")
+                SkippedTrigger(u, "the conversation moved on before Ada could reply")
             )
             return
         if self._pending is not None and self._pending[0] is not u:

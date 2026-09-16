@@ -2,7 +2,7 @@
   "name": "kaleo",
   "private": false,
   "version": "0.3.1",
-  "description": "Hardy - the AI hardware engineer. A desktop overlay for the Silkscreen PCB engine: describe a circuit, watch it get designed, reviewed, and written out as a KiCad board.",
+  "description": "Ada - the AI hardware engineer. A desktop overlay for the Silkscreen PCB engine: describe a circuit, watch it get designed, reviewed, and written out as a KiCad board.",
   "author": {
     "name": "Srikanth Nani",
     "email": "mail@srikanthnani.com",

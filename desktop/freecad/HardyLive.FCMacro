@@ -1,0 +1,107 @@
+"""HardyLive -- let the Hardy engine swap solids into this FreeCAD as it builds them.
+
+Run inside FreeCAD (``open -n -a FreeCAD --args HardyLive.FCMacro`` on macOS;
+``freecad HardyLive.FCMacro`` elsewhere). It starts a small XML-RPC server on
+``127.0.0.1`` and drains its requests on the GUI thread with a QTimer, which
+is the only thread FreeCAD lets a document be edited from.
+
+The structure is copied from neka-nat/freecad-mcp,
+``addon/FreeCADMCP/rpc_server/rpc_server.py`` (MIT): a ``SimpleXMLRPCServer``
+served from a daemon thread, requests queued and executed by
+``QtCore.QTimer.singleShot(..., process_gui_tasks)`` on the GUI thread, and a
+``ping`` that answers ``True``. What is different is the surface: one method,
+``replace_shape(path, label)``, which imports a STEP and swaps it in for the
+object of that label, so a watcher sees the board, then the base, then the
+lid appear, and a redesign replace them. No arbitrary code is executed and
+nothing is written to disk.
+
+Port: ``HARDY_FREECAD_LIVE_PORT`` (default 9877). Loopback only.
+"""
+
+import os
+import queue
+import threading
+from xmlrpc.server import SimpleXMLRPCServer
+
+import FreeCAD
+import FreeCADGui
+import Part
+from PySide import QtCore
+
+PORT = int(os.environ.get("HARDY_FREECAD_LIVE_PORT", "9877"))
+DOC_NAME = "HardyLive"
+POLL_MS = 200
+
+_tasks: "queue.Queue[tuple]" = queue.Queue()
+
+
+def _document():
+    doc = FreeCAD.ActiveDocument
+    if doc is None:
+        doc = FreeCAD.newDocument(DOC_NAME)
+    return doc
+
+
+def _replace_shape_gui(path, label):
+    shape = Part.read(path)
+    doc = _document()
+    for obj in list(doc.Objects):
+        if obj.Label == label:
+            doc.removeObject(obj.Name)
+    obj = doc.addObject("Part::Feature", label)
+    obj.Label = label
+    obj.Shape = shape
+    doc.recompute()
+    try:
+        FreeCADGui.SendMsgToActiveView("ViewFit")
+    except Exception:  # noqa: BLE001 - no active view yet is not a failure
+        pass
+    return True
+
+
+def _process_gui_tasks():
+    """Drain the queue on the GUI thread; re-arm the timer either way."""
+    while True:
+        try:
+            fn, args, result = _tasks.get_nowait()
+        except queue.Empty:
+            break
+        try:
+            result.put((True, fn(*args)))
+        except Exception as exc:  # noqa: BLE001 - the caller gets the words
+            result.put((False, f"{type(exc).__name__}: {exc}"))
+    QtCore.QTimer.singleShot(POLL_MS, _process_gui_tasks)
+
+
+def _dispatch(fn, *args, timeout_s=30.0):
+    result: "queue.Queue[tuple]" = queue.Queue()
+    _tasks.put((fn, args, result))
+    ok, value = result.get(timeout=timeout_s)
+    if not ok:
+        raise RuntimeError(value)
+    return value
+
+
+class HardyLiveRPC:
+    def ping(self):
+        return True
+
+    def replace_shape(self, path, label):
+        """Import the STEP at ``path`` as the object labelled ``label``,
+        replacing any object already carrying that label."""
+        if not os.path.isfile(path):
+            raise RuntimeError(f"no such file: {path}")
+        return _dispatch(_replace_shape_gui, path, str(label))
+
+
+def _serve():
+    server = SimpleXMLRPCServer(
+        ("127.0.0.1", PORT), allow_none=True, logRequests=False
+    )
+    server.register_instance(HardyLiveRPC())
+    server.serve_forever()
+
+
+threading.Thread(target=_serve, daemon=True).start()
+QtCore.QTimer.singleShot(POLL_MS, _process_gui_tasks)
+FreeCAD.Console.PrintMessage(f"HardyLive: listening on 127.0.0.1:{PORT}\n")

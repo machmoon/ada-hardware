@@ -68,6 +68,7 @@ __all__ = [
     "Project",
     "Repo",
     "check_citations",
+    "cite",
     "license_category",
     "mechanical_files",
     "normalise",
@@ -707,6 +708,24 @@ def check_citations(
     shown to the model, and (3) its value -- and its quantity, when it gives
     one -- is inside the quote. Each refusal names which of the three failed.
     """
+    return cite(repo.full_name, raw_facts, documents, url_for=repo.blob_url)
+
+
+def cite(
+    owner: str,
+    raw_facts: list[dict[str, Any]],
+    documents: dict[str, str],
+    *,
+    url_for: Any,
+) -> tuple[list[Fact], list[Dropped]]:
+    """:func:`check_citations` for any set of read documents.
+
+    ``owner`` names who the documents belong to in a :class:`Dropped` (a
+    repository, or a web page's URL) and ``url_for(source)`` gives the
+    citation URL of a kept fact. The three checks are the same ones, in the
+    same order, so a GitHub README and a scraped web page are held to one
+    rule (:mod:`silkscreen.web_research` is the second caller).
+    """
     kept: list[Fact] = []
     dropped: list[Dropped] = []
     haystacks = {path: normalise(text) for path, text in documents.items()}
@@ -721,7 +740,7 @@ def check_citations(
         label, quantity = item.get("label"), item.get("quantity")
         reason = _refusal(item, haystacks)
         if reason is not None:
-            dropped.append(Dropped(repo.full_name, name, value, reason))
+            dropped.append(Dropped(owner, name, value, reason))
             continue
         key = (name, normalise(value), normalise(label) if label else None)
         if key in seen:
@@ -733,7 +752,7 @@ def check_citations(
                 value=value,
                 quote=quote,
                 source=source,
-                url=repo.blob_url(source),
+                url=url_for(source),
                 label=label,
                 quantity=quantity,
             )
@@ -947,14 +966,22 @@ def parse_extraction(
     return out
 
 
-def _parse_fact(fact: Any, where: str, errors: list[str]) -> dict[str, Any] | None:
+def _parse_fact(
+    fact: Any,
+    where: str,
+    errors: list[str],
+    fields: frozenset[str] = FACT_FIELDS,
+) -> dict[str, Any] | None:
+    """One fact's structure. ``fields`` is the vocabulary it may use -- the
+    GitHub extraction's :data:`FACT_FIELDS`, or a superset for a caller whose
+    documents describe more than arms (:mod:`silkscreen.web_research`)."""
     if not isinstance(fact, dict):
         errors.append(f"{where} must be an object")
         return None
     before = len(errors)
     name = fact.get("field")
-    if name not in FACT_FIELDS:
-        errors.append(f"{where}: field {name!r} is not one of {sorted(FACT_FIELDS)}")
+    if name not in fields:
+        errors.append(f"{where}: field {name!r} is not one of {sorted(fields)}")
     value = fact.get("value")
     if isinstance(value, bool) or value is None:
         errors.append(

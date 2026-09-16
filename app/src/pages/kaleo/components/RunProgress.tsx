@@ -366,7 +366,7 @@ function explain(
     case "offline":
       return {
         title: "The engine isn't running.",
-        body: `Nothing answered at ${baseUrl}. Hardy talks to the silkscreen engine over HTTP, so the service has to be up before a run can start.`,
+        body: `Nothing answered at ${baseUrl}. Ada talks to the silkscreen engine over HTTP, so the service has to be up before a run can start.`,
         hint: "PORT=8081 python -m service.app",
       };
     case "setup":
@@ -392,8 +392,8 @@ function explain(
       };
     case "timeout":
       return {
-        title: "The run ran out of time.",
-        body: "The run passed this app\u2019s 300 second ceiling and was cancelled. A smaller board, or a shorter placer budget, comes back sooner.",
+        title: "The engine is taking longer than this app waits.",
+        body: "This app stopped waiting after its 300 second ceiling. The engine was not cancelled and keeps working; the run is asked for again under the same key, and starting the same request again picks it up rather than paying for a second one.",
       };
     case "cancelled":
       return { title: "Run cancelled.", body: "Nothing was written." };

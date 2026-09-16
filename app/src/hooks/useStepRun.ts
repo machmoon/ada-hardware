@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  REQUEST_TIMEOUT_MS,
   advanceStep,
   amendStep,
   cancelStep,
@@ -52,6 +53,13 @@ import {
 } from "@/hooks/useSilkscreenRun";
 
 export type StepRunStatus = "idle" | "running" | "waiting" | "done" | "error";
+
+/**
+ * How many times a timed-out start is asked for again under its key before
+ * this client gives up and reports it. Four windows of the request ceiling
+ * is twenty minutes: longer than the longest start measured (870 s).
+ */
+export const MAX_START_WAITS = 3;
 
 export interface StepRun {
   status: StepRunStatus;
@@ -536,6 +544,17 @@ export function useStepRun({ baseUrl, token, summary }: UseStepRunOptions): Step
   // the request it belongs to. Kept across an abandoned start and dropped the
   // moment one answers — see `startKeyFor`.
   const startKeyRef = useRef<{ key: string; request: string } | null>(null);
+  /**
+   * Re-issues the start under the same idempotency key. Set by `start`,
+   * cleared once the start has answered. A request timeout aborts this
+   * client's fetch and nothing else -- the engine finishes the read, plan and
+   * propose regardless (`service/steps.py::start_once`) and replays the
+   * envelope to the next request under the key. Without this the 300 s
+   * ceiling reported a finished, paid run as a dead one (2026-09-16: 870 s
+   * server-side, "cancelled" on screen).
+   */
+  const reattachRef = useRef<(() => void) | null>(null);
+  const startWaitsRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -727,7 +746,10 @@ export function useStepRun({ baseUrl, token, summary }: UseStepRunOptions): Step
       // The start was answered, so its key has done its job. Dropping it here
       // is what keeps "run that same intent again" a second board rather than
       // a replay of the first one.
-      if (response.step === "propose") startKeyRef.current = null;
+      if (response.step === "plan" || response.step === "propose") {
+        startKeyRef.current = null;
+        reattachRef.current = null;
+      }
       const nextHistory = [...historyRef.current, response];
       commitHistory(nextHistory);
       commitSession(response.session);
@@ -775,6 +797,41 @@ export function useStepRun({ baseUrl, token, summary }: UseStepRunOptions): Step
         caught instanceof SilkscreenError
           ? caught
           : new SilkscreenError("server", (caught as Error)?.message ?? "step failed");
+      if (err.kind === "timeout") {
+        // This client stopped waiting; the engine did not stop working. A
+        // start has no session id yet, so the only handle is the idempotency
+        // key: ask again under it and the engine answers 409 while it is
+        // still going, then replays the envelope. A later step has a session,
+        // and its status is the truth to fall back on.
+        const sessionId = sessionRef.current;
+        const again = reattachRef.current;
+        if (!sessionId && again && startWaitsRef.current < MAX_START_WAITS) {
+          startWaitsRef.current += 1;
+          logEvent(
+            `step.${step}`,
+            `The engine has not answered within ${Math.round(REQUEST_TIMEOUT_MS / 60_000)} minutes` +
+              ` and is still working. Asking for the result again under the same key` +
+              ` (${startWaitsRef.current} of ${MAX_START_WAITS}).`
+          );
+          // `run` refuses while this step is still marked in flight; the
+          // caller's `finally` clears that right after this returns.
+          setTimeout(() => {
+            if (mountedRef.current && abortRef.current === controller) again();
+          }, 0);
+          return;
+        }
+        if (sessionId) {
+          setRunning(null);
+          setStatus("waiting");
+          logEvent(
+            `step.${step}`,
+            `The engine has not answered within ${Math.round(REQUEST_TIMEOUT_MS / 60_000)} minutes` +
+              ` and is still working on ${step}. Its status decides what is offered next.`
+          );
+          resync(sessionId);
+          return;
+        }
+      }
       setError(err);
       setRunning(null);
       setFailedStep(step);
@@ -848,7 +905,14 @@ export function useStepRun({ baseUrl, token, summary }: UseStepRunOptions): Step
       requestRef.current = request;
       runStartedAtRef.current = Date.now();
       const key = startKeyFor(startKeyRef, request);
-      run("propose", (signal) => startSteps(baseUrl, request, signal, token, key));
+      // Plan first: the brief and its questions come back before the
+      // expensive propose call, which `approve("propose", {answers})` runs.
+      startWaitsRef.current = 0;
+      reattachRef.current = () =>
+        run("plan", (signal) =>
+          startSteps(baseUrl, { plan_first: true, ...request }, signal, token, key)
+        );
+      reattachRef.current();
     },
     [baseUrl, token, run, commitHistory, commitSession]
   );

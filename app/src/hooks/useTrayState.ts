@@ -1,11 +1,11 @@
 // The overlay's half of the menu bar icon (src-tauri/src/tray.rs).
 //
-// The tray draws two facts it cannot see for itself: whether Hardy's microphone
-// is open (the glyph fills in, and the "Hardy listening" check item is ticked)
+// The tray draws two facts it cannot see for itself: whether Ada's microphone
+// is open (the glyph fills in, and the "Ada listening" check item is ticked)
 // and, on Windows, whether the hide shortcut has blanked the webview. Both
 // live in React, so this hook reports them with `tray_set_state` every time
 // they change — and that report is the ONLY thing that moves the check mark.
-// Clicking the item in the menu does not tick it; it emits `tray-hardy-toggle`,
+// Clicking the item in the menu does not tick it; it emits `tray-ada-toggle`,
 // the page flips the ear, and the next report ticks it if the mic actually
 // opened. A mark that followed the click rather than the microphone would be
 // a lie about an open mic, which is the one thing this app's indicators must
@@ -18,15 +18,15 @@ import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-/** Emitted by the tray when "Hardy listening" is clicked; pinned in tray.rs. */
-export const TRAY_TOGGLE_EVENT = "tray-hardy-toggle";
+/** Emitted by the tray when "Ada listening" is clicked; pinned in tray.rs. */
+export const TRAY_TOGGLE_EVENT = "tray-ada-toggle";
 
 export interface TrayStateInput {
   /** The microphone is open right now — the ear's `listening`, not its switch. */
   listening: boolean;
   /** The overlay is on screen (on Windows, not blanked by the hide shortcut). */
   visible: boolean;
-  /** What a click on "Hardy listening" does: flip the ear's switch. */
+  /** What a click on "Ada listening" does: flip the ear's switch. */
   onToggleListening: () => void;
 }
 

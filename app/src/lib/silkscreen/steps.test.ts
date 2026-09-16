@@ -465,6 +465,7 @@ describe("stepRows", () => {
     expect(byId.route.status).toBe("running");
     expect(byId.review.status).toBe("pending");
     expect(rows.map((r) => r.id)).toEqual([
+      "plan",
       "propose",
       "place",
       "route",
@@ -908,7 +909,7 @@ describe("runReceipt", () => {
   it("names the stages that never ran, and ends with the submission sentence", () => {
     const receipt = runReceipt([routed]);
     expect(receipt.notDone[0]).toBe(
-      "Never run: Schematic, Placement, Review, Sourcing, Order, Case."
+      "Never run: Plan, Schematic, Placement, Review, Sourcing, Order, Case."
     );
     expect(receipt.notDone[receipt.notDone.length - 1]).toBe(
       "Nothing is submitted. Sending the package to a fab is yours to do."
@@ -1074,6 +1075,7 @@ describe("routeDetails", () => {
 
 import {
   REVIEW_CLEAN_LINE,
+  envelopeWarnings,
   mergeBackgroundOutcomes,
   receiptLine,
   reviewDetails,
@@ -1138,6 +1140,23 @@ describe("review outcome", () => {
     const older = reviewDetails(step({ step: "review", findings: [{ severity: "note", title: "x" }] }));
     expect(older?.status).toBe("ok");
     expect(older?.findings).toHaveLength(1);
+  });
+
+  it("carries the envelope's warnings, so a failed agenda is not a clean review", () => {
+    const warned = reviewDetails(
+      step({
+        step: "review",
+        findings: [],
+        blockers: [],
+        review: REVIEW_OK,
+        spec_review: null,
+        warnings: ["the spec-review agenda could not be prepared: RuntimeError: no calendar"],
+      })
+    );
+    expect(warned?.warnings).toEqual([
+      "the spec-review agenda could not be prepared: RuntimeError: no calendar",
+    ]);
+    expect(reviewDetails(step({ step: "review", findings: [], blockers: [] }))?.warnings).toEqual([]);
   });
 
   it("says failed, not 'no findings', on the sentence, the receipt clause and the run receipt", () => {
@@ -1306,5 +1325,30 @@ describe("priorArtDetails", () => {
     );
     expect(details?.headline).toContain("could not be searched");
     expect(details?.warnings).toEqual(["timed out"]);
+  });
+});
+
+describe("envelope warnings", () => {
+  it("surfaces the warnings no card shows, and stays silent where a card already does", () => {
+    // propose: the datasheet cache failed; nothing else on that step renders `warnings`.
+    expect(
+      envelopeWarnings(step({ step: "propose", warnings: ["datasheet cache unavailable: Firestore refused"] }))
+    ).toEqual(["datasheet cache unavailable: Firestore refused"]);
+    // case and sourcing: the block's own warnings are shown by their cards, the envelope's were not.
+    expect(envelopeWarnings(step({ step: "case", warnings: ["FreeCAD is not installed"] }))).toEqual([
+      "FreeCAD is not installed",
+    ]);
+    expect(envelopeWarnings(step({ step: "sourcing", warnings: ["Mouser did not answer"] }))).toEqual([
+      "Mouser did not answer",
+    ]);
+    // place, route, order and review fold `warnings` into their own details: nothing twice.
+    for (const name of ["place", "route", "order", "review"] as const) {
+      expect(envelopeWarnings(step({ step: name, warnings: ["x"] }))).toEqual([]);
+    }
+    // Blank and non-string entries are not warnings.
+    expect(
+      envelopeWarnings(step({ step: "propose", warnings: ["  ", 3 as unknown as string, "real"] }))
+    ).toEqual(["real"]);
+    expect(envelopeWarnings(undefined)).toEqual([]);
   });
 });

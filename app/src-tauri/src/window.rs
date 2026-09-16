@@ -455,7 +455,7 @@ pub fn create_dashboard_window<R: Runtime>(
 
     #[cfg(target_os = "macos")]
     let base_builder = base_builder
-        .title("Hardy — Dashboard")
+        .title("Ada — Dashboard")
         .center()
         .decorations(true)
         .inner_size(1200.0, 800.0)
@@ -468,7 +468,7 @@ pub fn create_dashboard_window<R: Runtime>(
 
     #[cfg(not(target_os = "macos"))]
     let base_builder = base_builder
-        .title("Hardy — Dashboard")
+        .title("Ada — Dashboard")
         .center()
         .decorations(true)
         .inner_size(800.0, 600.0)

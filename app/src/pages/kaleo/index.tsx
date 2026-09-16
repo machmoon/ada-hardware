@@ -13,6 +13,8 @@ import { useOverlayDock } from "@/hooks/useOverlayDock";
 import { useOverlaySize } from "@/hooks/useOverlaySize";
 import { useOverlaySkin } from "@/hooks/useOverlaySkin";
 import { ask } from "@/lib/silkscreen/chat";
+import { setVoiceVocabulary } from "@/lib/silkscreen/voice";
+import { recognitionVocabulary } from "@/lib/speech/vocabulary";
 import { isMeasured, sizeFor, type OverlayState } from "@/lib/overlay-size";
 import { useRunVoice } from "@/hooks/useRunVoice";
 import { useStepRun } from "@/hooks/useStepRun";
@@ -21,10 +23,10 @@ import { useReviewedInKicad } from "@/hooks/useReviewedInKicad";
 import { useWakeWord } from "@/hooks/useWakeWord";
 import { useTrayState } from "@/hooks/useTrayState";
 import {
-  fulfillHardyDecision,
+  fulfillAdaDecision,
   routeSpokenUtterance,
   wouldStartBoard,
-} from "@/lib/hardy-path";
+} from "@/lib/ada-path";
 import { collectDeskCandidates, enrichWithDeskContext } from "@/lib/desk-context";
 import { resolveDesk } from "@/lib/silkscreen/desk";
 import {
@@ -86,7 +88,16 @@ const ARM_DECAY_MS = 15_000;
  * that showed the second while a solve was still running would be lying about
  * what pressing the button does.
  */
-export type HeldRequest = { state: "parked" | "offered"; text: string };
+export type HeldRequest = {
+  state: "parked" | "offered";
+  text: string;
+  /**
+   * The orchestrator proposed this board out loud (`converse`), rather than
+   * the engineer typing it. Only a proposal can be answered with a bare
+   * spoken "yes" — see `wakeAction`.
+   */
+  proposed?: boolean;
+};
 
 /**
  * Which door a held sentence can be sent through, given what the run is.
@@ -192,7 +203,7 @@ export const SHAPE_ROOM_TIMEOUT_MS = 250;
 export interface OverlayStateInput {
   /** The full bar rather than the pill; see `isOverlayExpanded`. */
   open: boolean;
-  /** The microphone is open (or Hardy is talking); see `barContent`. */
+  /** The microphone is open (or Ada is talking); see `barContent`. */
   listening: boolean;
   /** A run is in flight in either state machine. */
   busy: boolean;
@@ -276,7 +287,7 @@ export function overlayStateFor(input: OverlayStateInput): OverlaySizing {
   const blocks: OverlayState[] = [];
   if (input.deskCaption) blocks.push("desk-caption");
   if (input.engineDown) blocks.push("engine-down");
-  if (input.commandNote && !input.stepsActive) blocks.push("hardy-caption");
+  if (input.commandNote && !input.stepsActive) blocks.push("ada-caption");
   if (input.stepsActive) blocks.push("steps");
   if (input.deliverOpen) blocks.push("deliver");
   // One running state now: the raw feed lives in the dashboard console, so
@@ -303,7 +314,7 @@ const DOMINANCE: readonly OverlayState[] = [
   "result",
   "failure",
   "cancelled",
-  "hardy-caption",
+  "ada-caption",
   "engine-down",
   "desk-caption",
 ];
@@ -617,9 +628,9 @@ const Kaleo = () => {
   const [expanded, setExpanded] = useState(true);
   // Which skin is on, live: Settings is a different webview, so this arrives
   // as a `storage` event rather than through a context.
-  const { skin, hardyInTerminal, setSkin } = useOverlaySkin();
+  const { skin, adaInTerminal, setSkin } = useOverlaySkin();
   /**
-   * The terminal skin's Hardy half.
+   * The terminal skin's Ada half.
    *
    * `/chat/stream` can decide to generate a board, which is a paid run — so
    * this streams every frame into the terminal as it arrives rather than
@@ -630,7 +641,7 @@ const Kaleo = () => {
     `term-${Math.random().toString(36).slice(2, 10)}`,
   );
   const askFromTerminal = useCallback(
-    async (text: string, mode: "hardy" | "agent", write: (line: string) => void) => {
+    async (text: string, mode: "ada" | "agent", write: (line: string) => void) => {
       const outcome = await ask(text, {
         baseUrl: run.baseUrl,
         token: run.token,
@@ -683,6 +694,16 @@ const Kaleo = () => {
   // onClick — React would pass the click event as the override.
   const [commandNote, setCommandNote] = useState<string | null>(null);
   const [deskCaption, setDeskCaption] = useState<string | null>(null);
+  // The caption is set beside `commandNote` with the same text and used to
+  // outlive it forever -- nothing cleared it, so every later state of the bar
+  // was three lines taller for the rest of the session (overlay-motion audit,
+  // item 11). It now shares the note's lifecycle: the moment the note is
+  // cleared or replaced by something else, the caption goes with it.
+  useEffect(() => {
+    if (commandNote !== deskCaption) setDeskCaption(null);
+    // `deskCaption` is deliberately not a dependency: this reacts to the note.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commandNote]);
 
   // The tour's one sentence for the strip arrives over the storage bridge
   // (`TOUR_CAPTION_KEY`, written by the dashboard's done step) and rides the
@@ -737,7 +758,8 @@ const Kaleo = () => {
    * to spend must not accumulate. This is the opposite object: the exact
    * sentence, kept verbatim, and losing it would mean the engineer types it
    * twice. Nothing here runs by itself — the only path from held to spent is
-   * `startHeld`, which is a click.
+   * `startHeld`: a click, or a bare spoken "yes" to a proposal Ada asked
+   * about out loud (`wakeAction`'s approval gate).
    */
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [held, setHeld] = useState<HeldRequest | null>(null);
@@ -1111,8 +1133,56 @@ const Kaleo = () => {
     });
   }, [run, steps, stepMode, summaryMode, interpret, busy]);
 
-  // Local wake → transcript → hardy-path. Deixis goes to /desk/resolve (or a
+  // Local wake → transcript → ada-path. Deixis goes to /desk/resolve (or a
   // caption) and never to /generate. wake-flow still owns board vs command.
+  /**
+   * A spoken sentence that is not a step command: talk to the orchestrator.
+   *
+   * "Ada, can you hear me" gets an answer, not a board. The engine runs with
+   * `confirm_before_build`, so the most a sentence can do here is make Ada
+   * *propose* a board, which lands in `held` as a question and is spent only
+   * by the button or a spoken yes.
+   */
+  const voiceSession = useRef<string>(`voice-${Math.random().toString(36).slice(2, 10)}`);
+  const converse = useCallback(
+    async (text: string, spoken: boolean) => {
+      setExpanded(true);
+      setArmed(null);
+      setCommandNote("…");
+      try {
+        const outcome = await ask(text, {
+          baseUrl: run.baseUrl,
+          token: run.token,
+          sessionId: voiceSession.current,
+          confirmBeforeBuild: true,
+        });
+        if (outcome.proposal) {
+          setReceipt(null);
+          setHeld({ state: busy ? "parked" : "offered", text: outcome.proposal, proposed: true });
+        }
+        const line =
+          outcome.assistant ||
+          (outcome.proposal ? `Want me to build ${outcome.proposal}?` : "");
+        setCommandNote(line || null);
+        if (spoken && line) void announce(line);
+      } catch (error) {
+        const line =
+          error instanceof Error && error.message
+            ? error.message
+            : "I couldn’t reach the engine.";
+        setCommandNote(line);
+        if (spoken) void announce(line);
+      }
+    },
+    [run.baseUrl, run.token, busy]
+  );
+
+  // Bias speech-to-text on this run's part numbers and refs
+  // (lib/speech/vocabulary.ts): "ESP32" was being heard as "S32".
+  useEffect(() => {
+    setVoiceVocabulary(recognitionVocabulary(steps.history));
+  }, [steps.history]);
+
   const wake = useWakeWord({
     baseUrl: run.baseUrl,
     token: run.token,
@@ -1120,7 +1190,7 @@ const Kaleo = () => {
     // On-device wake is on. `wake_status` still only reports whether an ONNX
     // file loads rather than whether it recognises anything, so the guarantee
     // behind this flag is measurement, not the status call: the shipped
-    // `resources/wake/hey_hardy.onnx` scores 0.87 recall on "Hey Hardy" spoken by
+    // `resources/wake/hey_ada.onnx` scores 0.87 recall on "Hey Ada" spoken by
     // voices it never trained on, and zero false accepts over held-out speech,
     // at the 0.7 threshold the app runs (scratchpad measurement, 2026-09-07).
     // The model it replaces was a collapsed training run that emitted ~0.09
@@ -1139,8 +1209,12 @@ const Kaleo = () => {
           snap: prepared.snap,
           busy,
           stepsStatus: steps.status,
+          // Only a proposal Ada asked about, and only once it is a
+          // question rather than parked behind a running stage: a spoken
+          // "yes" must never stop a run that is already spending.
+          pendingProposal: held?.proposed && held.state === "offered" ? held.text : null,
         });
-        const action = await fulfillHardyDecision(routed, {
+        const action = await fulfillAdaDecision(routed, {
           resolveDesk: (text, snap) =>
             resolveDesk(run.baseUrl, {
               utterance: text,
@@ -1164,11 +1238,29 @@ const Kaleo = () => {
           // interpret() answers in commandNote / the step panel, both of
           // which live in the open card. BAR LANE: expand here, not on wake.
           setExpanded(true);
+          // A sentence that names no stage and no restart is not a command
+          // to this run. It used to be held as "a different board"; it is
+          // conversation, and the orchestrator decides whether it is a board.
+          if (interpretCommand(action.text, steps.available).kind === "request") {
+            void converse(action.text, true);
+            return;
+          }
           // Spoken in, spoken back: this sentence arrived by voice.
           void interpret(action.text, true);
           return;
         }
         if (action.kind === "listen") return;
+        if (action.kind === "converse") {
+          void converse(action.text, true);
+          return;
+        }
+        if (action.kind === "decline") {
+          setHeld(null);
+          const line = "Okay, I won’t build it.";
+          setCommandNote(line);
+          void announce(line);
+          return;
+        }
         if (action.kind === "caption") {
           // Same reason: a caption nobody can see is the "it ignored me" bug.
           setExpanded(true);
@@ -1194,19 +1286,9 @@ const Kaleo = () => {
           return;
         }
         if (action.kind === "desk" || !wouldStartBoard(action)) return;
-        run.updateRequest({ intent: action.intent });
-        if (!stepMode) {
-          run.start({ intent: action.intent, ...summaryFields(summaryMode) });
-          return;
-        }
-        setCommandNote(null);
-        steps.start({
-          intent: action.intent,
-          datasheets: run.request.datasheets,
-          time_limit_s: run.request.time_limit_s,
-          kicad_live: true,
-          ...summaryFields(summaryMode),
-        });
+        // `start` now only ever means "yes" to the proposal sitting in
+        // `held`, so it is spent through the same door as the button.
+        void startHeld();
       })();
     },
   });
@@ -1241,7 +1323,7 @@ const Kaleo = () => {
   }, []);
 
   // The menu bar icon follows the ear: the glyph fills in while the mic is
-  // open, and its "Hardy listening" item is the same switch as the bar's mic
+  // open, and its "Ada listening" item is the same switch as the bar's mic
   // button. See useTrayState for why the check mark waits for this report.
   useTrayState({
     listening: wake.listening,
@@ -1480,12 +1562,12 @@ const Kaleo = () => {
           // The terminal skin replaces the bar rather than sitting inside it:
           // it is a real shell on a pty (`src-tauri/src/pty.rs`), and a shell
           // squeezed into a one-line strip is neither a terminal nor a bar.
-          // Hardy shares its input line — see `@/lib/terminal-sigil`.
+          // Ada shares its input line — see `@/lib/terminal-sigil`.
           <div ref={contentRef} className="w-full relative kv-shape-in" key="terminal">
             <Card className="flex h-[320px] w-full flex-col overflow-hidden p-0">
               <SkinStrip name="Terminal" onLeave={() => setSkin("plain")} />
               <div className="min-h-0 flex-1">
-                <TerminalSkin hardyEnabled={hardyInTerminal} onAsk={askFromTerminal} />
+                <TerminalSkin adaEnabled={adaInTerminal} onAsk={askFromTerminal} />
               </div>
             </Card>
           </div>
@@ -1712,7 +1794,9 @@ const Kaleo = () => {
               role="status"
             >
               <p className="line-clamp-3 min-w-0 text-[11px] leading-tight">
-                heard <span className="italic">“{held.text}”</span>
+                {held.proposed ? "build " : "heard "}
+                <span className="italic">“{held.text}”</span>
+                {held.proposed ? "?" : null}
               </p>
 
               {/* The service's sentence, verbatim. It composes this out of
@@ -1779,7 +1863,7 @@ const Kaleo = () => {
                         : "Starts a new board from your request plus this note — this calls the model and costs money."
                     }
                   >
-                    Start over with this
+                    {steps.session ? "Start over with this" : "Build it"}
                   </Button>
                 ) : (
                   <span className="text-[11px] text-muted-foreground" data-testid="held-waiting">
@@ -1816,7 +1900,7 @@ const Kaleo = () => {
           {commandNote && !stepsActive ? (
             <div
               className="kv-settle flex items-center justify-between gap-2 rounded-md bg-muted/60 px-2 py-1.5"
-              data-testid="hardy-caption"
+              data-testid="ada-caption"
               role="status"
             >
               {/* Four lines, matching this state's constant. The longest copy in
@@ -1831,7 +1915,7 @@ const Kaleo = () => {
                   setCommandNote(null);
                   safeLocalStorage.removeItem(TOUR_CAPTION_KEY);
                 }}
-                data-testid="hardy-caption-dismiss"
+                data-testid="ada-caption-dismiss"
               >
                 Dismiss
               </Button>

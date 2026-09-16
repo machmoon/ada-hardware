@@ -1,4 +1,4 @@
-"""Making Hardy speak out loud in a Google Meet call -- and saying which way it went.
+"""Making Ada speak out loud in a Google Meet call -- and saying which way it went.
 
 Where the design comes from
 ---------------------------
@@ -37,7 +37,7 @@ through the speakers), callers get ``.clone()``\\ s so the page stopping its
 track cannot kill the source, and a video-only request is not given a real
 camera. Two deliberate deviations, each stated: the gain node is **not**
 connected to ``audioContext.destination`` (Attendee's is; on a laptop sitting
-in the same call that is Hardy echoing through the room's own speakers), and
+in the same call that is Ada echoing through the room's own speakers), and
 the page resolves a promise when the ``AudioBufferSourceNode`` fires ``ended``
 -- Attendee's queue is fire-and-forget, and this module's receipt needs proof.
 
@@ -51,8 +51,8 @@ source played to its ``ended`` event with the context clock advancing at least
 the clip's length; and, in ``mic="meet"`` mode, Meet's own control read
 "Turn off microphone" (i.e. live) before playback began. Anything short of that
 is ``spoken=False`` with the reason in ``detail``. That is the
-``zoombot/speak.py`` ``AUDIBLE_SPEAKERS`` rule applied to one call: "Hardy
-replied" must never read as "the room heard Hardy" when it did not.
+``zoombot/speak.py`` ``AUDIBLE_SPEAKERS`` rule applied to one call: "Ada
+replied" must never read as "the room heard Ada" when it did not.
 
 Unverified on live Meet: whether Meet's audio processing (noise suppression,
 its voice-activity gate) passes TTS at full level; whether Meet re-acquires
@@ -118,7 +118,7 @@ _INIT_SCRIPT = r"""
               issued: [], plays: 0 };
 
   // Lazily, as Attendee's _createSourceAudioTrack does. Deliberately NOT
-  // connected to ctx.destination: nothing Hardy says plays on this machine.
+  // connected to ctx.destination: nothing Ada says plays on this machine.
   v.ensure = () => {
     if (v.source) return;
     v.ctx = new AudioContext();

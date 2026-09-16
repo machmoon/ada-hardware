@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Header, Label, Switch } from "@/components";
 import { SkinPreviewPicker } from "@/components/setup";
-import { type SkinId, getSkin, getTerminalHardy, setTerminalHardy } from "@/lib/overlay-skin";
+import { type SkinId, getSkin, getTerminalAda, setTerminalAda } from "@/lib/overlay-skin";
 
 /**
  * Pick the overlay's shape.
@@ -18,11 +18,11 @@ import { type SkinId, getSkin, getTerminalHardy, setTerminalHardy } from "@/lib/
  */
 export const OverlaySkin = ({ className }: { className?: string }) => {
   const [skin, setSkinState] = useState<SkinId>(() => getSkin());
-  const [hardyInTerminal, setHardyInTerminal] = useState(() => getTerminalHardy());
+  const [adaInTerminal, setAdaInTerminal] = useState(() => getTerminalAda());
 
-  const toggleHardy = (enabled: boolean) => {
-    setTerminalHardy(enabled);
-    setHardyInTerminal(enabled);
+  const toggleAda = (enabled: boolean) => {
+    setTerminalAda(enabled);
+    setAdaInTerminal(enabled);
   };
 
   return (
@@ -38,18 +38,18 @@ export const OverlaySkin = ({ className }: { className?: string }) => {
       {skin === "terminal" ? (
         <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
           <div className="min-w-0">
-            <Label className="text-sm font-medium">Ask Hardy from the terminal</Label>
+            <Label className="text-sm font-medium">Ask Ada from the terminal</Label>
             <p className="mt-1 text-xs text-muted-foreground">
-              A line starting with a Capital letter goes to Hardy; <code>!</code> asks her to
+              A line starting with a Capital letter goes to Ada; <code>!</code> asks her to
               work on it. A leading space always runs in the shell. Off makes this an
               ordinary terminal.
             </p>
           </div>
           <Switch
-            checked={hardyInTerminal}
-            onCheckedChange={toggleHardy}
-            data-testid="terminal-hardy-switch"
-            aria-label={hardyInTerminal ? "Turn off Hardy routing" : "Turn on Hardy routing"}
+            checked={adaInTerminal}
+            onCheckedChange={toggleAda}
+            data-testid="terminal-ada-switch"
+            aria-label={adaInTerminal ? "Turn off Ada routing" : "Turn on Ada routing"}
           />
         </div>
       ) : null}

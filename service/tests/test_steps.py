@@ -222,7 +222,7 @@ def test_steps_run_in_order_and_write_the_bridge_layout(server, tmp_path):
 
     status, state = get(server, f"/steps/{sid}")
     assert status == 200
-    assert state["done"] == ["order", "place", "review", "route"]
+    assert state["done"] == ["order", "place", "propose", "review", "route"]
     assert state["next"] == ["case", "sourcing"]
 
 
@@ -230,6 +230,8 @@ def test_a_step_out_of_order_is_a_409_not_a_guess(server):
     sid = _start(server)["session"]
     status, body = post(server, f"/steps/{sid}/route", {})
     assert status == 409 and "needs the run to be 'placed'" in body["error"]
+    # Retrying cannot fix an order mistake, so it is never marked retryable.
+    assert "should_retry" not in body
     post(server, f"/steps/{sid}/place", {})
     status, body = post(server, f"/steps/{sid}/place", {})
     assert status == 409 and "already ran" in body["error"]
@@ -1595,6 +1597,8 @@ def test_a_key_still_in_flight_is_a_409_rather_than_a_second_run(server, monkeyp
 
     assert status == 409
     assert "already starting" in refused["error"]
+    # The one retryable 409: the client waits and asks again under the key.
+    assert refused["should_retry"] is True
     assert answers and answers[0][0] == 200
     # One run reached the model and one session exists; the refused press
     # neither proposed nor registered anything.
@@ -1682,3 +1686,239 @@ def test_research_must_be_a_boolean(server):
     status, body = post(server, "/steps", {"intent": "an arm", "research": "yes"})
     assert status == 400
     assert "research" in body["error"]
+
+
+@_POSIX
+def test_route_streams_each_net_to_the_bridge_while_it_routes(
+    server, tmp_path, monkeypatch
+):
+    """With ``kicad_live`` on, the route step feeds the ``stream`` bridge one
+    JSON line per net as the router commits it and an ``end`` line after,
+    in KiCad's frame, and still answers the step normally. The fake bridge
+    records what it was fed; the other stages' spawns (schematic,
+    placement, routing) see a different ``$3`` and do nothing."""
+    log = tmp_path / "stream.log"
+    bridge = _fake_bridge(
+        tmp_path,
+        f'if [ "$3" = stream ]; then cat > "{log}"; fi\nexit 0',
+    )
+    monkeypatch.setenv("SILKSCREEN_KICAD_LIVE_PYTHON", str(bridge))
+    body = _start(server, kicad_live=True)
+    sid = body["session"]
+    status, placed = post(server, f"/steps/{sid}/place", {})
+    assert status == 200, placed
+    status, routed = post(server, f"/steps/{sid}/route", {})
+    assert status == 200, routed
+    lines = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+    assert lines[-1] == {"action": "end", "net": "", "segments": [], "vias": []} or (
+        lines[-1]["action"] == "end"
+    )
+    committed = [line for line in lines if line["action"] == "committed"]
+    assert [line["net"] for line in committed] == routed["routing"]["routed"]
+    seg = committed[0]["segments"][0]
+    assert seg["layer"] in ("F.Cu", "B.Cu") and seg["net"] == committed[0]["net"]
+    assert set(seg) == {"layer", "x0_mm", "y0_mm", "x1_mm", "y1_mm", "width_mm", "net"}
+    # The event stream on the wire names each net too, without the copper.
+    nets = [e for e in routed["events"] if e["event"] == "route.net"]
+    committed_nets = [e["net"] for e in nets if e["action"] == "committed"]
+    assert committed_nets == routed["routing"]["routed"]
+    assert "segments" not in nets[0]
+    assert routed["shown_in_kicad"] is True
+
+
+@_POSIX
+def test_a_stream_bridge_that_refuses_is_said_and_never_fails_the_step(
+    server, tmp_path, monkeypatch
+):
+    bridge = _fake_bridge(
+        tmp_path,
+        'if [ "$3" = stream ]; then cat >/dev/null; '
+        "echo 'error: no board editor is running: open the placed board in pcbnew "
+        "first' >&2; "
+        "exit 1; fi\nexit 0",
+    )
+    monkeypatch.setenv("SILKSCREEN_KICAD_LIVE_PYTHON", str(bridge))
+    body = _start(server, kicad_live=True)
+    sid = body["session"]
+    post(server, f"/steps/{sid}/place", {})
+    status, routed = post(server, f"/steps/{sid}/route", {})
+    assert status == 200, routed
+    assert routed["routing"]["routed"]
+    # The ordinary routing bridge (exit 0 above) still counts as shown; the
+    # live refusal is recorded in the bridge's own words, not hidden.
+    assert routed["shown_detail"] is None or "live routing" in routed["shown_detail"]
+
+
+def _freecad_show_fixture(steps_mod, monkeypatch, tmp_path, *, refuse_at: str | None):
+    """A recorded FreeCAD (client class + app path) and a background case
+    stage that hands three solids to the ``live`` sink it was given."""
+    from types import SimpleNamespace
+
+    from silkscreen.units import mm
+
+    calls: list[tuple] = []
+
+    class FakeClient:
+        def __init__(self):
+            calls.append(("new",))
+
+        def ready(self):
+            return False
+
+        def launch(self, app):
+            calls.append(("launch", app))
+
+        def wait_ready(self, timeout_s):
+            calls.append(("wait", timeout_s))
+
+        def replace_shape(self, path, label):
+            if label == refuse_at:
+                raise RuntimeError(f"no such file: {path}")
+            calls.append(("replace", path.name, label))
+
+    monkeypatch.setattr(steps_mod, "_freecad_client_factory", lambda: FakeClient)
+    monkeypatch.setattr(
+        steps_mod, "freecad_app", lambda environ=None: "/fake/FreeCAD.app"
+    )
+    opened: list = []
+    monkeypatch.setattr(
+        steps_mod, "open_in_freecad", lambda p: (opened.append(p), (True, None))[1]
+    )
+    fake = SimpleNamespace(
+        spec=SimpleNamespace(cutouts=[], lid="lip", wall_nm=mm(2)),
+        step_text="ISO-10303-21;\n",
+        repair_rounds=0,
+        exports=None,
+    )
+
+    def fake_start(model, board, **kw):
+        live = kw.get("live")
+        if live is not None:
+            for seq, name in enumerate(("board", "base", "lid"), start=1):
+                path = tmp_path / "live" / f"case-{seq:02d}-{name}.step"
+                path.parent.mkdir(exist_ok=True)
+                path.write_text("ISO-10303-21;\n")
+                live(name, seq, path)
+        return SimpleNamespace(result=lambda: fake, running=False, wait=lambda: None)
+
+    monkeypatch.setattr(steps_mod, "start_enclosure_stage", fake_start)
+    monkeypatch.setattr(
+        "service.app._enclosure_dict",
+        lambda e, **kw: {"step": e.step_text, "warnings": []},
+    )
+    return calls, opened
+
+
+def test_the_case_is_shown_live_in_freecad_solid_by_solid(
+    server, tmp_path, monkeypatch
+):
+    """With ``kicad_live``, place starts FreeCAD on the HardyLive macro and the
+    background design swaps the board, base and lid into it as each lands;
+    pressing case then reports the show and does not open a second window."""
+    calls, opened = _freecad_show_fixture(steps, monkeypatch, tmp_path, refuse_at=None)
+    sid = _start(server, kicad_live=True)["session"]
+    status, placed = post(server, f"/steps/{sid}/place", {})
+    assert status == 200, placed
+    assert calls[:2] == [("new",), ("launch", "/fake/FreeCAD.app")]
+    assert calls[2] == ("wait", steps.FREECAD_LIVE_READY_S)
+    assert [c for c in calls if c[0] == "replace"] == [
+        ("replace", "case-01-board.step", "board"),
+        ("replace", "case-02-base.step", "base"),
+        ("replace", "case-03-lid.step", "lid"),
+    ]
+    status, body = post(server, f"/steps/{sid}/case", {})
+    assert status == 200, body
+    assert body["freecad_live"] == {"shown": True, "solids": 3, "detail": None}
+    assert body["opened_in_freecad"] is True
+    assert opened == [], "the live window already holds the case; no second open"
+    assert not any("FreeCAD" in w for w in body.get("warnings", []))
+
+
+def test_a_freecad_show_that_stops_is_said_and_the_finished_case_still_opens(
+    server, tmp_path, monkeypatch
+):
+    calls, opened = _freecad_show_fixture(
+        steps, monkeypatch, tmp_path, refuse_at="base"
+    )
+    sid = _start(server, kicad_live=True)["session"]
+    post(server, f"/steps/{sid}/place", {})
+    # The board went in; base was refused; the lid was never sent.
+    assert [c for c in calls if c[0] == "replace"] == [
+        ("replace", "case-01-board.step", "board")
+    ]
+    status, body = post(server, f"/steps/{sid}/case", {})
+    assert status == 200, body
+    assert body["freecad_live"]["solids"] == 1
+    assert "stopped at base" in body["freecad_live"]["detail"]
+    assert any("not shown live in FreeCAD" in w for w in body["warnings"])
+    assert any("not shown live in FreeCAD" in w for w in body["enclosure"]["warnings"])
+    # One solid of three is not "shown": the finished STEP opens the plain way.
+    assert len(opened) == 1 and body["opened_in_freecad"] is True
+
+
+def test_no_freecad_means_no_show_and_the_reason_on_the_case_step(
+    server, tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    from silkscreen.units import mm
+
+    monkeypatch.delenv(steps.FREECAD_APP_ENV, raising=False)
+    monkeypatch.setattr(steps, "FREECAD_APP_CANDIDATES", (str(tmp_path / "none.app"),))
+    monkeypatch.setattr(steps, "FREECAD_EXECUTABLES", ("no-such-freecad-binary",))
+    seen_live: list = []
+
+    def fake_start(model, board, **kw):
+        seen_live.append(kw.get("live"))
+        fake = SimpleNamespace(
+            spec=SimpleNamespace(cutouts=[], lid="lip", wall_nm=mm(2)),
+            step_text="ISO-10303-21;\n", repair_rounds=0, exports=None,
+        )
+        return SimpleNamespace(result=lambda: fake, running=False, wait=lambda: None)
+
+    monkeypatch.setattr(steps, "start_enclosure_stage", fake_start)
+    monkeypatch.setattr(
+        "service.app._enclosure_dict",
+        lambda e, **kw: {"step": e.step_text, "warnings": []},
+    )
+    sid = _start(server, kicad_live=True)["session"]
+    post(server, f"/steps/{sid}/place", {})
+    assert seen_live == [None], "no FreeCAD, so the stage was given no live sink"
+    status, body = post(server, f"/steps/{sid}/case", {})
+    assert status == 200, body
+    assert body["freecad_live"]["shown"] is False
+    assert "FreeCAD is not installed" in body["freecad_live"]["detail"]
+
+
+def test_plan_first_stops_at_the_brief_and_propose_takes_the_answers(server):
+    # gpt-engineer's clarify-then-generate order: the questions reach the
+    # engineer before the expensive propose call, and an answer reaches it.
+    from silkscreen.agents.plan import PLAN_MARKER
+
+    from service.tests.test_app import PLAN
+
+    log: list = []
+    plan = {**PLAN, "questions": [
+        {"ask": "How many degrees of freedom?", "default": "4 plus a gripper"},
+        {"ask": "Budget?", "default": "under $150"},
+    ]}
+    Handler.model_factory = staticmethod(lambda: ScriptedModel(
+        by_marker={**scripted().by_marker, PLAN_MARKER: json.dumps(plan)}, calls=log))
+
+    planned = _start(server, plan_first=True)
+    assert (planned["step"], planned["stage"], planned["next"]) == ("plan", "planned", ["propose"])
+    assert [q["ask"] for q in planned["plan"]["plan"]["questions"]] == [
+        "How many degrees of freedom?", "Budget?"]
+    assert "schematic" not in planned["files"]
+    sid = planned["session"]
+    status, early = post(server, f"/steps/{sid}/place", {})
+    assert status == 409, early
+
+    status, proposed = post(server, f"/steps/{sid}/propose", {"answers": {"0": "6 DOF"}})
+    assert status == 200, proposed
+    assert proposed["stage"] == "proposed" and proposed["next"] == ["place"]
+    propose_prompt = next(c["prompt"] for c in log if PLAN_MARKER not in c["prompt"]
+                          and "DECIDED" in c["prompt"])
+    assert "How many degrees of freedom? -> DECIDED: 6 DOF" in propose_prompt
+    assert "Budget? -> not answered; assume under $150" in propose_prompt
+    assert post(server, f"/steps/{sid}/propose", {})[0] == 409

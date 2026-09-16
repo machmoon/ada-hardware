@@ -154,7 +154,7 @@ describe("notify", () => {
     expect(sendNotification).not.toHaveBeenCalled();
   });
 
-  it("stays silent while Kaleo is the frontmost app, because the user is already looking", async () => {
+  it("stays silent while Ada is the frontmost app, because the user is already looking", async () => {
     settings[SETTING_KEY] = true;
     invoke.mockResolvedValue(true);
     expect(await notify(request)).toBe("focused");

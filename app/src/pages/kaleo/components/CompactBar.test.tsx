@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/plugin-http", () => ({ fetch: vi.fn() }));
-// The pill's microphone is the one voice control (it is also the "Hey Hardy"
+// The pill's microphone is the one voice control (it is also the "Hey Ada"
 // mute), stubbed here so the pill's own rules are what is under test.
 vi.mock("./VoiceControl", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./VoiceControl")>()),

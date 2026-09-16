@@ -13,7 +13,7 @@ So:
 
 One KCU is one minute of engine wall-clock attributable to a run -- the same
 shape as Devin's ACU (~15 minutes of agent work), scaled to the fact that a
-Kaleo run is minutes rather than a quarter hour. It is deliberately *time*,
+Ada run is minutes rather than a quarter hour. It is deliberately *time*,
 not "one model call": a call that reads four datasheets and a call that
 answers "no" cost the same under a per-call meter, and users notice.
 """

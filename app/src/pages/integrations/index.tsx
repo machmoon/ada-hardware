@@ -38,7 +38,7 @@ const GROUP: Record<IntegrationKind, { title: string; description: string }> = {
 };
 
 /**
- * Every Kaleo surface, whether it is set up, and what to do about it if not.
+ * Every Ada surface, whether it is set up, and what to do about it if not.
  *
  * The panel exists because the answer to "can this thing email me the board?"
  * was previously spread across a Python module docstring, an `.env.example`
@@ -147,7 +147,7 @@ const Integrations = () => {
   return (
     <PageLayout
       title="Integrations"
-      description="Every surface Hardy can reach, and whether it is set up"
+      description="Every surface Ada can reach, and whether it is set up"
       rightSlot={
         <Button
           size="sm"
@@ -243,7 +243,7 @@ const Integrations = () => {
         <p className="text-xs leading-relaxed text-muted-foreground">
           Every setting on this page lives in the environment the silkscreen
           service was started with, in another process, possibly on another
-          machine. Hardy cannot set one from here, and{" "}
+          machine. Ada cannot set one from here, and{" "}
           <code className="font-mono">service/app.py</code> does not read{" "}
           <code className="font-mono">.env</code> — only the CLI does. So the
           hints are reproduced exactly as the engine wrote them, and the fix is

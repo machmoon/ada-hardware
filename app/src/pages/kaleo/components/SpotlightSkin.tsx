@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  * changed:
  *
  *  - cmdk's core renders ONE bare `Primitive.input` with `border: none;
- *    outline: none` and puts any border on the root. Kaleo's `PromptBar`
+ *    outline: none` and puts any border on the root. Ada's `PromptBar`
  *    wraps its field in `h-9 rounded-md border border-input/50 bg-muted/30`;
  *    that inner bordered box is the hand-rolled tell and it is absent here —
  *    the panel (the overlay `Card`) carries the radius, the field carries

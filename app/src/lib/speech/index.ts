@@ -1,4 +1,4 @@
-// Kaleo's voice: a spoken digest of a finished run.
+// Ada's voice: a spoken digest of a finished run.
 //
 // `summarize` composes what gets said, `backends` knows how to say it,
 // `speaker` makes sure only one thing is ever being said, and `settings`

@@ -9,7 +9,7 @@ import { ensureMicrophoneAccess, type CaptureAccess } from "@/lib/capture-permis
 import type { SetupCardId } from "@/lib/setup/machine";
 
 export const PERMISSIONS_TITLE = "Permissions";
-export const PERMISSIONS_SUBTITLE = "Hardy tells you when a run finishes, and listens only when you ask.";
+export const PERMISSIONS_SUBTITLE = "Ada tells you when a run finishes, and listens only when you ask.";
 
 /** macOS' own deep link to the microphone pane. */
 export const MIC_SETTINGS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
@@ -72,7 +72,7 @@ export const PermissionsStep = ({
                 {mic === "granted"
                   ? "Allowed. The mic button in the strip dictates a board."
                   : mic === "denied"
-                    ? "Refused. Turn it on for Hardy in System Settings → Privacy & Security → Microphone."
+                    ? "Refused. Turn it on for Ada in System Settings → Privacy & Security → Microphone."
                     : mic === "unavailable"
                       ? "No microphone is available here."
                       : "The mic button always works once this is allowed. macOS asks once."}
@@ -97,7 +97,7 @@ export const PermissionsStep = ({
         </div>
 
         <div className="rounded-lg border bg-card p-3" data-testid="permissions-wake">
-          <p className="mb-2 text-sm font-medium">Hey Hardy</p>
+          <p className="mb-2 text-sm font-medium">Hey Ada</p>
           <p className="mb-2 text-xs text-muted-foreground">
             Wake-word listening stays off unless you turn it on. The mic button always works.
           </p>

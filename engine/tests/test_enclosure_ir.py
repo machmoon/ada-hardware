@@ -301,3 +301,52 @@ def test_multiple_errors_reported_in_one_exception():
 
 def test_validation_error_is_an_enclosure_error():
     assert issubclass(EnclosureValidationError, EnclosureError)
+
+
+# --------------------------------------------------------------------------
+# Direct edits (2026-09-13): the person is the repairer, the parser the gate.
+# --------------------------------------------------------------------------
+
+
+def test_spec_to_dict_round_trips_through_the_parser():
+    from silkscreen.enclosure.ir import (
+        Cutout,
+        EnclosureSpec,
+        parse_enclosure_spec,
+        spec_to_dict,
+    )
+    from silkscreen.units import mm
+
+    spec = EnclosureSpec(
+        wall_nm=mm(2.4), clearance_nm=mm(1.2), lid="snap", corner_radius_nm=mm(1.5),
+        cutouts=(Cutout(id="usb", ref="J1", face="left", margin_nm=mm(0.5)),),
+        standoffs=True, vents=True, label="ADA", mount="corners", insert="M2.5",
+        material="PETG",
+    )
+    as_json = spec_to_dict(spec)
+    assert as_json["wall_mm"] == 2.4 and as_json["cutouts"][0]["face"] == "left"
+    assert parse_enclosure_spec(as_json) == spec
+    # A label of None survives as None, not as the string "None".
+    assert spec_to_dict(EnclosureSpec(**{**spec.__dict__, "label": None}))["label"] is None
+
+
+def test_apply_edits_lays_the_edit_over_the_spec_and_batches_every_failure():
+    import pytest
+    from silkscreen.enclosure.errors import EnclosureValidationError
+    from silkscreen.enclosure.ir import EnclosureSpec, apply_edits
+    from silkscreen.units import mm
+
+    spec = EnclosureSpec(
+        wall_nm=mm(2.0), clearance_nm=mm(1.0), lid="lip", corner_radius_nm=0,
+        cutouts=(), standoffs=True, vents=False, label="ADA",
+    )
+    edited = apply_edits(spec, {"wall_mm": 3.0, "label": None, "lid": "snap"})
+    assert edited.wall_nm == mm(3.0) and edited.label is None and edited.lid == "snap"
+    assert edited.clearance_nm == spec.clearance_nm, "untouched fields stay"
+    # Held to the model's bounds, every failure in one batch.
+    with pytest.raises(EnclosureValidationError) as caught:
+        apply_edits(spec, {"wall_mm": 0.3, "lid": "hinge", "colour": "red"})
+    text = "\n".join(caught.value.errors)
+    assert "wall" in text and "lid" in text and "colour" in text
+    with pytest.raises(EnclosureValidationError):
+        apply_edits(spec, ["wall_mm"])  # not an object

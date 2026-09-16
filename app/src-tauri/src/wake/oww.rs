@@ -3,7 +3,7 @@
 //! per-word classifier over the last 16 embeddings).
 //!
 //! The classifier is a local ONNX file (`KALEO_WAKE_ONNX`, the shipped
-//! `resources/wake/hey_hardy.onnx`). Command transcription after a hit still
+//! `resources/wake/hey_ada.onnx`). Command transcription after a hit still
 //! uses `/transcribe`. The streaming and trigger policy live in `spotter.rs`.
 
 use super::spotter::{Scorer, Trigger, WindowSpotter, SAMPLE_RATE};
@@ -48,7 +48,7 @@ pub fn open_paths(paths: &[PathBuf], trigger: Trigger) -> Result<LivekitSpotter>
 fn phrase_from_path(path: &Path) -> String {
     path.file_stem()
         .and_then(|s| s.to_str())
-        .unwrap_or("hardy")
+        .unwrap_or("ada")
         .replace(['_', '-'], " ")
 }
 
@@ -72,7 +72,7 @@ mod tests {
     }
 
     fn shipped_model() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/wake/hey_hardy.onnx")
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/wake/hey_ada.onnx")
     }
 
     /// `say` a phrase to a 48 kHz WAV so the test exercises the same
@@ -123,16 +123,15 @@ mod tests {
         None
     }
 
-    /// End to end on the shipped model: a synthesised "Hey Hardy" fires and an
+    /// End to end on the shipped model: a synthesised "Hey Ada" fires and an
     /// unrelated command does not. Gated like the ngspice tests: skips
     /// unless `say`, `afconvert` and the model are all present.
     #[test]
-    #[ignore = "the shipped classifier was trained on the previous wake phrase; retrain it on \"Hey Hardy\" before re-enabling"]
-    fn shipped_model_fires_on_hey_hardy_through_the_streaming_path() {
+    fn shipped_model_fires_on_hey_ada_through_the_streaming_path() {
         let model = shipped_model();
         let dir = std::env::temp_dir().join(format!("kaleo-wake-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let Some(pos) = synthesise("Hey Hardy", "Samantha", &dir) else {
+        let Some(pos) = synthesise("Hey Ada", "Samantha", &dir) else {
             eprintln!("skipping: no `say`/`afconvert` on this machine");
             return;
         };
@@ -145,7 +144,7 @@ mod tests {
 
         let mut spotter = open_paths(&[model.clone()], Trigger::new(0.7, 1, 0)).unwrap();
         let hit = stream(&mut spotter, &pos);
-        assert!(hit.is_some(), "Hey Hardy did not fire");
+        assert!(hit.is_some(), "Hey Ada did not fire");
 
         let mut spotter = open_paths(&[model], Trigger::new(0.7, 1, 0)).unwrap();
         assert_eq!(stream(&mut spotter, &neg), None, "an unrelated sentence fired");

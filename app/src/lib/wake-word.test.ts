@@ -23,14 +23,18 @@ import {
   type SpeechResultEventLike,
   type WakeListenerEvents,
 } from "./wake-word";
+import { SILENCE_OFF_FRAMES } from "./wake-word";
+
+/** The quiet that ends a command clip, in ms (100 ms analyser frames). */
+const SILENCE_MS = SILENCE_OFF_FRAMES * 100;
 
 describe("matchWakeWord", () => {
   it("finds the word and hands back what followed it, casing kept", () => {
-    expect(matchWakeWord("Hardy, I need a 3.3V LDO for USB")).toEqual({
+    expect(matchWakeWord("Ada, I need a 3.3V LDO for USB")).toEqual({
       utterance: "I need a 3.3V LDO for USB",
     });
-    expect(matchWakeWord("hey hardy")).toEqual({ utterance: "" });
-    expect(matchWakeWord("HARDY.")).toEqual({ utterance: "" });
+    expect(matchWakeWord("hey ada")).toEqual({ utterance: "" });
+    expect(matchWakeWord("ADA.")).toEqual({ utterance: "" });
   });
 
   it("accepts the recognizer's usual mishearings", () => {
@@ -51,13 +55,13 @@ describe("matchWakeWord", () => {
     // still matches, but it lost "Hey" off the front and "microfarad input
     // capacitor" off the end, which is the whole reason the window changed.
     expect(
-      matchWakeWord("Hey Hardy, make me a 3.3 volt LDO board with a 10 microfarad input capacitor.")
+      matchWakeWord("Hey Ada, make me a 3.3 volt LDO board with a 10 microfarad input capacitor.")
         ?.utterance
     ).toBe("make me a 3.3 volt LDO board with a 10 microfarad input capacitor.");
-    expect(matchWakeWord("hey Hardy, make me a 3.3 volt LDO board.")?.utterance).toBe(
+    expect(matchWakeWord("hey Ada, make me a 3.3 volt LDO board.")?.utterance).toBe(
       "make me a 3.3 volt LDO board."
     );
-    expect(matchWakeWord("Hardy, make me a 3.3 volt LDO board with a 10")?.utterance).toBe(
+    expect(matchWakeWord("Ada, make me a 3.3 volt LDO board with a 10")?.utterance).toBe(
       "make me a 3.3 volt LDO board with a 10"
     );
   });
@@ -183,11 +187,11 @@ describe("createSpeechListener", () => {
     expect(rec.interimResults).toBe(false);
     expect(ev.state).toHaveBeenCalledWith("listening", expect.any(String));
 
-    rec.say("hardy draft me a board", false); // interim: not yet
+    rec.say("ada draft me a board", false); // interim: not yet
     expect(ev.wake).not.toHaveBeenCalled();
     rec.say("the adapter is fine"); // no wake word
     expect(ev.wake).not.toHaveBeenCalled();
-    rec.say("Hardy draft me a board");
+    rec.say("Ada draft me a board");
     expect(ev.wake).toHaveBeenCalledExactlyOnceWith({
       utterance: "draft me a board",
       backend: "speech",
@@ -286,7 +290,7 @@ describe("createWindowListener", () => {
     const transcribe = vi
       .fn()
       .mockResolvedValueOnce({ text: "(inaudible)", model: "m" })
-      .mockResolvedValueOnce({ text: "Hardy, an LDO please", model: "m" });
+      .mockResolvedValueOnce({ text: "Ada, an LDO please", model: "m" });
     const c = clock();
     const ev = events();
     const listener = createWindowListener(
@@ -408,8 +412,8 @@ describe("createWindowListener", () => {
     expect(signals.map((s) => s.aborted)).toEqual([true, true]);
 
     // The older window answers late, with the wake word in it.
-    settle[0]({ text: "Hardy go", model: "m" });
-    settle[1]({ text: "Hardy go", model: "m" });
+    settle[0]({ text: "Ada go", model: "m" });
+    settle[1]({ text: "Ada go", model: "m" });
     await flush();
     expect(ev.wake).not.toHaveBeenCalled();
     expect(ev.state.mock.calls.filter(([state]) => state === "stopped")).toHaveLength(1);
@@ -453,7 +457,7 @@ describe("createWindowListener", () => {
     const signal = (transcribe.mock.calls[0] as unknown[])[2] as AbortSignal;
     expect(signal.aborted).toBe(false);
     // …but the call that was paid for still answers.
-    settle({ text: "Hardy draft an LDO", model: "m" });
+    settle({ text: "Ada draft an LDO", model: "m" });
     await flush();
     expect(ev.wake).toHaveBeenCalledExactlyOnceWith({
       utterance: "draft an LDO",
@@ -656,7 +660,7 @@ describe("createWindowListener", () => {
   it("sends the window's measured peak and marks the detection gated", async () => {
     FakeRecorder.instances = [];
     const { stream } = makeStream();
-    const transcribe = vi.fn().mockResolvedValue({ text: "Hardy", model: "m" });
+    const transcribe = vi.fn().mockResolvedValue({ text: "Ada", model: "m" });
     const c = clock();
     vi.useFakeTimers();
     const analyser = {
@@ -710,7 +714,7 @@ describe("createWindowListener", () => {
   it("an ungated window's wake says so, so no continuation is opened for a bare name", async () => {
     FakeRecorder.instances = [];
     const { stream } = makeStream();
-    const transcribe = vi.fn().mockResolvedValue({ text: "Hardy", model: "m" });
+    const transcribe = vi.fn().mockResolvedValue({ text: "Ada", model: "m" });
     const c = clock();
     const ev = events();
     const listener = createWindowListener(
@@ -751,7 +755,7 @@ describe("createWindowListener", () => {
     // the room cost a model call per window to answer "nobody spoke".
     const transcribe = vi
       .fn()
-      .mockResolvedValueOnce({ text: "Hey Hardy, make me an LDO", model: "m" })
+      .mockResolvedValueOnce({ text: "Hey Ada, make me an LDO", model: "m" })
       .mockResolvedValueOnce({ text: "hey Otto", model: "m" });
     const c = clock();
     const ev = events();
@@ -859,7 +863,7 @@ describe("createWindowListener: one window is one utterance", () => {
     const room = meterRoom();
     const transcribe = vi
       .fn()
-      .mockResolvedValue({ text: "Hey Hardy, make me a 3.3 volt LDO board", model: "m" });
+      .mockResolvedValue({ text: "Hey Ada, make me a 3.3 volt LDO board", model: "m" });
     const c = clock();
     const ev = events();
     vi.useFakeTimers();
@@ -872,7 +876,7 @@ describe("createWindowListener: one window is one utterance", () => {
         transcribe,
         cap: 5,
         // A command clip, the only thing this listener is armed as now. The
-        // clip can still catch the name — "Hey Hardy, make me…" is one breath —
+        // clip can still catch the name — "Hey Ada, make me…" is one breath —
         // and the greeting is stripped rather than handed to the page.
         continuing: () => true,
         setTimeout: c.setTimeout,
@@ -890,7 +894,7 @@ describe("createWindowListener: one window is one utterance", () => {
     expect(transcribe).not.toHaveBeenCalled();
 
     room.quiet();
-    vi.advanceTimersByTime(700);
+    vi.advanceTimersByTime(SILENCE_MS);
     expect(transcribe).toHaveBeenCalledTimes(1);
     // The ceiling timer was never reached; the room closed the window.
     expect(transcribe.mock.calls[0][1].peak).toBe(60);
@@ -902,6 +906,47 @@ describe("createWindowListener: one window is one utterance", () => {
       backend: "windows",
       gated: true,
     });
+  });
+
+  it("survives a thinking pause mid-sentence: \"can you … place it\" is one clip", async () => {
+    // The 2026-09-14 bug: a 700 ms cutoff closed "hey Ada … can you … place
+    // it" at the first pause, and "can you" went to chat instead of placement.
+    FakeRecorder.instances = [];
+    const { stream } = makeStream();
+    const room = meterRoom();
+    const transcribe = vi.fn().mockResolvedValue({ text: "can you place it", model: "m" });
+    const c = clock();
+    const ev = events();
+    vi.useFakeTimers();
+    const listener = createWindowListener(
+      {
+        baseUrl: "http://engine",
+        getUserMedia: vi.fn().mockResolvedValue(stream),
+        MediaRecorder: FakeRecorder as unknown as typeof MediaRecorder,
+        AudioContext: room.AudioContext,
+        transcribe,
+        cap: 5,
+        continuing: () => true,
+        setTimeout: c.setTimeout,
+        clearTimeout: c.clearTimeout,
+      },
+      ev
+    );
+    await listener.start();
+
+    room.talk();
+    vi.advanceTimersByTime(1_000); // "can you"
+    room.quiet();
+    vi.advanceTimersByTime(1_500); // thinking
+    expect(transcribe).not.toHaveBeenCalled();
+    room.talk();
+    vi.advanceTimersByTime(800); // "place it"
+    room.quiet();
+    vi.advanceTimersByTime(SILENCE_MS);
+    expect(transcribe).toHaveBeenCalledTimes(1);
+    expect(FakeRecorder.instances).toHaveLength(1);
+    vi.useRealTimers();
+    listener.stop();
   });
 
   it("throws a cough away locally: too short to be speech, so no call is spent", async () => {
@@ -930,7 +975,7 @@ describe("createWindowListener: one window is one utterance", () => {
     room.talk();
     vi.advanceTimersByTime(100); // one bang, and then the room again
     room.quiet();
-    vi.advanceTimersByTime(1_000);
+    vi.advanceTimersByTime(SILENCE_MS + 300);
     expect(FakeRecorder.instances).toHaveLength(1); // it did open a recorder…
     expect(transcribe).not.toHaveBeenCalled(); // …and never sent it
     expect(ev.window).not.toHaveBeenCalled();
@@ -940,7 +985,7 @@ describe("createWindowListener: one window is one utterance", () => {
     room.talk();
     vi.advanceTimersByTime(1_500);
     room.quiet();
-    vi.advanceTimersByTime(700);
+    vi.advanceTimersByTime(SILENCE_MS);
     expect(transcribe).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
     listener.stop();
@@ -1035,7 +1080,7 @@ describe("createWindowListener: the listening budget", () => {
 });
 
 describe("createLocalListener", () => {
-  it("starts Rust, forwards hardy-wake, and never touches getUserMedia", async () => {
+  it("starts Rust, forwards ada-wake, and never touches getUserMedia", async () => {
     const start = vi.fn(async () => {});
     const stop = vi.fn(async () => {});
     let deliver: (hit: { utterance?: string }) => void = () => {};

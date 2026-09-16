@@ -385,8 +385,14 @@ def propose_enclosure(
     max_repairs: int | None = None,
     critic: bool = False,
     on_event: Callable[[dict[str, Any]], None] | None = None,
+    on_stage: Callable[[str, Any], None] | None = None,
 ) -> EnclosureProposal:
     """Ask for an enclosure spec and repair it until it validates.
+
+    ``on_stage`` is :data:`silkscreen.enclosure.cad.OnStage`, handed to every
+    kernel build in the loop, so a watcher sees each round's board, base and
+    lid as they are built -- a repair round included, since a redesign is
+    exactly what a person watching wants to see happen.
 
     Returns an :class:`EnclosureProposal` whose ``model`` and ``kernel``
     carry the built geometry and its clause report, and ``brief`` what the
@@ -450,8 +456,8 @@ def propose_enclosure(
         except EnclosureValidationError as exc:
             errors = list(exc.errors)
         else:
-            built, report, errors = _kernel_round(
-                spec, envelope, rigorous, round_no, on_event
+            built, report, errors = kernel_round(
+                spec, envelope, rigorous, round_no, on_event, on_stage=on_stage
             )
             if not errors:
                 if critic:
@@ -497,14 +503,20 @@ def propose_enclosure(
     )
 
 
-def _kernel_round(
+def kernel_round(
     spec: EnclosureSpec,
     envelope: BoardEnvelope,
     rigorous: bool,
     round_no: int,
     on_event: Callable[[dict[str, Any]], None] | None,
+    on_stage: Callable[[str, Any], None] | None = None,
 ) -> tuple[EnclosureModel | None, KernelReport | None, list[str]]:
-    """Build and verify one parsed spec on the kernel.
+    """Build and verify one parsed spec on the kernel. **No model call.**
+
+    Public since 2026-09-13 because it is also the whole of the edit path:
+    a person changing a number on a finished case goes spec -> build ->
+    verify through this one function and never through the model
+    (:func:`~silkscreen.agents.stages.enclosure_edit_stage`).
 
     Returns ``(model, report, errors)``. A build that raises -- a
     :class:`KernelError` naming its failure class, a :class:`CutoutError` --
@@ -514,7 +526,7 @@ def _kernel_round(
     rather than vanishing.
     """
     try:
-        built = build_enclosure(spec, envelope)
+        built = build_enclosure(spec, envelope, on_stage=on_stage)
     except (KernelError, CutoutError) as exc:
         # str(KernelError) is already "<failure_class>: <detail>".
         return None, None, [str(exc)]
@@ -543,3 +555,7 @@ def _kernel_round(
             line for line in report.text().splitlines() if line.startswith("FAIL")
         ]
     return built, report, errors
+
+
+#: Back-compat alias for the private name callers used before 2026-09-13.
+_kernel_round = kernel_round

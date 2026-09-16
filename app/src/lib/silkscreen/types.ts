@@ -252,6 +252,7 @@ export interface GenerateRequest {
 
 /** The engine's approval-gated steps, in the order the run can take them. */
 export type StepName =
+  | "plan"
   | "propose"
   | "place"
   | "route"
@@ -279,6 +280,29 @@ export interface StepRequest extends GenerateRequest {
    * `prior_art`. Opt-in: up to three model calls plus GitHub requests.
    */
   research?: boolean;
+  /**
+   * Stop after the plan (`service/steps.py::start`): the response is step
+   * `plan` with the brief and its requirement questions, and `propose` then
+   * takes `{answers}`. Without it the start proposes straight away.
+   */
+  plan_first?: boolean;
+}
+
+/** A requirement the plan left open, with what gets assumed if unanswered. */
+export interface PlanQuestion {
+  ask: string;
+  default: string;
+}
+
+/** `PlanResult.as_dict`, as far as the panel reads it. */
+export interface PlanBlock {
+  ok: boolean;
+  plan: {
+    building: string;
+    assumptions: string[];
+    questions?: PlanQuestion[];
+  } | null;
+  warnings: string[];
 }
 
 /** One project from `engine/silkscreen/prior_art.py` `Project.as_dict`, as far as the panel reads it. */
@@ -563,6 +587,9 @@ export interface StepResponse {
   shown_detail?: string | null;
   events: StreamFrame[];
   duration_s: number;
+  // plan
+  /** Present on a `plan_first` start: the brief and its questions. */
+  plan?: PlanBlock | null;
   // propose
   /** Present when the start asked for `research`; null if it did not run. */
   prior_art?: PriorArtBlock | null;
@@ -590,8 +617,11 @@ export interface StepResponse {
   review?: ReviewBlock;
   /**
    * The agenda the engine prepared for a spec review, when it prepared one.
-   * Null is a real answer — it means the engine has nothing to propose — and
-   * absent means this engine does not produce agendas at all.
+   * Absent means this engine does not produce agendas at all. Null is one of
+   * two answers, and only `warnings` separates them: the engine had nothing
+   * to propose, or it could not prepare the agenda and said so in a warning
+   * beginning "the spec-review agenda could not be prepared" (`deliver.ts`
+   * `agendaFailure` reads it).
    */
   spec_review?: SpecReviewBlock | null;
   // sourcing (also on the order step)

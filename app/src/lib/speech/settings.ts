@@ -71,7 +71,7 @@ export function saveVoiceEnabled(enabled: boolean): void {
 }
 
 /**
- * May Hardy speak with the webview's own `speechSynthesis`?
+ * May Ada speak with the webview's own `speechSynthesis`?
  *
  * **Absence means no**, which is deliberately the reverse of
  * `isVoiceEnabled` above, and the reversal is the point of this whole
