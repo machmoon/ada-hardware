@@ -20,11 +20,16 @@ Three verifiers ship:
   does (JSON report in a temporary directory, ``--severity-all``), classified
   by KiCad's own ``severity`` field against a pinned list of benign types.
 
+:mod:`.ingest` turns everything else into the same shape: compiler output
+(GNU text or SARIF), reviewdog's rdjsonl, JSON-lines and CloudWatch logs,
+SPICE clauses and the enclosure and mechanism kernels.
+
 The engine stays model-free; this package imports nothing from ``agents``.
 """
 
 from __future__ import annotations
 
+from . import ingest
 from .circuit import electrical_completeness
 from .kicad import drc, erc, erc_from_spec, kicad_cli_path, parity
 from .verdict import Clause, Verdict
@@ -38,4 +43,5 @@ __all__ = [
     "drc",
     "parity",
     "kicad_cli_path",
+    "ingest",
 ]

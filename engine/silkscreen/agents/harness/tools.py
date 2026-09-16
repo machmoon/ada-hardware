@@ -24,7 +24,14 @@ from typing import Any, get_type_hints
 from ...verify import Verdict
 from .model import ToolSpec
 
-__all__ = ["Tool", "function_tool", "verifier_tool", "schema_for"]
+__all__ = [
+    "Tool",
+    "function_tool",
+    "verifier_tool",
+    "command_verifier",
+    "context_verifier",
+    "schema_for",
+]
 
 _JSON_TYPES = {
     str: "string",
@@ -113,3 +120,56 @@ def verifier_tool(
         fn=lambda context, **_: fn(context),
         is_verifier=True,
     )
+
+
+def command_verifier(
+    name: str,
+    description: str,
+    argv: list[str] | Callable[[dict[str, Any]], list[str]],
+    parse: Any = "gnu",
+    *,
+    cwd_key: str | None = None,
+    timeout_s: float = 600,
+) -> Tool:
+    """A verifier that runs a build or check command (``verify.ingest.run_check``).
+
+    ``argv`` may be a function of the run's context, so a gate can compile the
+    file the agent just wrote. ``cwd_key`` names the context entry holding the
+    working directory. This is how a compiler, a linter or a cloud CLI becomes
+    something ``Agent.required_verifiers`` can refuse to finish on.
+    """
+    from ...verify.ingest import run_check
+
+    def check(context: dict[str, Any]) -> Verdict:
+        args = argv(context) if callable(argv) else argv
+        cwd = context.get(cwd_key) if cwd_key else None
+        return run_check(name, args, parse, cwd=cwd, timeout_s=timeout_s)
+
+    return verifier_tool(name, description, check)
+
+
+def context_verifier(
+    name: str,
+    description: str,
+    key: str,
+    adapter: Callable[[Any], Verdict],
+) -> Tool:
+    """A verifier over a stage result already in the context.
+
+    ``adapter`` is one of ``verify.ingest.from_simulation``, ``from_kernel``,
+    ``from_mechanism`` or any callable returning a :class:`Verdict`. A missing
+    key is ``unverified``, never ``ok``.
+    """
+
+    def check(context: dict[str, Any]) -> Verdict:
+        if key not in context:
+            reason = f"nothing at context[{key!r}] to check"
+            return Verdict(name, unverified_reason=reason)
+        verdict = adapter(context[key])
+        if verdict.verifier != name:
+            verdict = Verdict(
+                name, verdict.clauses, verdict.evidence, verdict.unverified_reason
+            )
+        return verdict
+
+    return verifier_tool(name, description, check)

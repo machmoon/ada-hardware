@@ -37,7 +37,13 @@ from .model import (
 )
 from .receipt import Claim, Receipt, Summary, parse_summary, summary_guardrail, unproven
 from .reflect import ReflectAndRetry, ToolFailureResponse
-from .tools import Tool, function_tool, verifier_tool
+from .tools import (
+    Tool,
+    command_verifier,
+    context_verifier,
+    function_tool,
+    verifier_tool,
+)
 
 __all__ = [
     "Agent",
@@ -65,6 +71,8 @@ __all__ = [
     "Tool",
     "function_tool",
     "verifier_tool",
+    "command_verifier",
+    "context_verifier",
     "GuardrailFunctionOutput",
     "GuardrailTripwire",
     "InputGuardrail",
