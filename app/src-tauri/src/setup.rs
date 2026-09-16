@@ -335,6 +335,7 @@ pub fn setup_restart<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
     {
         app.set_activation_policy(tauri::ActivationPolicy::Regular)
             .map_err(|e| format!("Failed to set activation policy: {}", e))?;
+        crate::refresh_dev_dock_icon(&app);
     }
     crate::window::show_dashboard_window(&app)
 }

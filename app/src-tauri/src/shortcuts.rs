@@ -457,6 +457,9 @@ pub fn apply_app_icon_visibility<R: Runtime>(
             eprintln!("Failed to set activation policy: {}", e);
             format!("Failed to set activation policy: {}", e)
         })?;
+        if visible {
+            crate::refresh_dev_dock_icon(app);
+        }
     }
 
     #[cfg(target_os = "windows")]

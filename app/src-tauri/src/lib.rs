@@ -254,6 +254,26 @@ pub fn run() {
         });
 }
 
+/// Put the Ada mark back on the Dock tile. macOS rebuilds the tile, with
+/// the generic executable icon, every time the activation policy turns
+/// Regular, so every such call site runs this afterwards. A no-op in
+/// bundled builds, which carry the icon in Info.plist.
+pub(crate) fn refresh_dev_dock_icon<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    #[cfg(all(target_os = "macos", debug_assertions))]
+    {
+        let _ = app.run_on_main_thread(set_dev_dock_icon);
+        // The Dock can build the new tile a moment after the policy call
+        // returns; set the icon again once it has.
+        let later = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            let _ = later.run_on_main_thread(set_dev_dock_icon);
+        });
+    }
+    #[cfg(not(all(target_os = "macos", debug_assertions)))]
+    let _ = app;
+}
+
 /// `tauri dev` runs the bare debug binary rather than a `.app` bundle, so
 /// macOS has no Info.plist to read an icon from and the Dock shows the
 /// generic executable icon. Hand NSApplication the same PNG the bundle
