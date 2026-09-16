@@ -7,7 +7,7 @@
 # Geometry follows Apple's macOS app icon template: a 1024 px canvas with an
 # 824 px rounded-square tile centred on it (100 px margin), corner radius 185.
 # The mark is a differential pair drawn the way the router draws copper: two
-# traces of one width and equal length, a 45-degree jog, spacing equal to the
+# traces of one width, a 45-degree jog, spacing equal to the
 # trace width -- the tightly coupled pair signals.py writes a net class for --
 # copper on a near-black tile (2026-09-16; before this the mark was a copper
 # "A" on solder-mask green). Shapes are rendered 4x supersampled and
@@ -26,9 +26,14 @@ COPPER = (214, 140, 72, 255)
 
 # Trace geometry on the 1024 canvas, centred on (512, 512). Width 80; the pair
 # pitch is 128, so the gap between the two conductors equals the trace width.
+# The pitch is measured perpendicular to every segment, slant included: the
+# inner trace's two bends move along X by pitch * tan(22.5 deg), the mitre a
+# coupled router draws (engine/silkscreen/diffpair.py). Offsetting the whole
+# trace straight down instead left the slant 1/sqrt(2) as wide (caught by Pat,
+# 2026-09-16).
 WIDTH = 80
 TRACE_P = [(168, 572), (352, 572), (600, 324), (856, 324)]
-TRACE_N = [(168, 700), (352, 700), (600, 452), (856, 452)]
+TRACE_N = [(168, 700), (405.0, 700), (653.0, 452), (856, 452)]
 
 
 def s(v: float) -> int:
