@@ -37,6 +37,19 @@ const VERDICT_LINE: Record<string, string> = {
   unknown: "Ada Pro is not known.",
 };
 
+/** The SDK's ISO 8601 period ("P1M") in words; an unknown one is shown as is. */
+export function periodWords(period: string): string {
+  const words: Record<string, string> = {
+    P1W: "week",
+    P1M: "month",
+    P2M: "two months",
+    P3M: "three months",
+    P6M: "six months",
+    P1Y: "year",
+  };
+  return words[period] ?? period;
+}
+
 function iso(date: Date | null | undefined): string {
   if (!date) return "none";
   const time = date instanceof Date ? date.getTime() : Number.NaN;
@@ -131,7 +144,7 @@ export const AdaPro = ({ className }: AdaProProps) => {
                   <Label className="text-sm font-medium">{product.title}</Label>
                   <p className="text-xs text-muted-foreground">
                     {product.price.formattedPrice}
-                    {product.normalPeriodDuration ? ` every ${product.normalPeriodDuration}` : ""}
+                    {product.normalPeriodDuration ? ` every ${periodWords(product.normalPeriodDuration)}` : ""}
                     {" · "}
                     <code>{product.identifier}</code>
                   </p>

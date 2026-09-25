@@ -127,3 +127,5 @@ data/voice_samples/
 .claude/
 # AWS CloudFormation templates for the site's account; deployed by hand, kept out of the public tree.
 infra/
+# scripts/board_eval.py writes its measurements here; the copy the docs cite lives in docs/measurements/.
+/board_eval.json

@@ -77,7 +77,10 @@ what it could not):
 > input capacitor, a 22 uF ceramic output capacitor and a power LED with its
 > series resistor.
 
-Add the AMS1117-3.3 datasheet URL in the datasheets row of the run options.
+Add the AMS1117-3.3 datasheet URL in the datasheets row of the run options:
+`http://www.advanced-monolithic.com/pdf/ds1117.pdf` (the manufacturer's own; it
+answers `%PDF-`, which the read stage and the BOM probe both require, where
+distributor links serve an HTML viewer page).
 
 Why this intent: the AMS1117 is an old bipolar LDO that needs output-capacitor
 ESR in a stability band, and a low-ESR ceramic is the classic subtle mistake.
@@ -100,6 +103,16 @@ intent; that hazard is gone.
 - **Model tier.** `SILKSCREEN_PROVIDER=claude` is set in `.env` today, so the
   worker calls go to Claude, not Gemini. Pin one model for the recording and
   rehearse once on it; a failover mid-take costs minutes and reads as a hang.
+  Measured 2026-09-24 on the CLI with that `.env` (lead `claude-opus-5`, default
+  `fast` effort, `--case --bom`, the datasheet URL above): **156 s end to end**;
+  read 26 s, plan 30 s, propose 42 s with two repair rounds, place 5 s, review
+  26 s overlapping placement, sourcing 14 s, case 16 s. The review returned the
+  ESR finding citing datasheet page 4, plus a blocker on a TVS the proposer had
+  drawn forward-biased. Two things to expect on camera from that run: the plan
+  asked four questions and, unanswered on the CLI, added a PTC and a TVS on
+  VBUS (answer "no input protection" if you want the eight-part board); and the
+  case kernel passed twelve clauses and failed `min_wall` by 0.35 mm on the lid,
+  which demo-fast reports as a note, so say "twelve of thirteen" if it repeats.
 - **KiCad is not installed on this Mac today.** `/Applications/KiCad` does not
   exist and `kicad-cli` is not on `PATH`. The 0-8, 20-32 and 32-48 beats put
   the schematic and the board on screen in KiCad's own editors, so they have

@@ -133,17 +133,26 @@ def _message(who: str, subject: str, body: str, when: datetime, *, to: str,
     return msg
 
 
-def _insert(token: str, msg: EmailMessage) -> str:
+def _insert(token: str, msg: EmailMessage, thread_id: str | None = None) -> str:
+    """Insert one message; return its Gmail ``threadId``.
+
+    Gmail threads an inserted message only when the request names the
+    ``threadId`` (the References header alone leaves it a lone conversation;
+    measured 2026-09-24: twelve replies showed as twelve rows), so a reply
+    carries the id the first message came back with.
+    """
     raw = base64.urlsafe_b64encode(msg.as_bytes()).decode("ascii")
-    body = json.dumps({"raw": raw, "labelIds": ["INBOX", "UNREAD"]}).encode()
+    payload = {"raw": raw, "labelIds": ["INBOX", "UNREAD"]}
+    if thread_id:
+        payload["threadId"] = thread_id
     resp = urllib_transport()(HttpRequest(
-        method="POST", url=INSERT_URL, body=body,
+        method="POST", url=INSERT_URL, body=json.dumps(payload).encode(),
         headers={"Authorization": f"Bearer {token}",
                  "Content-Type": "application/json"},
     ))
     if resp.status != 200:
         raise RuntimeError(f"insert failed: HTTP {resp.status}")
-    return resp.json().get("id", "?")
+    return resp.json().get("threadId", "")
 
 
 def _token() -> str:
@@ -194,12 +203,14 @@ def main(argv: list[str]) -> int:
                                 msgid=make_msgid(domain=DOMAIN)))
         when += timedelta(minutes=17)
     refs: list[str] = []
+    thread_id: str | None = None
     when = now - timedelta(days=1, hours=6)
     for i, (who, body) in enumerate(AVDD_THREAD):
         msgid = make_msgid(domain=DOMAIN)
-        subject = ("" if i == 0 else "Re: " * min(i, 3)) + "which pin is AVDD"
-        _insert(token, _message(who, subject, body, when, to=to, msgid=msgid,
-                                refs=refs or None))
+        subject = ("" if i == 0 else "Re: ") + "which pin is AVDD"
+        thread_id = _insert(token, _message(who, subject, body, when, to=to,
+                                            msgid=msgid, refs=refs or None),
+                            thread_id=thread_id) or thread_id
         refs.append(msgid)
         when += timedelta(minutes=23)
         time.sleep(0.2)

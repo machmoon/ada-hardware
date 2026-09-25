@@ -20,7 +20,7 @@ import {
   setPurchasesSdk,
 } from "@/lib/purchases/client";
 import { resetAppUserIdForTests } from "@/lib/purchases/app-user-id";
-import { AdaPro, CANCELLED_LINE } from "./AdaPro";
+import { AdaPro, CANCELLED_LINE, periodWords } from "./AdaPro";
 
 const mount = (apiKey: string) =>
   render(
@@ -57,6 +57,8 @@ describe("AdaPro", () => {
     expect(row.getAttribute("data-product")).toBe("ada_pro_monthly");
     expect(row.textContent).toContain("Ada Pro");
     expect(row.textContent).toContain("$9.00");
+    // The fixture's P1M is the SDK's ISO 8601 period; the row says it in words.
+    expect(row.textContent).toContain("$9.00 every month");
     expect(screen.getByTestId("pro-buy").textContent).toBe("Buy");
     expect(screen.getByTestId("pro-verdict").getAttribute("data-status")).toBe("free");
   });
@@ -141,5 +143,16 @@ describe("AdaPro", () => {
     await waitFor(() => expect(screen.getByTestId("pro-verdict").getAttribute("data-status")).toBe("unknown"));
     expect(screen.getByTestId("pro-verdict").textContent).toContain("Network request failed");
     expect(screen.getByTestId("pro-buy").textContent).toBe("Buy");
+  });
+});
+
+describe("periodWords", () => {
+  it("says the SDK's ISO 8601 period in words and leaves an unknown one as is", () => {
+    expect(periodWords("P1W")).toBe("week");
+    expect(periodWords("P1M")).toBe("month");
+    expect(periodWords("P3M")).toBe("three months");
+    expect(periodWords("P1Y")).toBe("year");
+    // Not in the table: shown as the SDK gave it rather than guessed at.
+    expect(periodWords("P2W")).toBe("P2W");
   });
 });
