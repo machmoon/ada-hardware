@@ -39,6 +39,7 @@ from ..enclosure.restyle import (
     restyle_violations,
     run_style_script,
     style_facts,
+    unsandboxed_refusal,
 )
 from ..enclosure.snapshot import render_grid
 from ..units import mm
@@ -190,6 +191,10 @@ def restyle_enclosure(
     spec: EnclosureSpec = proposal.spec
     if proposal.model is None or proposal.kernel is None:
         return StyleOutcome(proposal, None, 0, ("restyle skipped: no built case",))
+    # Before the model is asked: a script that may not run is not worth a call.
+    refusal = unsandboxed_refusal()
+    if refusal is not None:
+        return StyleOutcome(proposal, None, 0, (refusal,))
     plain, plain_report = _with_skin(proposal, envelope)
 
     render = Document(data=render_grid(plain), mime_type="image/png")

@@ -19,6 +19,7 @@ from silkscreen.agents.enclosure_style import (  # noqa: E402
     restyle_enclosure,
 )
 from silkscreen.agents.model import ScriptedModel  # noqa: E402
+from silkscreen.enclosure import restyle  # noqa: E402
 from silkscreen.enclosure.board_shape import board_envelope  # noqa: E402
 from silkscreen.enclosure.cad import build_enclosure  # noqa: E402
 from silkscreen.enclosure.ir import parse_enclosure_spec  # noqa: E402
@@ -47,6 +48,13 @@ def style(base, lid, facts):
     tool = bd.Box(4, 4, 10).moved(bd.Location((x / 2, y / 2, 0)))
     return base - tool, lid
 ```"""
+
+
+@pytest.fixture(autouse=True)
+def _allow_unsandboxed(monkeypatch):
+    # These scripts are fixed, known text; CI runs them on Linux, where there
+    # is no sandbox-exec. The refusal itself is pinned below.
+    monkeypatch.setenv(restyle.UNSANDBOXED_ENV, "1")
 
 
 @pytest.fixture(scope="module")
@@ -102,7 +110,12 @@ def test_a_restyle_that_breaks_a_clause_is_rejected_and_the_plain_case_ships(cas
 
 def test_the_sandbox_refuses_the_network_and_a_runaway_loop(case):
     _, proposal = case
-    net = "import socket\ndef style(b, l, f):\n    socket.create_connection(('1.1.1.1', 80), timeout=2)\n    return b, l"
+    net = (
+        "import socket\n"
+        "def style(b, l, f):\n"
+        "    socket.create_connection(('1.1.1.1', 80), timeout=2)\n"
+        "    return b, l"
+    )
     result = run_style_script(proposal.model, net, timeout_s=20)
     assert result.model is None
     loop = run_style_script(
@@ -116,3 +129,15 @@ def test_the_sandbox_refuses_the_network_and_a_runaway_loop(case):
 def test_extract_script_takes_the_fenced_block():
     assert extract_script("here:\n```python\nx = 1\n```\nthanks") == "x = 1"
     assert extract_script("x = 2") == "x = 2"
+
+
+def test_no_sandbox_is_a_refusal_before_any_model_call(case, monkeypatch):
+    envelope, proposal = case
+    monkeypatch.delenv(restyle.UNSANDBOXED_ENV, raising=False)
+    monkeypatch.setattr(restyle, "SANDBOXED", False)
+    result = run_style_script(proposal.model, "def style(b, l, f):\n    return b, l")
+    assert result.model is None and "restyle refused" in result.error
+    llm = ScriptedModel(by_marker={STYLE_MARKER: ROUNDED})
+    out = restyle_enclosure(llm, proposal, envelope)
+    assert out.script is None and "restyle refused" in out.warnings[0]
+    assert llm.calls == []

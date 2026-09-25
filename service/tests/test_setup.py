@@ -91,7 +91,11 @@ class EntraFake:
 
 
 def files_under(root):
-    return sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+    # POSIX form on every OS: the assertions below compare against "demo/x.env",
+    # and str() of a relative Path is "demo\\x.env" on Windows.
+    return sorted(
+        p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file()
+    )
 
 
 # ---------------------------------------------------------------- shape
@@ -812,16 +816,16 @@ def test_consent_with_a_foreign_host_is_403(server, monkeypatch):
         method="POST",
         payload={},
     )
-    _, _, body = call(
+    # A setup route reached under a foreign Host is the DNS-rebinding case:
+    # refused outright, before any sign-in or consent link is built.
+    status, _, _ = call(
         server,
         "/setup/google/connect",
         method="POST",
         payload={},
         headers={"Host": "attacker.example"},
     )
-    assert json.loads(body)["auth_url"].startswith(
-        f"http://127.0.0.1:{server.server_port}/"
-    )
+    assert status == 403
 
 
 def test_consent_post_requires_a_form_and_is_bounded(server, monkeypatch):
@@ -899,3 +903,35 @@ def test_voice_state_agrees_with_speak_report_rather_than_re_deriving_it():
 
     assert report["selected"] == selected
     assert (report["state"] == "ready") == (selected is not None)
+
+
+def test_a_cross_origin_browser_post_is_refused(server):
+    # The CSRF shape: a page on another origin posting with mode:"no-cors".
+    status, _, body = call(
+        server,
+        "/billing/config",
+        method="POST",
+        payload={"STRIPE_WEBHOOK_SECRET": "whsec_attacker"},
+        headers={"Origin": "https://attacker.example"},
+    )
+    assert status == 403 and b"cross-origin" in body
+    status, _, _ = call(
+        server,
+        "/setup/google/connect",
+        method="POST",
+        payload={},
+        headers={"Origin": "null"},
+    )
+    assert status == 403
+
+
+def test_the_service_binds_loopback_unless_deployed(monkeypatch):
+    from service import app as service_app
+
+    monkeypatch.delenv("SILKSCREEN_BIND", raising=False)
+    monkeypatch.delenv("K_SERVICE", raising=False)
+    assert service_app.bind_host() == "127.0.0.1"
+    monkeypatch.setenv("K_SERVICE", "silkscreen")
+    assert service_app.bind_host() == "0.0.0.0"
+    monkeypatch.setenv("SILKSCREEN_BIND", "127.0.0.1")
+    assert service_app.bind_host() == "127.0.0.1"

@@ -19,8 +19,9 @@ Placeholders to replace before it goes live:
 
 Preview: `open site/index.html`.
 
-Status (2026-09-16): **not public.** No `infra/` directory exists, neither
-GitHub remote has Pages enabled, and nothing has ever deployed this page.
+Status (2026-09-21): **live on AWS** at https://d1l2uamq911fx1.cloudfront.net
+(private S3 bucket `ada-site-361147857635` behind CloudFront distribution
+`E34D7QV323WAY7` with origin access control, us-east-1). No custom domain yet.
 
 Deploy: `.github/workflows/site.yml` publishes this directory to GitHub Pages
 on every push to `main` that touches `site/`. It needs Pages enabled once in
@@ -28,5 +29,5 @@ the repository settings with "GitHub Actions" as the source; until then the
 job fails at the deploy step naming that setting. The S3 + CloudFront path
 below is the alternative once a bucket and distribution exist:
 
-    aws s3 sync site/ s3://<bucket>/ --delete --exclude README.md
-    aws cloudfront create-invalidation --distribution-id <id> --paths "/*"
+    aws s3 sync site/ s3://ada-site-361147857635/ --delete --exclude README.md
+    aws cloudfront create-invalidation --distribution-id E34D7QV323WAY7 --paths "/*"

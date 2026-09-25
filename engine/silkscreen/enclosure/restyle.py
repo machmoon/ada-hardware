@@ -32,9 +32,10 @@ recessing and cutting patterns, not adding bulk outside it.
 Isolation: the script runs in a child interpreter with a timeout. On macOS it
 runs under ``sandbox-exec`` with network denied and writes denied everywhere
 but its own scratch directory, so model-written code can read nothing out and
-change nothing outside the job. Where ``sandbox-exec`` does not exist the
-subprocess and timeout still apply and :data:`SANDBOXED` says so -- the
-difference is stated, never hidden.
+change nothing outside the job. Where ``sandbox-exec`` does not exist (Linux,
+including the Cloud Run image) the script is refused unless
+``SILKSCREEN_UNSANDBOXED_STYLE=1`` is set, because an unsandboxed child there
+can reach the metadata server and the runtime service account's token.
 """
 
 from __future__ import annotations
@@ -59,6 +60,8 @@ __all__ = [
     "extract_script",
     "restyle_violations",
     "run_style_script",
+    "unsandboxed_refusal",
+    "UNSANDBOXED_ENV",
 ]
 
 #: Seconds one style script may run. Fillets on a small case take well under
@@ -71,6 +74,29 @@ MAX_SCRIPT_CHARS = 20_000
 MAX_ERROR_CHARS = 1_500
 
 SANDBOXED = sys.platform == "darwin" and shutil.which("sandbox-exec") is not None
+
+#: Opt-in for running model-written scripts with no OS sandbox. Off by
+#: default: on Linux (the Cloud Run image) the child would otherwise reach the
+#: metadata server and the runtime service account's token. Set it only on a
+#: machine where that is acceptable, e.g. CI running scripted, known scripts.
+UNSANDBOXED_ENV = "SILKSCREEN_UNSANDBOXED_STYLE"
+
+
+def unsandboxed_refusal() -> str | None:
+    """Why a style script must not run here, or None when it may.
+
+    Fails closed, the teamsbot rule: a missing sandbox is a refusal, never an
+    exemption. The precedent is google/nsjail's position that model- or
+    user-supplied code gets namespaces and no network before it gets a CPU.
+    """
+    if SANDBOXED or os.environ.get(UNSANDBOXED_ENV) == "1":
+        return None
+    return (
+        "restyle refused: model-written scripts only run inside macOS "
+        f"sandbox-exec, and there is none on {sys.platform}; set "
+        f"{UNSANDBOXED_ENV}=1 only on a machine where running them unsandboxed "
+        "is acceptable"
+    )
 
 _FENCE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL)
 
@@ -210,6 +236,9 @@ def run_style_script(
     restyle against the same keep-outs the deterministic case passed.
     """
     b = require_kernel()
+    refusal = unsandboxed_refusal()
+    if refusal is not None:
+        return StyleResult(None, refusal)
     if not script.strip():
         return StyleResult(None, "the answer contained no Python script")
     if len(script) > MAX_SCRIPT_CHARS:

@@ -94,6 +94,7 @@ from silkscreen.units import to_mm  # noqa: E402
 
 from . import amend as _amend  # noqa: E402
 from . import deliver as _deliver  # noqa: E402
+from . import entitlements as _entitlements  # noqa: E402
 from . import envfiles as _envfiles  # noqa: E402
 from . import inbox as _inbox  # noqa: E402
 from . import integrations as _integrations  # noqa: E402
@@ -1929,6 +1930,30 @@ def _loggable_path(raw: str) -> str:
     return "/".join("***" if _TOKENISH.match(seg) else seg for seg in path.split("/"))
 
 
+
+#: Peers that are this machine. ``::ffff:`` is IPv4-mapped loopback.
+_LOOPBACK_PEERS = frozenset({"127.0.0.1", "::1", "::ffff:127.0.0.1"})
+
+#: The desktop webview's origins (Tauri 2: macOS/Linux, then Windows).
+_TAURI_ORIGINS = frozenset(
+    {"tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"}
+)
+
+
+def _writes_credentials(route: str) -> bool:
+    """Routes that save keys or secrets into the running process.
+
+    ``/billing/config`` can replace the Stripe key *and* the webhook secret,
+    after which anyone holding that secret can sign ``checkout.session.completed``
+    events and grant credit -- so on a shared service it must never be one
+    ordinary bearer away (OWASP Authorization Cheat Sheet: deny by default).
+    The demo consent routes are nonce-gated browser forms and stay public.
+    """
+    if route == "/billing/config":
+        return True
+    return route.startswith("/setup/") and not _setup.is_public_demo_route(route)
+
+
 class Handler(BaseHTTPRequestHandler):
     """Same-origin chat, generation, placement repair, and built web UI."""
 
@@ -1949,6 +1974,11 @@ class Handler(BaseHTTPRequestHandler):
     #: ``model_factory`` convention: a test swaps in engines with a recorded
     #: transport and the suite never opens a socket or loads a model.
     tts_engines_factory = staticmethod(_tts.build_engines)
+
+    #: The ``order`` step's entitlement gate (service/entitlements.py), or
+    #: None when RevenueCat is not configured. A factory, the ``model_factory``
+    #: convention: a test pins a gate over a recorded transport.
+    entitlement_gate_factory = staticmethod(_entitlements.current)
 
     #: Root of the built bundle; None serves no static files at all.
     web_root: Path | None = WEB_DIST
@@ -2147,6 +2177,39 @@ class Handler(BaseHTTPRequestHandler):
         if not expected:
             return False
         return hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
+
+    def _origin_allowed(self) -> bool:
+        """False for a browser POST from a page on another origin.
+
+        OWASP's CSRF cheat sheet, "Verifying Origin with Standard Headers", as
+        jupyter_server does it (``jupyter_server/base/handlers.py``,
+        ``check_origin``): no ``Origin`` is a non-browser client and passes to
+        the bearer gate; the service's own origin, a loopback origin (the Vite
+        dev server) and the Tauri webview pass; anything else, including the
+        literal ``null`` a sandboxed frame sends, is refused.
+        """
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True
+        origin = origin.strip().lower()
+        if origin in _TAURI_ORIGINS:
+            return True
+        netloc = urlsplit(origin).netloc
+        if not netloc:
+            return False
+        if netloc == (self.headers.get("Host") or "").strip().lower():
+            return True
+        return _setup.host_is_local(netloc)
+
+    def _from_this_machine(self) -> bool:
+        """Did this request come from loopback, addressed to a loopback host?
+
+        Both halves: the peer address rules out another machine (and Cloud
+        Run's front end), and the ``Host`` check rules out a DNS-rebound page.
+        """
+        peer = self.client_address[0] if self.client_address else ""
+        host = self.headers.get("Host")
+        return peer in _LOOPBACK_PEERS and _setup.host_is_local(host)
 
     def _unauthorized(self) -> None:
         """Refuse one request, and close rather than keep the connection.
@@ -2361,7 +2424,21 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized(urlsplit(self.path).path):
             self._unauthorized()
             return
-        if urlsplit(self.path).path.startswith("/setup/"):
+        route = urlsplit(self.path).path
+        if not self._origin_allowed():
+            # A browser page on another origin can POST here with
+            # mode:"no-cors" and a text/plain body -- no preflight -- so the
+            # bearer gate alone never stopped it on a token-less local service.
+            self._send(403, {"error": "cross-origin request refused"}, close=True)
+            return
+        if _writes_credentials(route) and not self._from_this_machine():
+            self._send(
+                403,
+                {"error": "credentials can only be changed from this machine"},
+                close=True,
+            )
+            return
+        if route.startswith("/setup/"):
             # Matched on the path, not on self.path: the consent form posts to
             # a bare path, but a client may add a query string.
             self._setup_post(urlsplit(self.path).path)
@@ -2572,6 +2649,19 @@ class Handler(BaseHTTPRequestHandler):
                 body = _deliver.handle_post(self.path, payload)
             else:
                 store = self.store if self.store is not None else build_store()
+                # Only the order step is gated on the ``pro`` entitlement: it
+                # is the one optional step that runs purely on press (case and
+                # sourcing are prefetched at place). Decided before the model
+                # is built, and it fails open: service/entitlements.py.
+                decision = None
+                if _entitlements.is_order_path(self.path):
+                    decision = _entitlements.decide(
+                        self.entitlement_gate_factory(),
+                        self.headers.get(_entitlements.HEADER, "") or "",
+                    )
+                    if decision.refused is not None:
+                        self._send(402, decision.refused, cache_control="no-store")
+                        return
                 # Optional, and only ``POST /steps`` reads it: a start has no
                 # session to be guarded by, so this header is the one way a
                 # caller can say "this is the same press as before" and not be
@@ -2586,6 +2676,10 @@ class Handler(BaseHTTPRequestHandler):
                     store=store,
                     idempotency_key=self.headers.get("Idempotency-Key", "") or "",
                 )
+                if decision is not None:
+                    # Added at this layer, not in steps.py: the envelope is
+                    # built there and knows nothing about entitlements.
+                    body = {**body, "entitlement": decision.block}
         except _steps.StepNotFound as exc:
             self._send(404, {"error": str(exc)})
         except _amend.RunCancelled as exc:
@@ -3409,9 +3503,24 @@ class Handler(BaseHTTPRequestHandler):
         _logs.emit("warning", f"{self.address_string()} - {fmt % args}")
 
 
+def bind_host() -> str:
+    """Where the service listens: loopback unless it is deployed.
+
+    Jupyter's default (``jupyter_server/serverapp.py``, ``ip`` defaults to
+    localhost): a developer's ``python -m service.app`` must not be reachable
+    from the rest of the Wi-Fi. Cloud Run sets ``K_SERVICE`` and needs every
+    interface; ``SILKSCREEN_BIND`` overrides both (the Dockerfile sets it for
+    a plain ``docker run``).
+    """
+    explicit = os.getenv("SILKSCREEN_BIND", "").strip()
+    if explicit:
+        return explicit
+    return "0.0.0.0" if os.getenv("K_SERVICE") else "127.0.0.1"
+
+
 def make_server(port: int | None = None) -> ThreadingHTTPServer:
     port = port if port is not None else int(os.getenv("PORT", "8080"))
-    return ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    return ThreadingHTTPServer((bind_host(), port), Handler)
 
 
 def _warm_kicad_library() -> None:  # pragma: no cover - process entry
