@@ -129,7 +129,10 @@ describe("EngineStep", () => {
     expect(screen.getByTestId("kicad-answer").textContent).toBe("KiCad is here");
     expect(screen.getByTestId("kicad-detail").textContent).toMatch(/did not run it/);
     expect(screen.getByTestId("kicad-detail").textContent).not.toMatch(/works/);
-    expect(h.setCard).toHaveBeenCalledWith("kicad", true);
+    // `setCard` runs from a second effect keyed on the kicad state, after the
+    // commit the waitFor above observed, so it is awaited too or the assertion
+    // races the passive effect (it lost 2 runs in 3 with the five files together).
+    await waitFor(() => expect(h.setCard).toHaveBeenCalledWith("kicad", true));
   });
 
   it("a missing KiCad holds the screen instead of auto-advancing past the bad news", async () => {
@@ -140,7 +143,7 @@ describe("EngineStep", () => {
     expect(screen.getByTestId("kicad-fix").textContent).toBe(KICAD_MISSING_FIX);
     // Not a blocker: Ada still designs boards, so Continue stays open.
     expect(h.onCanContinue).toHaveBeenLastCalledWith(true);
-    expect(h.setCard).toHaveBeenCalledWith("kicad", false);
+    await waitFor(() => expect(h.setCard).toHaveBeenCalledWith("kicad", false));
     await act(async () => {
       await new Promise((r) => setTimeout(r, AUTO_ADVANCE_MS + 100));
     });
@@ -155,6 +158,6 @@ describe("EngineStep", () => {
     expect(screen.getByTestId("kicad-answer").textContent).toBe("KiCad: not asked");
     expect(screen.queryByTestId("kicad-fix")).toBeNull();
     // Unknown is not an answer, so the card is not recorded as connected.
-    expect(h.setCard).toHaveBeenCalledWith("kicad", false);
+    await waitFor(() => expect(h.setCard).toHaveBeenCalledWith("kicad", false));
   });
 });

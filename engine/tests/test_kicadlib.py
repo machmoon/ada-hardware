@@ -240,7 +240,10 @@ def test_connector_families_resolve_to_installed_footprints_with_3d_bodies():
     cases = {
         "JST_GH_4P": "Connector_JST:JST_GH_BM04B-GHS-TBT_1x04-1MP_P1.25mm_Vertical",
         "JST_XH_3P": "Connector_JST:JST_XH_B3B-XH-A_1x03_P2.50mm_Vertical",
-        "TERMINAL_5.08_2P": "Connector_Phoenix_MSTB:PhoenixContact_MSTBA_2,5_2-G-5,08_1x02_P5.08mm_Horizontal",
+        "TERMINAL_5.08_2P": (
+            "Connector_Phoenix_MSTB:"
+            "PhoenixContact_MSTBA_2,5_2-G-5,08_1x02_P5.08mm_Horizontal"
+        ),
         "IDC_2.54_10P": "Connector_IDC:IDC-Header_2x05_P2.54mm_Vertical",
     }
     for spec, lib_id in cases.items():
@@ -261,7 +264,8 @@ def test_a_board_with_library_connectors_faces_its_wire_entry_outward(monkeypatc
 
     spec = parse_circuit_spec({
         "devices": {
-            "J_MOTOR": {"kind": "connector", "package": "TERMINAL_5.08_2P", "pins": {"A": "1", "B": "2"}},
+            "J_MOTOR": {"kind": "connector", "package": "TERMINAL_5.08_2P",
+                        "pins": {"A": "1", "B": "2"}},
             "J_SENSOR": {"kind": "connector", "package": "JST_GH_4P",
                          "pins": {"VCC": "1", "SDA": "2", "SCL": "3", "GND": "4"}},
         },
@@ -270,7 +274,9 @@ def test_a_board_with_library_connectors_faces_its_wire_entry_outward(monkeypatc
                  "GND": ["J_MOTOR.B", "J_SENSOR.GND"]},
     })
     board = build_board(spec, time_limit_s=5)
-    motor = next(p for p in board.parts if p.footprint.name.startswith("PhoenixContact"))
+    motor = next(
+        p for p in board.parts if p.footprint.name.startswith("PhoenixContact")
+    )
     assert motor.footprint.library is not None
     # The mouth faces the solver's bottom edge: the part's box starts at y=0.
     assert motor.y_nm <= min(p.y_nm for p in board.parts)

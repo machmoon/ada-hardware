@@ -1,7 +1,7 @@
 """Score the boards Ada lays out, the way a fab or a reviewing engineer would.
 
-    python scripts/board_eval.py                     # scoreboard, writes board_eval.json
-    python scripts/board_eval.py --compare old.json  # and the delta against a saved run
+    python scripts/board_eval.py                    # scoreboard, writes board_eval.json
+    python scripts/board_eval.py --compare old.json # and the delta against a saved run
 
 The unit tests check that each function does what its author meant. None of
 them asks whether the *product* got better: whether a board passes KiCad's own
@@ -34,7 +34,9 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path[:0] = [str(ROOT / "engine"), str(ROOT / "engine" / "tests"), str(ROOT / "scripts")]
+sys.path[:0] = [
+    str(ROOT / "engine"), str(ROOT / "engine" / "tests"), str(ROOT / "scripts")
+]
 
 from design_quality import _SELFTEST, spec_as_dict  # noqa: E402
 from silkscreen.agents import generate_pcb  # noqa: E402
@@ -42,7 +44,10 @@ from silkscreen.agents.model import ScriptedModel  # noqa: E402
 from silkscreen.units import to_mm  # noqa: E402
 from test_board_decoupling import _loop_mm, _two_chip_spec  # noqa: E402
 
-KICAD_CLI = shutil.which("kicad-cli") or "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
+KICAD_CLI = (
+    shutil.which("kicad-cli")
+    or "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli"
+)
 
 
 #: The hard case: what an engineer means by "an ESP32 dev board". USB-C in,
@@ -51,7 +56,8 @@ KICAD_CLI = shutil.which("kicad-cli") or "/Applications/KiCad/KiCad.app/Contents
 #: (RF_Module:ESP32-WROOM-32E, Interface_USB:CH340C, the USB-C 16P receptacle).
 ESP32_DEVBOARD = {
     "devices": {
-        "j_usb": {"kind": "connector", "package": "USB_C_Receptacle_USB2.0_16P", "pins": {
+        "j_usb": {"kind": "connector", "package": "USB_C_Receptacle_USB2.0_16P",
+                  "pins": {
             "GND_A1": "A1", "GND_B12": "B12", "GND_B1": "B1", "GND_A12": "A12",
             "VBUS_A4": "A4", "VBUS_B9": "B9", "VBUS_B4": "B4", "VBUS_A9": "A9",
             "DP_A": "A6", "DP_B": "B6", "DN_A": "A7", "DN_B": "B7",
@@ -71,8 +77,10 @@ ESP32_DEVBOARD = {
         "ESP32-WROOM-32E": {"pins": {"GND": "1", "VDD": "2", "EN": "3", "IO0": "25",
                                      "IO2": "24", "RXD0": "34", "TXD0": "35"},
                             "no_connect": ["IO2"]},
-        "SW_EN": {"kind": "switch", "package": "SW_SPST_TL3305A", "pins": {"A": "1", "B": "2"}},
-        "SW_BOOT": {"kind": "switch", "package": "SW_SPST_TL3305A", "pins": {"A": "1", "B": "2"}},
+        "SW_EN": {"kind": "switch", "package": "SW_SPST_TL3305A",
+                  "pins": {"A": "1", "B": "2"}},
+        "SW_BOOT": {"kind": "switch", "package": "SW_SPST_TL3305A",
+                    "pins": {"A": "1", "B": "2"}},
     },
     "passives": {
         "R_CC1": {"type": "resistor", "value": "5k1"},
@@ -92,9 +100,9 @@ ESP32_DEVBOARD = {
         "VBUS": ["j_usb.VBUS_A4", "j_usb.VBUS_B9", "j_usb.VBUS_B4", "j_usb.VBUS_A9",
                  "AMS1117-3.3.VIN", "C_VBUS.1"],
         "GND": ["j_usb.GND_A1", "j_usb.GND_B12", "j_usb.GND_B1", "j_usb.GND_A12",
-                "AMS1117-3.3.GND", "CH340C.GND", "ESP32-WROOM-32E.GND", "R_CC1.2", "R_CC2.2",
-                "C_VBUS.2", "C_3V3.2", "C_ESP.2", "C_CH.2", "C_V3.2", "C_EN.2",
-                "SW_EN.B", "SW_BOOT.B", "D_PWR.2"],
+                "AMS1117-3.3.GND", "CH340C.GND", "ESP32-WROOM-32E.GND", "R_CC1.2",
+                "R_CC2.2", "C_VBUS.2", "C_3V3.2", "C_ESP.2", "C_CH.2", "C_V3.2",
+                "C_EN.2", "SW_EN.B", "SW_BOOT.B", "D_PWR.2"],
         "+3V3": ["AMS1117-3.3.VOUT", "C_3V3.1", "CH340C.VCC", "C_CH.1",
                  "ESP32-WROOM-32E.VDD", "C_ESP.1", "R_EN.1", "R_BOOT.1", "R_LED.1"],
         "CH_V3": ["CH340C.V3", "C_V3.1"],
@@ -120,7 +128,8 @@ def cases() -> dict[str, dict]:
 
 def kicad_counts(pcb: Path, sch: Path) -> dict[str, int | str]:
     if not Path(KICAD_CLI).exists():
-        return {"erc_errors": "n/a", "drc_errors": "n/a", "unconnected": "n/a", "parity": "n/a"}
+        return {"erc_errors": "n/a", "drc_errors": "n/a", "unconnected": "n/a",
+                "parity": "n/a"}
 
     def run(*args) -> dict:
         report = pcb.with_suffix(f".{args[0]}{len(args)}.json")
@@ -129,7 +138,8 @@ def kicad_counts(pcb: Path, sch: Path) -> dict[str, int | str]:
         return json.loads(report.read_text()) if report.exists() else {}
 
     erc = run("sch", "erc", "--severity-error", str(sch))
-    drc = run("pcb", "drc", "--severity-error", "--schematic-parity", "--refill-zones", str(pcb))
+    drc = run("pcb", "drc", "--severity-error", "--schematic-parity", "--refill-zones",
+              str(pcb))
     return {
         "erc_errors": sum(len(s.get("violations", [])) for s in erc.get("sheets", [])),
         "drc_errors": len(drc.get("violations", [])),
@@ -175,7 +185,8 @@ def print_table(rows: dict[str, dict], before: dict[str, dict] | None) -> None:
         for c in COLUMNS:
             v, old = row.get(c), (before or {}).get(name, {}).get(c)
             text = "-" if v is None else str(v)
-            if isinstance(v, (int, float)) and isinstance(old, (int, float)) and v != old:
+            numbers = isinstance(v, (int, float)) and isinstance(old, (int, float))
+            if numbers and v != old:
                 text += f" ({v - old:+.3g})"
             cells.append(f"{text:>20}")
         print(f"{name:<14}" + "".join(cells))
@@ -193,10 +204,13 @@ def main() -> int:
     # The product path: KiCad's installed library, unless explicitly switched off.
     os.environ.pop("SILKSCREEN_KICAD_LIBRARY", None)
     workdir = args.keep or Path(tempfile.mkdtemp(prefix="board-eval-"))
-    rows = {n: score(n, s, workdir) for n, s in cases().items() if not args.only or n in args.only}
+    rows = {n: score(n, s, workdir) for n, s in cases().items()
+            if not args.only or n in args.only}
     before = json.loads(args.compare.read_text())["cases"] if args.compare else None
     print_table(rows, before)
-    args.output.write_text(json.dumps({"kicad_cli": KICAD_CLI, "cases": rows}, indent=2))
+    args.output.write_text(
+        json.dumps({"kicad_cli": KICAD_CLI, "cases": rows}, indent=2)
+    )
     failing = [n for n, r in rows.items() if any(isinstance(r[k], int) and r[k] for k in
                ("erc_errors", "drc_errors", "unconnected", "parity"))]
     print(f"\nwrote {args.output}; KiCad-clean: {len(rows) - len(failing)}/{len(rows)}"

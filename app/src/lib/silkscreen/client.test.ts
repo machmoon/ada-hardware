@@ -12,8 +12,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@tauri-apps/plugin-http", () => ({ fetch: vi.fn() }));
 
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { setSetting } from "@/lib/settings/store";
 import {
+  ENTITLEMENT_REQUIRED_LINE,
+  advanceStep,
+  cancelRun,
   startRetryDelayMs,
+  stepStatus,
   MAX_TIME_LIMIT_S,
   MIN_TIME_LIMIT_S,
   SilkscreenError,
@@ -818,5 +823,75 @@ describe("openCase", () => {
     expect(String(url)).toBe("http://x/steps/s%201/open_case");
     expect((init as RequestInit).method).toBe("POST");
     expect(verdict).toEqual({ opened: false, detail: "FreeCAD is not installed" });
+  });
+});
+
+/* ------------------------------------------------------------- Ada Pro */
+
+describe("the Ada Pro gate on the wire", () => {
+  const UUID = "8f1c2b4e-3d5a-4f6b-9c7d-0e1f2a3b4c5d";
+  const headersOf = (call: number) =>
+    (mockFetch.mock.calls[call][1] as RequestInit).headers as Record<string, string>;
+
+  afterEach(async () => {
+    await setSetting("purchases.appUserId", "");
+  });
+
+  it("a 402 with reason entitlement_required is kind entitlement, carrying the service's sentence", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(402, {
+        reason: "entitlement_required",
+        entitlement: "pro",
+        detail: "Ada Pro is required to prepare a fab order on this service.",
+        checked_at: "2026-09-24T10:00:00Z",
+      })
+    );
+    const err = await failure(advanceStep("http://x", "s1", "order"));
+    expect(err.kind).toBe("entitlement");
+    expect(err.status).toBe(402);
+    expect(err.message).toBe("Ada Pro is required to prepare a fab order on this service.");
+    // The sentence is the message; nothing repeats it in `detail`.
+    expect(err.detail).toBe("");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("a 402 with no sentence still says what is needed", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(402, { reason: "entitlement_required" }));
+    const err = await failure(advanceStep("http://x", "s1", "order"));
+    expect(err.kind).toBe("entitlement");
+    expect(err.message).toBe(ENTITLEMENT_REQUIRED_LINE);
+  });
+
+  it("the pre-existing 402 insufficient_credit keeps its handling", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse(402, { reason: "insufficient_credit", error: "Not enough credit" })
+    );
+    const err = await failure(advanceStep("http://x", "s1", "order"));
+    expect(err.kind).not.toBe("entitlement");
+    expect(err.kind).toBe("server");
+    expect(err.status).toBe(402);
+    expect(err.message).toBe("Not enough credit");
+  });
+
+  it("every /steps request carries X-Kaleo-App-User-Id once the desktop has one", async () => {
+    await setSetting("purchases.appUserId", UUID);
+    mockFetch.mockResolvedValue(jsonResponse(200, { session: "s1", step: "order", next: [] }));
+    await startSteps("http://x", { intent: "a 3.3V LDO board" });
+    await advanceStep("http://x", "s1", "order");
+    await stepStatus("http://x", "s1");
+    expect(headersOf(0)["X-Kaleo-App-User-Id"]).toBe(UUID);
+    expect(headersOf(1)["X-Kaleo-App-User-Id"]).toBe(UUID);
+    expect(headersOf(2)["X-Kaleo-App-User-Id"]).toBe(UUID);
+    // A run route is not a step route.
+    await cancelRun("http://x", "run_1");
+    expect("X-Kaleo-App-User-Id" in headersOf(3)).toBe(false);
+  });
+
+  it("with no id there is no header, never an invented one", async () => {
+    mockFetch.mockResolvedValue(jsonResponse(200, { session: "s1", step: "order", next: [] }));
+    await advanceStep("http://x", "s1", "order");
+    await stepStatus("http://x", "s1");
+    expect("X-Kaleo-App-User-Id" in headersOf(0)).toBe(false);
+    expect("X-Kaleo-App-User-Id" in headersOf(1)).toBe(false);
   });
 });

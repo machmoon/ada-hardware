@@ -115,7 +115,9 @@ class FailoverLlm(BaseLlm):
     backoff_s: float = 0.5
     #: ``(event dict) -> None``; receives one ``model.retry`` per failed or
     #: skipped attempt.
-    on_retry: Callable[[dict[str, Any]], None] | None = Field(default=None, exclude=True)
+    on_retry: Callable[[dict[str, Any]], None] | None = Field(
+        default=None, exclude=True
+    )
     #: Called before every attempt *after the first*; the first is already
     #: paced by the agent's ``before_model_callback``.
     before_attempt: Callable[[], None] | None = Field(default=None, exclude=True)
@@ -151,7 +153,9 @@ class FailoverLlm(BaseLlm):
     ) -> AsyncGenerator[LlmResponse, None]:
         now = self.clock()
         indexed = list(enumerate(self.tiers))
-        ready = [(i, t) for i, t in indexed if self.cooldowns.get(self._key(t), 0.0) <= now]
+        ready = [
+            (i, t) for i, t in indexed if self.cooldowns.get(self._key(t), 0.0) <= now
+        ]
         if not ready:
             for _, tier in indexed:
                 self.cooldowns.pop(self._key(tier), None)
@@ -167,7 +171,9 @@ class FailoverLlm(BaseLlm):
                 "is asked again"
             )
             errors.append(f"{tier.model}: {reason}")
-            self._report(provider=tier.model, model=tier.model, error=reason, elapsed_s=0.0)
+            self._report(
+                provider=tier.model, model=tier.model, error=reason, elapsed_s=0.0
+            )
 
         first = True
         for index, tier in ready:
@@ -197,7 +203,9 @@ class FailoverLlm(BaseLlm):
                         elapsed_s=round(self.clock() - started, 3),
                     )
                     if provider_is_down(error):
-                        self.cooldowns[self._key(tier)] = self.clock() + quota_cooldown_s(error)
+                        self.cooldowns[self._key(tier)] = (
+                            self.clock() + quota_cooldown_s(error)
+                        )
                         break
                     if try_no + 1 < self._attempts_for(index):
                         await asyncio.sleep(self.backoff_s * (2**try_no))

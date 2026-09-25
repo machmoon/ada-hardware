@@ -8,6 +8,7 @@ verbatim, minus fields this code does not read.
 from __future__ import annotations
 
 import json
+import os
 import stat
 import urllib.parse
 
@@ -211,7 +212,12 @@ def test_the_whole_flow_writes_a_private_token_and_reports_connected(tmp_path):
     assert result["connected"] is True
     assert result["scope"] == "mcp"
     assert result["expires_at"] == 1_000.0 + 3600
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    # POSIX mode bits do not exist on Windows (S_IMODE reads 0o666 there),
+    # the googleapps/tests/test_auth.py rule; the code's own answer holds
+    # everywhere.
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert oauth.token_file_is_private(path)
     assert oauth.token_status(path, now=1_000.0) == "connected"
 
 

@@ -293,7 +293,9 @@ class FallbackModel:
     @staticmethod
     def _key(provider: Provider) -> str:
         model = getattr(provider.model, "model", None)
-        return f"{provider.name}:{model}" if isinstance(model, str) and model else provider.name
+        if isinstance(model, str) and model:
+            return f"{provider.name}:{model}"
+        return provider.name
 
     def _eligible(self) -> tuple[list[Provider], dict[str, float]]:
         """``(providers to try, {skipped name: seconds left})``.
@@ -378,9 +380,10 @@ class FallbackModel:
             # asked for the (Gemini-named) cheap tier moves to Claude's own
             # cheap model, and an event naming the Gemini id would be false.
             target = getattr(sibling, "model", None)
+            suffix = target if isinstance(target, str) and target else model
             swapped.append(
                 Provider(
-                    name=f"{provider.name}-{target if isinstance(target, str) and target else model}",
+                    name=f"{provider.name}-{suffix}",
                     model=sibling,
                     attempts=provider.attempts,
                 )
@@ -636,7 +639,9 @@ def default_chain(
                 ("claude-cheap", CLAUDE_CHEAP_MODEL, 2, ClaudeModel),
             ]
         else:
-            lead = primary if primary and not is_claude_model(primary) else primary_model()
+            lead = (
+                primary if primary and not is_claude_model(primary) else primary_model()
+            )
             rungs += [
                 ("gemini-primary", lead, 2, gemini),
                 ("gemini-flash", FALLBACK_MODEL, 2, gemini),

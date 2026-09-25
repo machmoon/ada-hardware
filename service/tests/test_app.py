@@ -375,7 +375,9 @@ def test_generate_returns_a_passing_v2_constraint_receipt(server):
     assert body["blockers"] == []
 
 
-def test_blocked_constraints_do_not_hide_the_generated_artifact(server, unrouted_boards):
+def test_blocked_constraints_do_not_hide_the_generated_artifact(
+    server, unrouted_boards
+):
     status, body = post(
         server,
         {
@@ -2806,7 +2808,9 @@ def test_a_stream_reports_the_run_and_ends_with_the_one_shot_body(server):
     assert streamed == once_body
 
 
-def test_generate_stream_reports_blocked_constraint_verification(server, unrouted_boards):
+def test_generate_stream_reports_blocked_constraint_verification(
+    server, unrouted_boards
+):
     status, _, frames = post_stream(
         server,
         {
@@ -3450,7 +3454,9 @@ def test_a_daily_quota_refusal_is_remembered_across_requests(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
     monkeypatch.delenv("SILKSCREEN_MODEL", raising=False)
     monkeypatch.setattr(resilience, "SHARED_COOLDOWNS", {})
-    monkeypatch.setattr(resilience, "seconds_until_quota_reset", lambda now=None: 5000.0)
+    monkeypatch.setattr(
+        resilience, "seconds_until_quota_reset", lambda now=None: 5000.0
+    )
     calls: list[str] = []
 
     def fake_generate(self, prompt, **kwargs):
@@ -3728,7 +3734,9 @@ def test_build_transcribe_model_is_one_cheap_provider_with_one_attempt(monkeypat
 def _proposal_error():
     from silkscreen.agents.propose import ProposalAttempt, ProposalError
 
-    unsupported = "connector 'NANO' has unsupported package 'arduino_nano'; supported: [...]"
+    unsupported = (
+        "connector 'NANO' has unsupported package 'arduino_nano'; supported: [...]"
+    )
     attempts = [
         ProposalAttempt(round=0, raw="{}", errors=[unsupported]),
         ProposalAttempt(
@@ -3738,7 +3746,9 @@ def _proposal_error():
             + ["x" * 5000],
         ),
     ]
-    return ProposalError("No valid circuit after 2 attempts.", attempts, unsupported=[unsupported])
+    return ProposalError(
+        "No valid circuit after 2 attempts.", attempts, unsupported=[unsupported]
+    )
 
 
 def test_a_proposal_that_never_validates_is_a_named_422_with_bounded_errors(

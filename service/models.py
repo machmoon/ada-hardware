@@ -143,7 +143,9 @@ def _clean_name(value: object) -> str:
     return name.removeprefix("models/")
 
 
-def _claude_entry(model_id: str, name: str, description: str, **limits: Any) -> dict[str, Any]:
+def _claude_entry(
+    model_id: str, name: str, description: str, **limits: Any
+) -> dict[str, Any]:
     return {
         "id": model_id,
         "name": name,
@@ -207,7 +209,11 @@ def _claude_models() -> tuple[list[dict[str, Any]], str | None, str | None]:
             f"Claude model discovery failed: {type(exc).__name__}: {exc}",
         )
     if not entries:
-        return _claude_configured_entries(), "claude-configured", "Claude returned no models."
+        return (
+            _claude_configured_entries(),
+            "claude-configured",
+            "Claude returned no models.",
+        )
     entries.sort(key=lambda item: item["id"])
     return entries, "claude", None
 
@@ -245,7 +251,9 @@ def _live_catalog() -> dict[str, Any]:
     return {
         "default": "auto",
         "auto_model": _auto_model(),
-        "source": claude_source if gemini is None else f"{claude_source}+{gemini['source']}",
+        "source": (
+            claude_source if gemini is None else f"{claude_source}+{gemini['source']}"
+        ),
         "models": claude + list((gemini or {}).get("models", [])),
         **({"warning": " ".join(warnings)} if warnings else {}),
     }

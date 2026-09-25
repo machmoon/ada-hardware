@@ -1,5 +1,7 @@
+import { useRef, useState } from "react";
 import { CornerDownLeftIcon, XIcon } from "lucide-react";
 import { Button, Input } from "@/components";
+import { cn } from "@/lib/utils";
 import type { EngineHealth } from "@/hooks";
 import { useSilkscreenRun, type RunRequestDraft } from "@/contexts";
 import type { WakeWord } from "@/hooks/useWakeWord";
@@ -93,6 +95,22 @@ const ListeningPanel = ({
     </div>
   );
 };
+
+/**
+ * Three boards the engine is known to build, offered under an empty field.
+ *
+ * Pressing one fills the field and nothing else: the sentence is then the
+ * person's to edit and to submit, and the ⏎ control keeps saying what that
+ * costs. They show only while the field is empty and has focus, so the
+ * resting strip over KiCad is still one row; the window grows to fit them
+ * through the same raise-only measurement that fits a banner
+ * (`overlayStateFor` in index.tsx, `sizeFor` in lib/overlay-size.ts).
+ */
+export const EXAMPLE_PROMPTS: readonly string[] = [
+  "A 3.3 V LDO board off USB-C with a power LED",
+  "A 555 timer LED blinker on a 9 V battery",
+  "An ESP32 dev board with USB-C and a reset button",
+];
 
 /** Everything that decides what the ⏎ control promises. */
 export interface SubmitState {
@@ -267,17 +285,45 @@ export const PromptBar = ({
   const showListening =
     barContent({ micOpen: micIsOpen(listenState), speaking, hidden }) === "listening";
 
+  // Focus-within, tracked by hand: React's onFocus/onBlur bubble, and a blur
+  // whose `relatedTarget` is still inside the row (the field to a chip, a chip
+  // to the arrow) is not the person leaving. A chip press is the case that
+  // needs care: macOS WebKit does not focus a button on click, so the field
+  // would blur with `relatedTarget` null, the row would unmount on mousedown
+  // and the click would land on nothing. Each chip prevents the mousedown's
+  // default, so the field keeps focus through the press and the click fires.
+  const [within, setWithin] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const showExamples =
+    within && !request.intent.trim() && !busy && !awaitingApproval && !hidden && !showListening;
+  const fill = (example: string) => {
+    onRequestChange({ intent: example });
+    // The chip that was pressed is about to unmount; the sentence it left is
+    // the person's to edit, so the caret goes back to the field.
+    inputRef.current?.focus();
+  };
+
   return (
     // `min-w-0` is load-bearing: a flex item's default min-width is `auto`,
     // so without it this row refuses to shrink below its own content and
     // pushes Generate, the dashboard button and the drag handle off the
     // 600px card whenever a status line beside the mic gets long. Seen on
     // screen with the glimpse line showing.
-    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+    <div
+      // `flex-wrap` only while the examples are shown: their row has
+      // `basis-full`, so it is the one child that wraps, and the field's
+      // `flex-1` (basis 0) keeps the controls on the first line as before.
+      className={cn("flex min-w-0 flex-1 items-center gap-1.5", showExamples && "flex-wrap")}
+      onFocus={() => setWithin(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setWithin(false);
+      }}
+    >
       {showListening ? (
         <ListeningPanel state={listenState} speaking={speaking} />
       ) : (
         <Input
+          ref={inputRef}
           placeholder={placeholder}
           value={request.intent}
           // Typing is no longer switched off while a run is in flight. A
@@ -377,6 +423,28 @@ export const PromptBar = ({
           <CornerDownLeftIcon className="size-3.5" />
         </Button>
       </span>
+
+      {showExamples ? (
+        // Under the field, at the field's own text size. Each one is a whole
+        // sentence, not a category, so what lands in the field is a board.
+        <div className="flex basis-full flex-wrap gap-1 pl-0.5" data-testid="prompt-examples">
+          {EXAMPLE_PROMPTS.map((example) => (
+            <button
+              key={example}
+              type="button"
+              className="rounded-full border border-input/50 bg-muted/30 px-2 py-0.5 text-[11px] leading-tight text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[2px] focus-visible:ring-ring"
+              // See the focus-within note above: the field keeps focus
+              // through the press, so the row is still here for the click.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => fill(example)}
+              data-testid="prompt-example"
+              data-example={example}
+            >
+              {example}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 };

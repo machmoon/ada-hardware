@@ -55,6 +55,9 @@ import type { StepRun } from "@/hooks/useStepRun";
 import type { StepName } from "@/lib/silkscreen/types";
 import { cn } from "@/lib/utils";
 import { useCalm } from "@/lib/calm";
+import { usePurchases } from "@/contexts/purchases.context";
+import { PRO_BUTTON_LABEL } from "@/lib/purchases/client";
+import { PRO_PANE_ID, openSettingsPane } from "@/lib/purchases/pane";
 
 export interface StepPanelProps {
   run: StepRun;
@@ -872,6 +875,29 @@ const StepRail = ({ rows }: { rows: RailRow[] }) => (
 /** What one approval costs, stated on the control that spends it. */
 const PRICE = "1 call";
 
+/** The order step's control while the verdict is `free` or the service refused it. */
+const PRO_TITLE = "Ada Pro is required to prepare a fab order. Opens Settings; spends nothing.";
+
+/**
+ * The strip's one gated control. It replaces the order step's approve button
+ * (and its armed confirm) while this desktop is known not to have Ada Pro, or
+ * when the service just said so with a 402. It spends nothing: it opens the
+ * dashboard at the Ada Pro pane, where the purchase is made.
+ */
+const ProButton = ({ variant }: { variant: "default" | "outline" }) => (
+  <Button
+    size="sm"
+    variant={variant}
+    onClick={() => void openSettingsPane(PRO_PANE_ID)}
+    data-testid="step-pro"
+    data-step="order"
+    data-locked="pro"
+    title={PRO_TITLE}
+  >
+    {PRO_BUTTON_LABEL}
+  </Button>
+);
+
 export const StepPanel = ({
   run,
   note,
@@ -882,6 +908,25 @@ export const StepPanel = ({
   reviewed = true,
 }: StepPanelProps) => {
   const calm = useCalm();
+  // The Ada Pro gate, on the order step only (`case` and `sourcing` are
+  // prefetched by the service at `place`, so a client gate on those would
+  // stop no model call). `free` locks it; a 402 `entitlement` error from the
+  // service locks it the same way until the desktop's own verdict turns
+  // `entitled` (the error stays on the run until the next approval, and a
+  // person who bought Pro after the 402 must get the button back without
+  // starting the run over); `unknown` and `checking` never lock, they leave
+  // the button live with a note, because Ada is loopback-first and an
+  // offline laptop must not lose a paid feature. The service's gate, where
+  // it is configured, is what refuses; the id it checks is a claim this
+  // desktop sends (lib/purchases/app-user-id.ts), not a proof.
+  const purchases = usePurchases();
+  const entitlementRefused =
+    run.status === "error" &&
+    run.error?.kind === "entitlement" &&
+    (run.failedStep ?? "order") === "order" &&
+    purchases.status !== "entitled";
+  const orderLocked = purchases.status === "free" || entitlementRefused;
+  const proUnchecked = purchases.status === "unknown" || purchases.status === "checking";
   const rows = railRows({
     history: run.history,
     running: run.running,
@@ -1182,6 +1227,8 @@ export const StepPanel = ({
               >
                 Start over
               </Button>
+            ) : armed.step === "order" && orderLocked ? (
+              <ProButton variant="default" />
             ) : (
               <Button
                 size="sm"
@@ -1201,35 +1248,57 @@ export const StepPanel = ({
         </div>
       ) : run.status === "waiting" || run.status === "error" ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          {run.available.map((step: StepName) => (
-            <Button
-              key={step}
-              size="sm"
-              // The primary weight is a claim that this is the obvious next
-              // click. It is not, while the artifact is still unread.
-              variant={step === run.available[0] && !unread ? "default" : "outline"}
-              // Only the case step carries a payload of the panel's own;
-              // every other approval is the bare step, so the hook's own
-              // fields (`summaryPayload`) are all it sends.
-              onClick={() => {
-                const payload = payloadFor(step);
-                if (payload) run.approve(step, payload);
-                else run.approve(step);
-              }}
-              data-testid="step-approve"
-              data-step={step}
-              data-unread={step === run.available[0] && unread ? "true" : undefined}
-              data-afresh={step === "case" && caseAfresh ? "true" : undefined}
-              title={`Runs in ${WHERE_LABEL[STEP_DESCRIPTORS[step].where]}. One engine call, not reversible.`}
-            >
-              {step === "case" && caseAfresh ? "Design the case afresh" : STEP_DESCRIPTORS[step].action}
-              {step === run.available[0] ? ` · ${PRICE}` : ""}
-            </Button>
-          ))}
+          {run.available.map((step: StepName) =>
+            step === "order" && orderLocked ? (
+              <ProButton
+                key={step}
+                variant={step === run.available[0] && !unread ? "default" : "outline"}
+              />
+            ) : (
+              <Button
+                key={step}
+                size="sm"
+                // The primary weight is a claim that this is the obvious next
+                // click. It is not, while the artifact is still unread.
+                variant={step === run.available[0] && !unread ? "default" : "outline"}
+                // Only the case step carries a payload of the panel's own;
+                // every other approval is the bare step, so the hook's own
+                // fields (`summaryPayload`) are all it sends.
+                onClick={() => {
+                  const payload = payloadFor(step);
+                  if (payload) run.approve(step, payload);
+                  else run.approve(step);
+                }}
+                data-testid="step-approve"
+                data-step={step}
+                data-unread={step === run.available[0] && unread ? "true" : undefined}
+                data-afresh={step === "case" && caseAfresh ? "true" : undefined}
+                title={`Runs in ${WHERE_LABEL[STEP_DESCRIPTORS[step].where]}. One engine call, not reversible.`}
+              >
+                {step === "case" && caseAfresh ? "Design the case afresh" : STEP_DESCRIPTORS[step].action}
+                {step === run.available[0] ? ` · ${PRICE}` : ""}
+              </Button>
+            )
+          )}
           <Button size="sm" variant="ghost" onClick={onDismiss} data-testid="step-dismiss">
             {run.available.length ? "Stop here" : "Done"}
           </Button>
         </div>
+      ) : null}
+
+      {proUnchecked &&
+      (run.status === "waiting" || run.status === "error") &&
+      (run.available.includes("order") || armed?.step === "order") ? (
+        // The verdict is not known, so the order button above stays live and
+        // this says why nothing was checked. Never a lock: see the gate note.
+        <p
+          className="text-[10.5px] leading-tight text-muted-foreground"
+          data-testid="pro-note"
+          data-status={purchases.status}
+        >
+          Ada Pro not checked
+          {purchases.reason ? `: ${purchases.reason}` : "."}
+        </p>
       ) : null}
 
       {run.status === "done" ? (

@@ -114,7 +114,9 @@ def housing_dims(act: rules.Actuator, *, top_wall: bool = True) -> HousingDims:
 def seat_bore_nm(bearing: rules.Bearing) -> int:
     """The modelled bearing-seat diameter: ``D + compensation - interference``
     with the interference at the middle of the allowed band."""
-    interference = (rules.SEAT_INTERFERENCE_MIN_NM + rules.SEAT_INTERFERENCE_MAX_NM) // 2
+    interference = (
+        rules.SEAT_INTERFERENCE_MIN_NM + rules.SEAT_INTERFERENCE_MAX_NM
+    ) // 2
     return bearing.od_nm + rules.HOLE_COMPENSATION_NM - interference
 
 
@@ -230,7 +232,8 @@ def layout_for(spec: MechanismSpec) -> Layout:
             spline_need = act.spline_h_nm + _MW - d.hub_len_nm
             cheek_t = max(_T, spline_need)
             if j.bearing != "none":
-                cheek_t = max(cheek_t, rules.BEARINGS[j.bearing].width_nm + rules.FIT_SLIDE_NM + _MW)
+                cheek_t = max(cheek_t, rules.BEARINGS[j.bearing].width_nm
+                              + rules.FIT_SLIDE_NM + _MW)
             seat = seat_bore_nm(rules.BEARINGS[j.bearing]) if j.bearing != "none" else 0
             cheek_r = max(d.hub_d_nm, seat, act.spline_d_nm) // 2 + _T
             # The bridge must clear the distal corner of the housing it
@@ -254,7 +257,9 @@ def layout_for(spec: MechanismSpec) -> Layout:
                 distal = "hinge"
                 z_b = L - nd.u_max_nm
                 beam_y = (-nyc + _GAP, nyc - _GAP)
-                servo = ServoPlacement(k, (0, y_top, L), (0, 1, 0), (0, 0, -1), (1, 0, 0))
+                servo = ServoPlacement(
+                    k, (0, y_top, L), (0, 1, 0), (0, 0, -1), (1, 0, 0)
+                )
             else:
                 distal = "twist"
                 z_b = L - nd.a_nm + nd.s_min_nm

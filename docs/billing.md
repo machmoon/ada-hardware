@@ -250,13 +250,54 @@ modes, and never raises into the webhook path.
 
 ## Known gaps
 
-- **`MemoryLedger` is process-local.** It is the offline stand-in. Durable
-  storage is the prerequisite for more than one Cloud Run replica — two
-  replicas today have two different balances.
-- **Overage settlement is not wired end to end.** `create_setup_session` and
-  `charge_overage` exist and are correct, but nothing persists the `customer`
-  and `payment_method` ids an off-session charge needs. Blocked on deciding
-  what identifies an account (`billing/accounts.py` is the seam).
-- **Never run against real Stripe.** Every test uses a recorded transport.
-  (The reversal-event subscription this note used to add here is now part of
-  step 3 of the setup, where an operator will actually read it.)
+The first two gaps this section used to list are closed by the two sections
+above it, and an earlier revision of this page contradicted itself by keeping
+them: `MemoryLedger` is no longer the only ledger, since `billing/sqlite_ledger.py`
+is the durable one and the default (`~/.kaleo/ledger.sqlite3`), and overage
+settlement is wired end to end, since `billing/paymethods.py` keeps the `cus_`
+and `pm_` pair and `billing/settle.py` runs the charge. What remains open:
+
+- **One replica only.** SQLite on a shared filesystem is not a distributed
+  database. Two service replicas still have two ledgers, and multi-instance is
+  a real deployment gate.
+- **Never run against real Stripe.** Every test uses a recorded transport, and
+  no live key has ever been configured against this code. (The reversal-event
+  subscription this note used to add here is now part of step 3 of the setup,
+  where an operator will actually read it.)
+- **Off by default.** `KALEO_METERING` is unset unless an operator sets it, so a
+  run says in words that it was not charged.
+
+## RevenueCat and this ledger
+
+The Shipaton entry (`DEVPOST.md`) sells one entitlement, `pro`, through the
+RevenueCat Web SDK inside the desktop app, and it does not use this package.
+The division of labour is one sentence: **RevenueCat records that a purchase
+happened, the ledger records what it is worth.** RevenueCat owns the product,
+the offering, the customer's entitlements and the store receipt; this ledger
+owns compute, in integer mKCU, and the reserve-then-commit accounting around a
+run. Neither replaces the other. A purchase without a grant is a receipt for
+nothing, and a grant without a receipt is compute nobody paid for.
+
+**The launch path: a RevenueCat webhook into this ledger. [not yet built]**
+RevenueCat signs its webhooks the way Stripe signs its own: the header
+`X-RevenueCat-Webhook-Signature` carries `t=<unix>,v1=<hex>`, where `v1` is
+HMAC-SHA256 over `"<t>.<raw body>"` under the endpoint's secret. That is the
+scheme `billing/webhook.py` already verifies for `Stripe-Signature`, against
+the raw bytes and before the body is parsed, so the RevenueCat receiver is the
+same verifier with a different header name and secret. What the receiver would
+do with a verified event:
+
+- Grant the pack keyed `rc:txn:<transaction_id>`, so a redelivered event is a
+  `ReplayedEvent` and not a second grant. `rc:txn:` fits `billing/accounts.py`'s
+  id rule (letters, digits, `_`, `.`, `:`, `-`); RevenueCat's anonymous
+  `$RCAnonymousID:` form does not, which is one reason the desktop app mints
+  its own app user id (a UUID kept under `purchases.appUserId`).
+- Record `cents_paid` as 0 for an event whose `store` is `TEST_STORE` or whose
+  `environment` is `SANDBOX`. No money moved, and a ledger that said otherwise
+  could not be reconciled against anything.
+- Answer a replay with 200 and a forged or stale signature with 400, the same
+  table as the Stripe route above.
+
+It is not built this week because a desktop demo has no public URL for
+RevenueCat to deliver to. Until it exists, a Test Store purchase changes the
+customer's entitlements at RevenueCat and writes nothing here.

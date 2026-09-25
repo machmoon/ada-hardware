@@ -10,19 +10,26 @@ measure passes with margin 0 and a detail beginning ``nothing to check``.
 Clause names (stable; they are the vocabulary of the repair prompt):
 
 ``valid_solids``           every printed part is one valid solid of positive volume
-``print_bed``              every part, in its printed orientation, fits the 220 x 220 x 250 bed
-``servo_pocket``           each servo envelope (built here from the rules table) sits in its
-                           housing without interference, with at least a press-fit gap
-``bearing_seat``           each seat bore, found on the B-rep, presses its bearing with an
-                           interference inside the band, is deep enough, and is on the axis
-``min_wall``               ray-sampled outer walls >= the printable minimum (enclosure sampler)
-``overhang``               no down-facing face steeper than 45 deg in printed orientation
-                           (enclosure measurement)
+``print_bed``              every part, in its printed orientation, fits the
+                           220 x 220 x 250 bed
+``servo_pocket``           each servo envelope (built here from the rules table)
+                           sits in its housing without interference, with at
+                           least a press-fit gap
+``bearing_seat``           each seat bore, found on the B-rep, presses its
+                           bearing with an interference inside the band, is deep
+                           enough, and is on the axis
+``min_wall``               ray-sampled outer walls >= the printable minimum
+                           (enclosure sampler)
+``overhang``               no down-facing face steeper than 45 deg in printed
+                           orientation (enclosure measurement)
 ``self_collision_home``    no two parts touch or interfere at the home pose
-``self_collision_sampled`` the same at the outstretched pose and at every joint's range limits
-``reach``                  max horizontal tool reach inside the ranges >= the spec's target
+``self_collision_sampled`` the same at the outstretched pose and at every
+                           joint's range limits
+``reach``                  max horizontal tool reach inside the ranges >= the
+                           spec's target
 ``joint_torque``           worst joint: stall x derating - gravity moment, outstretched
-``base_stability``         freestanding: the base resists the outstretched overturning moment
+``base_stability``         freestanding: the base resists the outstretched
+                           overturning moment
 ``total_mass``             printed parts + vitamins + tool within the spec's mass budget
 
 Units: each :class:`Clause` carries ``margin`` as an integer in millionths
@@ -166,7 +173,9 @@ def part_mass_mg(volume_mm3: float, area_mm2: float, material: str) -> int:
     return round(effective * rules.DENSITY_UG_PER_MM3[material] / 1000)
 
 
-def _point_masses(model: MechanismModel) -> tuple[list[PointMass], dict[str, int], int, int]:
+def _point_masses(
+    model: MechanismModel,
+) -> tuple[list[PointMass], dict[str, int], int, int]:
     """``(masses on links >= 1, per-item grams table, base mass, base servo mass)``."""
     b = require_kernel()
     spec, lay = model.spec, model.layout
@@ -191,7 +200,9 @@ def _point_masses(model: MechanismModel) -> tuple[list[PointMass], dict[str, int
         if link == 0:
             base_servo_mg = act.mass_mg
             continue
-        centre = sp.to_link(-act.body_h_nm / 2, act.body_l_nm / 2 - act.shaft_from_end_nm, 0)
+        centre = sp.to_link(
+            -act.body_h_nm / 2, act.body_l_nm / 2 - act.shaft_from_end_nm, 0
+        )
         masses.append(PointMass(name, link, act.mass_mg, centre))
     for i, j in enumerate(spec.joints):
         if j.bearing != "none":
@@ -243,7 +254,8 @@ def _print_bed(model: MechanismModel) -> Clause:
         size = p.printed.bounding_box().size
         for axis, have, limit in zip("XYZ", (size.X, size.Y, size.Z), bed, strict=True):
             if limit - have < worst:
-                worst, where = limit - have, f"{p.name} {axis} {have:.1f} mm vs {limit:.0f} mm"
+                worst = limit - have
+                where = f"{p.name} {axis} {have:.1f} mm vs {limit:.0f} mm"
     return Clause("print_bed", worst >= 0, _nm(worst), "mm",
                   f"tightest: {where} (printed orientation)")
 
@@ -254,7 +266,9 @@ def _servo_envelope(sp: ServoPlacement, act: rules.Actuator) -> Any:
     b = require_kernel()
 
     def box(s0, s1, u0, u1, v0, v1):
-        pts = [sp.to_link(s, u, v) for s in (s0, s1) for u in (u0, u1) for v in (v0, v1)]
+        pts = [
+            sp.to_link(s, u, v) for s in (s0, s1) for u in (u0, u1) for v in (v0, v1)
+        ]
         xs, ys, zs = (sorted(c / 1e6 for c in axis) for axis in zip(*pts, strict=True))
         return b.Pos(xs[0], ys[0], zs[0]) * b.Box(
             xs[-1] - xs[0], ys[-1] - ys[0], zs[-1] - zs[0], align=(b.Align.MIN,) * 3
@@ -300,7 +314,8 @@ def _servo_pocket(model: MechanismModel) -> Clause:
         clash = enclosure_kernel._intersection_volume(env, housing)
         if clash > _VOLUME_TOL_MM3:
             margin = -_cube(clash)
-            text = f"{act.name} for {joint.id!r} interferes with its housing by {clash:.3f} mm^3"
+            text = (f"{act.name} for {joint.id!r} interferes with its housing "
+                    f"by {clash:.3f} mm^3")
         else:
             gap = env.distance(housing)
             margin = gap - need
@@ -318,7 +333,8 @@ def _bearing_seat(model: MechanismModel) -> Clause:
     spec = model.spec
     rows = [(i, j) for i, j in enumerate(spec.joints) if j.bearing != "none"]
     if not rows:
-        return Clause("bearing_seat", True, 0, "mm", f"{_NOTHING}: no joint names a bearing")
+        return Clause("bearing_seat", True, 0, "mm",
+                      f"{_NOTHING}: no joint names a bearing")
     worst, where = math.inf, ""
     for i, joint in rows:
         br = rules.BEARINGS[joint.bearing]
@@ -339,18 +355,22 @@ def _bearing_seat(model: MechanismModel) -> Clause:
                 best = (r, face)
         if best is None:
             margin = UNEVALUATED / 1e6
-            text = f"{joint.id!r}: no cylindrical seat for a {br.name} found on the Y axis"
+            text = (f"{joint.id!r}: no cylindrical seat for a {br.name} found "
+                    f"on the Y axis")
         else:
             r, face = best
             interference = (br.od_nm + rules.HOLE_COMPENSATION_NM) / 1e6 - 2 * r
-            lo, hi = rules.SEAT_INTERFERENCE_MIN_NM / 1e6, rules.SEAT_INTERFERENCE_MAX_NM / 1e6
+            lo = rules.SEAT_INTERFERENCE_MIN_NM / 1e6
+            hi = rules.SEAT_INTERFERENCE_MAX_NM / 1e6
             depth = face.bounding_box().size.Y
             fit = min(interference - lo, hi - interference)
             deep = depth - br.width_nm / 1e6
             margin = min(fit, deep)
-            text = (f"{joint.id!r} {br.name}: seat d{2 * r:.3f} mm gives {interference:.3f} mm "
-                    f"diametral interference (band {lo:.2f}..{hi:.2f}, with {rules.HOLE_COMPENSATION_NM / 1e6:.1f} "
-                    f"mm FDM compensation), depth {depth:.3f} mm vs B {br.width_nm / 1e6:.1f} mm")
+            comp = rules.HOLE_COMPENSATION_NM / 1e6
+            text = (f"{joint.id!r} {br.name}: seat d{2 * r:.3f} mm gives "
+                    f"{interference:.3f} mm diametral interference (band "
+                    f"{lo:.2f}..{hi:.2f}, with {comp:.1f} mm FDM compensation), "
+                    f"depth {depth:.3f} mm vs B {br.width_nm / 1e6:.1f} mm")
         if margin < worst:
             worst, where = margin, text
     return Clause("bearing_seat", worst >= -1e-6, _nm(worst), "mm",
@@ -372,7 +392,9 @@ def _min_wall(model: MechanismModel, warnings: list[str]) -> Clause:
     ctx = _enclosure_ctx(warnings)
     samples = []
     for p in model.parts:
-        samples += enclosure_kernel._wall_samples(ctx, f"part {p.name}", p.printed, z_only=False)
+        samples += enclosure_kernel._wall_samples(
+            ctx, f"part {p.name}", p.printed, z_only=False
+        )
     if not samples:
         return Clause("min_wall", False, UNEVALUATED, "mm",
                       "no outer-face sample produced a thickness")
@@ -443,8 +465,9 @@ def _pose_clearance(model: MechanismModel, q: Sequence[float]) -> tuple[float, s
         if d <= 1e-6:
             vol = enclosure_kernel._intersection_volume(a, bb)
             margin = -_cube(vol) if vol > _VOLUME_TOL_MM3 else 0.0
-            text = (f"{posed[i][0]} / {posed[j][0]} interfere by {vol:.3f} mm^3"
-                    if vol > _VOLUME_TOL_MM3 else f"{posed[i][0]} / {posed[j][0]} touch")
+            pair = f"{posed[i][0]} / {posed[j][0]}"
+            text = (f"{pair} interfere by {vol:.3f} mm^3"
+                    if vol > _VOLUME_TOL_MM3 else f"{pair} touch")
         else:
             margin, text = d, f"{posed[i][0]} / {posed[j][0]} {d:.3f} mm apart"
         if margin < worst:
@@ -461,10 +484,13 @@ def _collision_clause(name: str, model: MechanismModel,
             worst, where = margin, f"{text} at {label}"
     # Touching (0) is a failure: a moving joint that rubs is not clear.
     return Clause(name, worst > 1e-6, _nm(worst), "mm",
-                  f"closest pair of {len(model.parts)} parts over {len(poses)} pose(s): {where}")
+                  f"closest pair of {len(model.parts)} parts over {len(poses)} "
+                  f"pose(s): {where}")
 
 
-def verify_mechanism(model: MechanismModel, *, sample_poses: bool = True) -> MechanismReport:
+def verify_mechanism(
+    model: MechanismModel, *, sample_poses: bool = True
+) -> MechanismReport:
     """Run every clause in :data:`CLAUSES` order. A clause that raises fails
     with :data:`UNEVALUATED` and the exception in its detail."""
     spec, lay = model.spec, model.layout
@@ -478,8 +504,8 @@ def verify_mechanism(model: MechanismModel, *, sample_poses: bool = True) -> Mec
         reach_holder[0] = r
         pose = ", ".join(f"{math.degrees(v):.0f}" for v in q)
         return Clause("reach", r >= spec.reach_nm, r - spec.reach_nm, "mm",
-                      f"max horizontal tool reach {r / 1e6:.1f} mm (pose deg [{pose}]) vs "
-                      f"{spec.reach_nm / 1e6:.1f} mm target")
+                      f"max horizontal tool reach {r / 1e6:.1f} mm "
+                      f"(pose deg [{pose}]) vs {spec.reach_nm / 1e6:.1f} mm target")
 
     def torque() -> Clause:
         masses, t, _, _ = _point_masses(model)
@@ -506,9 +532,9 @@ def verify_mechanism(model: MechanismModel, *, sample_poses: bool = True) -> Mec
             moment += pm.mass_mg * g * (edge - x)
         if spec.base_type != "freestanding":
             return Clause("base_stability", True, 0, "N-mm",
-                          f"{_NOTHING}: base is bolted down (freestanding it would have "
-                          f"{moment / 1e6:+.0f} N-mm righting minus overturning moment "
-                          f"about its edge, outstretched)")
+                          f"{_NOTHING}: base is bolted down (freestanding it would "
+                          f"have {moment / 1e6:+.0f} N-mm righting minus overturning "
+                          f"moment about its edge, outstretched)")
         return Clause("base_stability", moment >= 0, round(moment), "N-mm",
                       f"righting minus overturning moment about the {2 * edge:.0f} mm "
                       f"base edge, outstretched (tool at x = "
@@ -520,13 +546,15 @@ def verify_mechanism(model: MechanismModel, *, sample_poses: bool = True) -> Mec
             table.update(t)
         total = sum(table.values())
         if spec.mass_budget_mg is None:
+            infill = rules.PRINT_INFILL_PPM / 1e4
             return Clause("total_mass", True, 0, "g",
                           f"{_NOTHING}: no mass budget; total {total / 1000:.0f} g "
-                          f"(printed at {rules.PRINT_INFILL_PPM / 1e4:.0f} % infill + servos, "
+                          f"(printed at {infill:.0f} % infill + servos, "
                           f"bearings, tool, payload)")
         m = spec.mass_budget_mg - total
         return Clause("total_mass", m >= 0, m * 1000, "g",
-                      f"total {total / 1000:.0f} g vs budget {spec.mass_budget_mg / 1000:.0f} g")
+                      f"total {total / 1000:.0f} g vs budget "
+                      f"{spec.mass_budget_mg / 1000:.0f} g")
 
     checks = {
         "valid_solids": lambda: _valid_solids(model),
@@ -539,8 +567,9 @@ def verify_mechanism(model: MechanismModel, *, sample_poses: bool = True) -> Mec
             "self_collision_home", model, [("home", [0.0] * len(spec.joints))]),
         "self_collision_sampled": lambda: (
             _collision_clause("self_collision_sampled", model, sampled_poses(model))
-            if sample_poses else Clause("self_collision_sampled", False, UNEVALUATED, "mm",
-                                        "sampling switched off by the caller")
+            if sample_poses
+            else Clause("self_collision_sampled", False, UNEVALUATED, "mm",
+                        "sampling switched off by the caller")
         ),
         "reach": reach,
         "joint_torque": torque,

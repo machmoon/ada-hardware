@@ -9,6 +9,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { SETTING_DEFAULTS, isValidSetting } from "@/lib/settings/keys";
 
 const readJson = (relative: string) =>
   JSON.parse(readFileSync(new URL(relative, import.meta.url), "utf8"));
@@ -269,5 +270,82 @@ describe("setup assistant plugins", () => {
       }
     }
     expect(calls).toBeGreaterThan(0);
+  });
+});
+
+// Ada Pro purchases (src/lib/purchases/, docs/purchases.md). Each guard pins a
+// decision the code cannot assert about itself: the only key the bundle may
+// carry is a public one read from a git-ignored file; a production build
+// refuses a Test Store key at the one point every build passes through; no
+// source file carries a key literal; and the app user id sent to RevenueCat
+// and to the engine can only ever be a UUID minted here, never a credential.
+describe("purchases", () => {
+  it("app/.gitignore keeps .env.local out of the tree", () => {
+    const ignore = readFileSync(new URL("../../.gitignore", import.meta.url), "utf8");
+    expect(ignore.split(/\r?\n/)).toContain("*.local");
+  });
+
+  it(".env.example names the public key and holds no value", () => {
+    const example = readFileSync(new URL("../../.env.example", import.meta.url), "utf8");
+    expect(example).toMatch(/^VITE_REVENUECAT_PUBLIC_KEY=$/m);
+  });
+
+  it("vite.config.ts refuses a Test Store key in a production build, by the agreed sentence", () => {
+    const config = readFileSync(new URL("../../vite.config.ts", import.meta.url), "utf8");
+    expect(config).toContain(
+      "Refusing to build a store bundle with a RevenueCat Test Store key; set ADA_ALLOW_TEST_STORE=1 for a demo build."
+    );
+    expect(config).toMatch(/mode !== "production"/);
+    expect(config).toMatch(/process\.env\.ADA_ALLOW_TEST_STORE/);
+    expect(config).toMatch(/loadEnv\(mode, process\.cwd\(\), "VITE_"\)/);
+  });
+
+  // Every .ts/.tsx under src/, this file included. A key literal is the one
+  // thing that must never be in the bundle's own sources: the key belongs in
+  // `.env.local`, and a `test_` key in a source file would ship in every
+  // build the Vite guard never sees.
+  const srcDir = fileURLToPath(new URL("..", import.meta.url));
+  const sources = readdirSync(srcDir, { recursive: true, encoding: "utf8" })
+    .filter((rel) => /\.(ts|tsx)$/.test(rel))
+    .map((rel) => ({ rel, text: readFileSync(join(srcDir, rel), "utf8") }));
+
+  it("no source file carries a RevenueCat key literal", () => {
+    const keyLike = /["'`](test|rcb_sb|rcb|strp|sk|pk)_[A-Za-z0-9_.-]{24,}["'`]/;
+    for (const { rel, text } of sources) {
+      expect(text, rel).not.toMatch(keyLike);
+    }
+  });
+
+  it("only the purchases module reads the public key from import.meta.env", () => {
+    const readers = sources.filter(({ text }) => text.includes("VITE_REVENUECAT_PUBLIC_KEY"));
+    const code = readers.filter(({ text }) => /import\.meta\.env[^\n]*VITE_REVENUECAT_PUBLIC_KEY|env\?\.VITE_REVENUECAT_PUBLIC_KEY/.test(text));
+    expect(code.map((r) => r.rel)).toEqual(["lib/purchases/client.ts"]);
+  });
+
+  it("the app user id setting accepts only an empty string or a UUID", () => {
+    expect(SETTING_DEFAULTS["purchases.appUserId"]).toBe("");
+    expect(isValidSetting("purchases.appUserId", "")).toBe(true);
+    expect(isValidSetting("purchases.appUserId", "8f1c2b4e-3d5a-4f6b-9c7d-0e1f2a3b4c5d")).toBe(true);
+    expect(isValidSetting("purchases.appUserId", "8F1C2B4E-3D5A-4F6B-9C7D-0E1F2A3B4C5D")).toBe(true);
+    // RevenueCat's own anonymous form (billing/accounts.py refuses the `$`).
+    expect(isValidSetting("purchases.appUserId", "$RCAnonymousID:8f1c2b4e3d5a4f6b9c7d0e1f2a3b4c5d")).toBe(false);
+    // An engine API key (service/auth.py) or a bearer token is a credential, not an id.
+    expect(isValidSetting("purchases.appUserId", "ada_8f1c2b4e3d5a4f6b9c7d0e1f2a3b4c5d")).toBe(false);
+    expect(isValidSetting("purchases.appUserId", "Bearer 8f1c2b4e")).toBe(false);
+    expect(isValidSetting("purchases.appUserId", 42)).toBe(false);
+    expect(isValidSetting("purchases.appUserId", null)).toBe(false);
+  });
+
+  it("the last verdict setting is the three-word verdict plus a time, and nothing else", () => {
+    expect(SETTING_DEFAULTS["purchases.lastVerdict"]).toEqual({ verdict: "unknown", at: "" });
+    for (const verdict of ["entitled", "free", "unknown"]) {
+      expect(isValidSetting("purchases.lastVerdict", { verdict, at: "2026-09-24T10:00:00.000Z" })).toBe(true);
+    }
+    expect(isValidSetting("purchases.lastVerdict", { verdict: "paid", at: "" })).toBe(false);
+    expect(isValidSetting("purchases.lastVerdict", { verdict: "free" })).toBe(false);
+    expect(isValidSetting("purchases.lastVerdict", { verdict: "free", at: 1 })).toBe(false);
+    expect(isValidSetting("purchases.lastVerdict", "free")).toBe(false);
+    expect(isValidSetting("purchases.lastVerdict", null)).toBe(false);
+    expect(isValidSetting("purchases.lastVerdict", ["free", ""])).toBe(false);
   });
 });

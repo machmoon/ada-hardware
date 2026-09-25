@@ -170,7 +170,9 @@ def urllib_transport() -> Transport:
         try:
             with opener.open(req, timeout=request.timeout_s) as resp:
                 headers = {k.lower(): v for k, v in resp.headers.items()}
-                return HttpResponse(resp.status, resp.read(MAX_RESPONSE_BYTES + 1), headers)
+                return HttpResponse(
+                    resp.status, resp.read(MAX_RESPONSE_BYTES + 1), headers
+                )
         except urllib.error.HTTPError as exc:
             with exc:
                 headers = {k.lower(): v for k, v in (exc.headers or {}).items()}
@@ -223,7 +225,9 @@ def _hit(item: Any) -> SearchHit | None:
         description=description if isinstance(description, str) else None,
         markdown=markdown if isinstance(markdown, str) and markdown.strip() else None,
         error=str(error)[:_DETAIL_CHARS] if error else None,
-        status_code=status if isinstance(status, int) and not isinstance(status, bool) else None,
+        status_code=(
+            status if isinstance(status, int) and not isinstance(status, bool) else None
+        ),
     )
 
 
@@ -265,7 +269,9 @@ class FirecrawlClient:
             timeout_s=timeout_ms / 1000 + 10,
         )
 
-    def search(self, query: str, *, limit: int, timeout_ms: int = 60_000) -> list[SearchHit]:
+    def search(
+        self, query: str, *, limit: int, timeout_ms: int = 60_000
+    ) -> list[SearchHit]:
         """Search and scrape. Raises :class:`FirecrawlError` for every failure."""
         response = self._transport(
             self.search_request(query, limit=limit, timeout_ms=timeout_ms)
@@ -294,9 +300,13 @@ class FirecrawlClient:
                 raise FirecrawlRateLimited(code, detail)
             raise FirecrawlError(code, detail)
         if not isinstance(payload, dict):
-            raise FirecrawlError("bad_json", "Firecrawl answered with a body that was not JSON")
+            raise FirecrawlError(
+                "bad_json", "Firecrawl answered with a body that was not JSON"
+            )
         if payload.get("success") is not True:
-            raise FirecrawlError("unsuccessful", message or "Firecrawl said success: false")
+            raise FirecrawlError(
+                "unsuccessful", message or "Firecrawl said success: false"
+            )
         data = payload.get("data")
         web = data.get("web") if isinstance(data, dict) else None
         if web is None and isinstance(data, dict):

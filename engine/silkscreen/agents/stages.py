@@ -357,7 +357,9 @@ def research_stage(
     except (FirecrawlError, ValueError) as exc:
         detail = f"web research failed: {exc}"
         emit({"event": "research.failed", "stage": "research", "detail": detail[:200]})
-        result = WebResearchResult(intent=intent, status="unavailable", warnings=[detail])
+        result = WebResearchResult(
+            intent=intent, status="unavailable", warnings=[detail]
+        )
     if result.status == "unconfigured":
         emit(
             {
@@ -1785,8 +1787,9 @@ def mechanism_stage(
                 step_text = exports.step.read_text(encoding="utf-8")
             else:
                 with tempfile.TemporaryDirectory(prefix="silkscreen-mechanism-") as tmp:
-                    step_text = export_mechanism(proposal.model, tmp, stem).step.read_text(
-                        encoding="utf-8"
+                    step_text = (
+                        export_mechanism(proposal.model, tmp, stem)
+                        .step.read_text(encoding="utf-8")
                     )
         except (MechanismError, OSError) as exc:
             emit({"event": "mechanism.failed", "error": str(exc)[:160]})

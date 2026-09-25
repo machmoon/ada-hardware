@@ -1,11 +1,137 @@
+> **Note for Pat.** This is a factual draft in short plain paragraphs, written so you
+> can rewrite it in your own voice before submitting. RevenueCat's Shipaton guide says
+> the description should answer what problem, who it is for, what it lets them do, how it
+> makes money and what makes it different, and warns "Don't let AI write your whole
+> description." Every number below is quoted from a file in this repository; check the
+> paths before you keep a number.
 
-# Silkscreen
+# Ada
 
-**Agentic PCB design that shows its work.**
+Ada is an AI hardware engineer that works beside KiCad: describe a board, get a
+schematic, a placed and routed board and a printable case, each checked by KiCad's own
+ERC and DRC. For a beginner before the first dead board, and a senior engineer before fab.
+
+Shipaton 2026, Next Gen (student) category. The entry is a public open-source repository
+(engine MIT at the root `LICENSE`, desktop app GPL-3.0 in `app/LICENSE`), a video under
+two minutes, and one purchase powered by the RevenueCat Web SDK. There is no store
+release, on purpose and by the category's rules; see the tags below for what that means.
+
+## What problem
+
+Designing even a simple printed circuit board takes days, and most of that time is
+lookup rather than thought: which pin is AVDD, which page has the reference schematic,
+which capacitor the regulator needs on its output. The first board a beginner orders
+usually comes back dead, and the cause is almost always something a datasheet stated
+plainly. Every EDA tool checks that a wire reaches a pin. None of them checks that it was
+the right pin.
+
+## Who it is for
+
+Two people who want the same thing. A beginner before the first dead board, who cannot
+yet tell a correct schematic from a plausible one. And a senior engineer before fab, who
+can, but wants a second reader that cites the page. It is the rare feature where the
+novice product and the expert product are the same product.
+
+## What it lets them do
+
+Describe a board in plain language in the desktop app, next to the KiCad you already
+have. Ada reads the datasheets, proposes a circuit into a validated intermediate
+representation, refuses to build one that does not validate, draws a `.kicad_sch`,
+places the parts with OR-Tools CP-SAT, routes the copper with a two-layer octilinear A*
+router with rip-up and a ground pour, and writes a KiCad 8 format project. Each stage is
+a real file. KiCad's own `kicad-cli` runs ERC, DRC and schematic parity on the result as
+external verifiers. The 2026-09-16 run recorded in
+`docs/measurements/board-eval-2026-09-16.json` shows six circuits with 0 ERC errors, 0
+DRC violations and 0 parity issues, and an 18-part ESP32 dev board 100 % routed with
+DRC 0. Then a `build123d` kernel builds a
+printable case and measures thirteen signed-margin clauses on the solid, a sourcing pass
+produces a BOM with each part number marked `verified`, `proposed` or `none`, and an
+adversarial review argues against the design with datasheet citations. Every step the
+engineer runs waits for a press; the case and sourcing designs are prefetched when
+placement lands, and the step envelope says so (`background: ["case", "sourcing"]`).
+
+## How it makes money
+
+**Ada Pro** is one entitlement, `pro`, sold as the monthly subscription product
+`ada_pro_monthly` in the `default` offering. It is bought inside the desktop app through
+the RevenueCat Web SDK (`@revenuecat/purchases-js`, MIT). It unlocks one step, **Prepare
+fab order**, which is the only optional step that runs purely on press (the case and
+sourcing designs are prefetched server-side at placement, so a client gate on those would
+not stop the model call). The gate is enforced on the client and, when
+`REVENUECAT_SECRET_API_KEY` and `REVENUECAT_PROJECT_ID` are set, on the service, which
+answers `402` with `reason: entitlement_required` when the customer lacks `pro`. When the
+service has no key it says so in the order step's envelope rather than pretending to
+have checked.
+
+The entry uses the RevenueCat Test Store: simulated purchases through the SDK's own
+modal, no money moves, and a Test Store key must never ship in a store build. A verdict
+the app cannot obtain (SDK not configured, offline, an error) is `unknown`, and `unknown`
+does not lock the step: this is a loopback-first app and an offline laptop must not lose
+a paid feature. `free` locks it behind "Prepare fab order · Ada Pro".
+
+The existing `billing/` package is Ada's usage-metering design and the launch path, not
+what this entry sells. It meters engine time (1 KCU is one minute of engine wall-clock,
+stored as integer milli-KCU) in an append-only ledger, with overage rather than cutoff
+and a capped auto-reload, built on Stripe. It has never run against live Stripe and is
+off unless `KALEO_METERING` is set. The division of labour is one sentence: RevenueCat
+records that a purchase happened, the ledger records what it is worth.
+
+## What makes it different
+
+Verification is the product. The output is checked by KiCad's own ERC and DRC, by a
+SPICE verifier that answers pass or fail with a signed margin, and by a CAD kernel that
+measures the case rather than rendering it. The model may propose; a deterministic
+verifier decides, and the model does not get to argue with it. Every integration reports
+what actually happened in a fixed vocabulary (`verified` / `proposed` / `none`,
+`FEASIBLE` rather than `OPTIMAL`, a router that names every net it could not finish),
+and nothing returns a quiet zero. The KiCad integration is a file format, not a robot
+arm: no plugin, no mouse control, and the project opens on a machine with no KiCad
+libraries installed. The earlier version of this project, which won a prize and could not
+survive a second user, is why; the next section is the thesis that came out of it.
+
+## Status tags
+
+Each item further down is tagged **[built]** or **[not yet built]** against the code in
+this repository today. The tags that apply to the entry as a whole:
+
+- **[not yet built]** A store release. The desktop app runs from a checkout with a local
+  `.venv`; there is no signed `.dmg` and no notarization (`docs/release.md`).
+- **[not yet built]** Anything but macOS for the desktop app.
+- **[not yet built]** Live billing. The purchase is a RevenueCat Test Store purchase, and
+  the Stripe metering in `billing/` has never run against live Stripe and is off unless
+  `KALEO_METERING` is set.
+- **[not yet built]** A live run of the service-side entitlement gate against a
+  RevenueCat project: every test drives a recorded transport. With no
+  `REVENUECAT_SECRET_API_KEY` the service does not gate the order step and says so,
+  and when RevenueCat cannot be reached it fails open and says that too.
+- **[not yet built]** A model-proposed ESP32 board. The ESP32 result quoted above is a
+  scripted circuit run through the real engine.
+- **[not yet built]** Any live meeting or chat front end: the Zoom, Teams, Meet and Slack
+  packages have never run against a live account.
+- The Cloud Run deployment recorded in the README was down on 2026-09-06 (`/readyz`
+  answered 500). A recorded deploy is not a running one.
+
+The earlier entry, for the All Things Agentic hackathon on 2026-08-31 (Gemini, ADK, Cloud
+Run), is kept verbatim in [docs/google-hackathon.md](docs/google-hackathon.md).
 
 ---
 
-## Inspiration
+## What is staged in the video, and what is not
+
+The video shows Ada's first day at a company that does not exist. Perch Robotics, its
+seven colleagues, their Slack lines, the "which pin is AVDD" mail thread, the datasheet
+mail and the 2 am page are seeded fixtures written by three scripts in `scripts/demo/`
+(`seed_gmail.py` inserts mail into the signed-in inbox with Gmail's `messages.insert`,
+`seed_slack.py` posts the cast through one bot token, `page.sh` fires the banner).
+PagerDuty is not an integration; the page is a message, and Ada's acknowledgement is
+posted by the same script. The people are staged. Ada is not: joining the Meet call and
+speaking in it (`meetbot/`), the recap and the progress lines in the thread, the
+proposal, placement, routing and review, the Ada Pro purchase through the RevenueCat
+SDK, the fab-order mail and the calendar invite are real runs of the code in this
+repository, recorded as they happened. The Test Store purchase is simulated by
+RevenueCat, so no money moved, and the narration says so.
+
+## Why "checkably right"
 
 Every device in your life runs on a printed circuit board, and designing even a simple
 one still takes days of work that is mostly *lookup*, not *thought*. You find a chip.
@@ -52,15 +178,12 @@ cited.
 
 ---
 
-## What it does
+## What it does, stage by stage
 
-Silkscreen takes a plain-language description of what you want to build and produces a
-validated circuit, a placed board, and a review of its own work with citations. For the
-Collaborative Partner track, it also ships a focused placement agent that repairs a
-damaged board and learns a hardware team's explicit layout preferences.
-
-Each stage below is tagged **[built]** or **[not yet built]** against the code in this
-repository today.
+Ada takes a plain-language description of what you want to build and produces a
+validated circuit, a placed and routed board, a case, a BOM, and a review of its own work
+with citations. Each stage below is tagged **[built]** or **[not yet built]** against
+the code in this repository today.
 
 **Placement repair and company profiles. [built]**
 An engineer opens the placement lab, selects Compact Control or Thermal First, and
@@ -93,7 +216,7 @@ CP-SAT or A* directly. Soft preferences provide an advisory score for the genera
 board; they do not claim that alternative layouts were ranked.
 
 **1. Understand the parts. [built]**
-Point Silkscreen at a component and it reads the actual datasheet. Gemini's native PDF
+Point Ada at a component and it reads the actual datasheet. Gemini's native PDF
 vision matters here in a way that text extraction does not: pinout tables, package
 drawings, and reference schematics are *pictures*, and the numbers we need live inside
 them. Every extracted fact carries the page it came from.
@@ -129,7 +252,7 @@ remove the clock. What *is* invariant is what the tests check: every part placed
 overlapping courtyards, and a file that reparses.
 
 **5. Write a real file. [built]**
-Silkscreen reads and writes KiCad files directly. No KiCad installation, no `pcbnew`
+Ada reads and writes KiCad files directly. No KiCad installation, no `pcbnew`
 DLLs, no platform lock, and — emphatically — no controlling the user's mouse. It runs
 identically on macOS, Linux, and Windows, which is the difference between a demo and a
 tool.
@@ -147,13 +270,28 @@ autorouter and the output says so:** a uniform 0.25 mm grid cannot reach every p
 fine-pitch package. The corners a sequential router paints itself into are escaped by a
 bounded, deterministic rip-up-and-retry pass (a blocked net lifts the copper in its way,
 routes, and re-routes what it lifted; pads are never ripped), but a board can still be
-genuinely out of channels. On a dense LQFP board it finishes 6 of 50 nets. Every net it cannot
+genuinely out of channels. On a dense fine-pitch LQFP board it finishes 6 of 50 nets. Every net it cannot
 finish is named, with the reason, and left as ratsnest for a human — a router that
 silently dropped a connection would be worse than no router at all.
 
+Since 2026-09-16 the router is octilinear, ground is a copper pour on both layers with
+a fan-out via per ground pad and a stitching grid, and a differential pair is laid as one
+centreline and offset to a fixed gap, with the gap, coupled length and skew measured and
+reported. `docs/measurements/board-eval-2026-09-16.json` (written by
+`scripts/board_eval.py` on 2026-09-16; the file names the `kicad-cli` it ran, KiCad
+10.0.6 on that machine, and does not record the version itself) records six circuits
+with 0 ERC errors, 0 DRC violations, 0 unconnected items and 0 parity issues, including
+an 18-part ESP32 dev board routed 100 % with 16 vias. **[not yet built]** The
+ESP32 result is a scripted circuit run through the real engine (the circuit is fixed in
+`scripts/board_eval.py`; the placer, router, emitter and KiCad checks are the live code),
+not a board a model proposed.
+
 Both emitters are checked against KiCad itself, not only against a parser: `kicad-cli
 sch erc` and `pcb drc` are run on the output. That is how we found a via shorting a
-foreign track on a board the entire test suite passed.
+foreign track on a board the entire test suite passed. Since 2026-09-15 those checks run
+inside the proposal loop too (`engine/silkscreen/verify/`): an unwired power pin or an
+ERC error goes back to the model as a repair, and the model does not get to argue with a
+deterministic verifier.
 
 **6. Review it, and say why. [built]**
 An adversarial reviewer re-reads the datasheets and argues against the design: this pin
@@ -224,6 +362,35 @@ and none of that exists — no screen capture, no accessibility-tree read, no ov
 and therefore none of the permission prompts they would require. The protocol was built so
 the bounds source can be swapped without touching the guide, which is the cheap half.
 
+**8b. Put it in a case. [built]**
+The case is built like a CAD engineer works, not picked from a style list. The model
+proposes a JSON spec (mount, inserts, material, a snap lid); every mechanical number
+lives in a rules table sourced from open-source enclosure generators; `build123d` builds
+real B-rep solids with standoffs at the board's mounting holes and cutouts sized from the
+mating plug; and a kernel measures thirteen frozen clauses on the solid, each with a
+signed margin in millimetres (board clash volume, headroom, boss concentric with its
+hole, every cutout admits its plug, lid mates, minimum wall, overhang in the printed
+orientation). The result is a labelled STEP assembly plus two STLs. Without the `cad`
+extra installed the step refuses in words rather than degrading to a lesser case.
+
+**8c. Simulate the circuit. [built, opt-in]**
+`spice/` is a verifier, not a waveform viewer: it answers pass or fail with a signed
+margin on each clause. With `--simulate` the model proposes a testbench in the same JSON
+format the MCP tool takes, ngspice runs it, and a failed clause becomes a finding with
+its provenance kept apart from the datasheet review. A part with no behavioural model is
+reported `unsimulatable` by name, and no ngspice on the machine is `unavailable` with
+the install hint, both decided before a model call is spent.
+
+**8d. The desktop app. [built, macOS only, runs from a checkout]**
+`app/` is a Tauri 2 overlay that sits beside a running KiCad and shows the run as a strip
+of approval-gated steps: plan, propose, place, route, review, case, sourcing, order.
+Every step the engineer runs waits for a press; the case and sourcing designs start in
+the background once placement succeeds and the envelope reports them as such. It is a
+GPL-3.0 fork of Pluely (`app/NOTICE.md`), and
+the engine under it is MIT. **[not yet built]** A store release: the app runs from a
+checkout with a local `.venv` and there is no signed `.dmg`, no notarization and no
+Mac App Store listing (`docs/release.md`). **[not yet built]** Windows and Linux.
+
 **9. Be where the requirement is stated. [built, and unverified live]**
 A hardware requirement is spoken long before it is typed. `meetings/` already reads a
 finished Google Meet transcript; `zoombot/` and `teamsbot/` are the same idea in Zoom and
@@ -269,78 +436,6 @@ ready. `ready` is a claim about configuration and nothing else; nothing in that 
 a live call, and no secret is ever echoed, not even a tail. Unbuilt integrations still
 appear, marked unavailable, because "not built here" and "not on the menu" are different
 facts and only one of them is true.
-
----
-
-## How we built it
-
-**STATUS:** the ADK driver is the default engine; `SILKSCREEN_ENGINE=sdk` keeps the
-straight-line driver one environment variable away.
-
-The agent layer is Google's Agent Development Kit. The pipeline — read → propose →
-validate → place → verifier repair → schematic → route → review — is an ADK
-dynamic **Workflow** in
-`engine/silkscreen/agents/adk/`, where each stage is a node that calls the same stage
-body the plain SDK path calls. `generate_pcb(engine=...)` chooses the driver, and both
-drivers emit the same events from inside those shared bodies, so which one ran is not
-something a client can observe. The topology is deliberate rather than a flat pile of
-prompts:
-
-- an **orchestrator node** for the main pipeline, running the stages as successive
-  `await ctx.run_node(...)` calls, so the order is ordinary program text and a stage
-  that fails comes back out of the run as the original exception
-- a **bounded repair cycle** inside the propose node: every IR failure in a batch goes
-  back to the model as one repair prompt, and the loop ends when the IR validates
-- a dedicated **adversarial reviewer** node, prompted to *refute* the design rather than
-  confirm it, because an agent asked "is this correct?" will say yes — and its findings
-  are filtered against the spec, so a part reference the circuit does not contain is
-  stripped out of the finding that named it, while the finding itself is still shown
-- a **parallel fan-out** over datasheets, one reader per component, since parts are
-  independent: an `asyncio.gather` inside the read node (`agents/stages.py:217`), bounded to
-  `MAX_CONCURRENT_READS` at a time by a semaphore, each read on its own thread. One part
-  failing does not abandon the others — it becomes a `read.failed` event and the rest still
-  land — and the run fails only if *every* read failed. `gather` preserves request order in
-  its results, so a completion order that varies never makes the *result* vary
-
-**[built]** Placement repair is a separate bounded agent loop. Gemini reads the board,
-company profile, and verifier feedback, then proposes absolute `PLACE` or relative
-`MOVE` actions. Unknown references are ignored, fixed parts cannot move, and a batch is
-accepted only when its geometry and preference score improves. The deterministic
-repairer also exports synthetic board-to-action trajectories for future Qwen supervised
-fine-tuning. With the default-off experimental gate and separate trace consent
-enabled, rejected proposals are stored with verifier receipts and a better Gemini or
-deterministic target for preference training. Portable reward functions expose legality
-first, progress second, and a small company-preference reward last for a future RL run.
-This submission does not claim that a trained checkpoint exists or beats the
-deterministic baseline.
-
-Model tiering: `gemini-3.7-flash` for datasheet vision and reasoning, dropping to
-`gemini-3.5-flash-lite` behind it, and — after four failed Gemini attempts only — one try
-on open-weights `gemma-4-31b-it` through the same API as a last resort; a result names
-which rung served it in `served_by`, so a Gemma run is never presented as a Gemini run. It
-is a failover chain rather than per-task routing, and every provider's output is checked
-for usable text before it is accepted, because a fallback path nobody has exercised is a
-second bug and not a backup. The selectable ADK root model is held to the Gemini 3.5 floor
-by the service (`gemini-3.1-pro-preview` is refused unless an operator opts in). Deployment
-is Cloud Run; extracted datasheet facts persist to Firestore so the second run on a part is
-free. The live URL in the README is verified before a demo with
-`curl -s -o /dev/null -w '%{http_code}' <url>/readyz` — a recorded deploy is not a running
-one.
-
-**[not yet built]** Tool confirmation gates any step that writes a file.
-
-**[built]** The deterministic engine kernel is deliberately boring and makes no
-network calls; Gemini and the opt-in placement providers sit behind policy adapters:
-
-- **OR-Tools CP-SAT** for placement
-- **kiutils** for `.kicad_pcb` I/O — pure Python, no KiCad install
-- Pure-integer nanometre arithmetic end to end, because unit confusion between
-  millimetres, mils, and KiCad's internal nanometres is a silent, board-destroying class
-  of bug
-- 3807 tests that run with no network, no API key, and no KiCad installed
-
-Splitting it this way is the point. The parts that must be *correct* are testable
-offline. The parts that must be *smart* are the ones talking to a model.
 
 ---
 
@@ -395,7 +490,7 @@ valuable engineering artifact we produced was an honest list of what was actuall
 What we're proud of in the new one:
 
 - **The deterministic kernel has no network calls.** Every correctness-critical path is tested offline.
-- **3807 tests, and the interesting ones are regressions** — each pins down a specific bug
+- **3899 tests, and the interesting ones are regressions** — each pins down a specific bug
   that shipped in the previous version and can never ship again.
 - **A validation layer whose job is to say no.** The IR makes a floating capacitor and a
   hallucinated pin unrepresentable rather than merely unlikely.
@@ -436,7 +531,7 @@ resolve — and none of its code: upstream is Windows-only Electron by its autho
 statement, and the in-window pointer we shipped (feature 8) is a fresh Svelte
 implementation. The OS-level overlay that would most resemble MudrikNow is still unbuilt.
 Nothing in `engine/`, `service/`, or `scripts/` imports from it, it is
-excluded from lint and tests, and it contributes nothing to the 3807 tests or to
+excluded from lint and tests, and it contributes nothing to the 3899 tests or to
 any figure quoted in this document.
 
 `vendor/openwhispr/` is not our code either. It is
@@ -466,11 +561,23 @@ named here because they will keep coming back: **Breeze TTS 2** (gated repositor
 rights the original withheld) and **F5-TTS** (MIT code, CC-BY-NC-4.0 weights; the code
 licence does not rescue the weights).
 
-Everything else in the repository was written during the submission period.
+`app/` is a GPL-3.0 fork of [Pluely](https://github.com/iamsrikanthnani/pluely); the
+upstream attribution is in `app/NOTICE.md`, which is kept as received. The engine at the
+repository root is MIT and imports nothing from `app/`. The purchase runs on
+[`@revenuecat/purchases-js`](https://github.com/RevenueCat/purchases-js) (MIT), used as
+a dependency and not vendored.
+
+Everything else in the repository was written by us.
 
 ---
 
 ## What's next
+
+**Live billing.** Move the entitlement from the Test Store to a Web Billing sandbox key
+and then production, add the RevenueCat webhook to the service (the signature scheme is
+the one `billing/webhook.py` already verifies for Stripe) so a purchase writes a grant
+into the ledger, and turn `KALEO_METERING` on. Then a store build with a signed,
+notarized `.dmg`.
 
 **Footprint generation from datasheets.** Wrong footprints are the most common cause of a
 dead first-spin board, and unlike layout, correctness is objectively checkable against the

@@ -8,7 +8,7 @@ export const HelloStep = () => (
   <StepFrame
     stepId="hello"
     title={HELLO_TITLE}
-    subtitle="Ada is a junior hardware engineer who works beside KiCad. A few choices, then you are set."
+    subtitle="Ada is an AI hardware engineer that works beside KiCad: describe a board, get a schematic, a placed and routed board and a printable case, each checked by KiCad's own ERC and DRC. A few choices, then you are set."
     above={<img src={kaleoMark} alt="" width={72} height={72} className="mx-auto rounded-2xl" draggable={false} />}
   />
 );

@@ -187,7 +187,9 @@ def claude_backend(env: Mapping[str, str] | None = None) -> str | None:
     """
     env = os.environ if env is None else env
     forced = _text(env, CLAUDE_BACKEND_ENV_VAR).lower()
-    has_vertex = bool(_text(env, VERTEX_PROJECT_ENV_VAR) and _text(env, VERTEX_REGION_ENV_VAR))
+    has_vertex = bool(
+        _text(env, VERTEX_PROJECT_ENV_VAR) and _text(env, VERTEX_REGION_ENV_VAR)
+    )
     has_key = bool(_text(env, API_KEY_ENV_VAR))
     if forced == "vertex":
         return "vertex" if has_vertex else None
@@ -212,7 +214,8 @@ def claude_missing(env: Mapping[str, str] | None = None) -> str:
     forced = _text(env, CLAUDE_BACKEND_ENV_VAR).lower()
     if forced == "vertex" or (
         forced != "api"
-        and bool(_text(env, VERTEX_PROJECT_ENV_VAR)) != bool(_text(env, VERTEX_REGION_ENV_VAR))
+        and bool(_text(env, VERTEX_PROJECT_ENV_VAR))
+        != bool(_text(env, VERTEX_REGION_ENV_VAR))
     ):
         return (
             f"Claude on Vertex AI needs both {VERTEX_PROJECT_ENV_VAR} and "
@@ -276,13 +279,17 @@ class ClaudeModel:
         env = os.environ if env is None else env
         self.model = model or claude_primary_model(env)
         if not is_claude_model(self.model):
-            raise ModelError(f"ClaudeModel was given a non-Claude model id {self.model!r}")
+            raise ModelError(
+                f"ClaudeModel was given a non-Claude model id {self.model!r}"
+            )
         timeout_ms = request_timeout_ms(timeout_s)
         self.timeout_s = timeout_ms / 1000.0
         if effort is not None and effort not in _EFFORTS:
             raise ModelError(f"effort {effort!r} must be one of {', '.join(_EFFORTS)}")
         self.effort = (
-            (effort or _effort_for(self.model, env)) if supports_effort(self.model) else None
+            (effort or _effort_for(self.model, env))
+            if supports_effort(self.model)
+            else None
         )
 
         if backend is None:
@@ -315,7 +322,9 @@ class ClaudeModel:
             ) from exc
         if self.backend == "api":
             if not self._api_key:
-                raise ModelError(f"Claude is not configured: {claude_missing(self._env)}.")
+                raise ModelError(
+                    f"Claude is not configured: {claude_missing(self._env)}."
+                )
             return anthropic.Anthropic(
                 api_key=self._api_key, timeout=self.timeout_s, max_retries=0
             )
@@ -393,7 +402,9 @@ class ClaudeModel:
 
     # ------------------------------------------------------------ request
 
-    def _content(self, prompt: str, documents: list[Document] | None) -> list[dict[str, Any]]:
+    def _content(
+        self, prompt: str, documents: list[Document] | None
+    ) -> list[dict[str, Any]]:
         blocks: list[dict[str, Any]] = []
         for doc in documents or []:
             blocks.append(self._document_block(doc))
@@ -425,7 +436,9 @@ class ClaudeModel:
         if mime == "application/pdf":
             return {
                 "type": "document",
-                "source": {"type": "base64", "media_type": "application/pdf", "data": data},
+                "source": {
+                    "type": "base64", "media_type": "application/pdf", "data": data
+                },
             }
         if mime in ("image/jpeg", "image/png", "image/gif", "image/webp"):
             return {

@@ -220,7 +220,9 @@ def parse_mechanism_spec(raw: str | dict[str, Any]) -> MechanismSpec:
             errors.append(f"{where}: unknown key {key!r}")
         jid = rj.get("id")
         if not isinstance(jid, str) or not _ID.match(jid):
-            errors.append(f"{where}.id must be an identifier like 'shoulder_lift', got {jid!r}")
+            errors.append(
+                f"{where}.id must be an identifier like 'shoulder_lift', got {jid!r}"
+            )
             jid = f"j{i + 1}"
         elif jid in seen:
             errors.append(f"{where}.id {jid!r} is used twice")
@@ -241,21 +243,27 @@ def parse_mechanism_spec(raw: str | dict[str, Any]) -> MechanismSpec:
             not isinstance(rng, list) or len(rng) != 2
             or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in rng)
         ):
-            errors.append(f"{where}: range_deg must be [min, max] in degrees, got {rng!r}")
+            errors.append(
+                f"{where}: range_deg must be [min, max] in degrees, got {rng!r}"
+            )
         else:
             lo, hi = float(rng[0]), float(rng[1])
             if not (-180 <= lo < hi <= 180):
                 errors.append(
-                    f"{where}: range_deg must satisfy -180 <= min < max <= 180, got {rng}"
+                    f"{where}: range_deg must satisfy -180 <= min < max <= 180, "
+                    f"got {rng}"
                 )
             elif not lo <= 0 <= hi:
-                errors.append(f"{where}: range_deg must include 0 (the home pose), got {rng}")
+                errors.append(
+                    f"{where}: range_deg must include 0 (the home pose), got {rng}"
+                )
             else:
                 lo_mdeg, hi_mdeg = round(lo * 1000), round(hi * 1000)
         actuator = rj.get("actuator")
         if actuator not in rules.ACTUATORS:
             errors.append(
-                f"{where}: actuator must be one of {sorted(rules.ACTUATORS)}, got {actuator!r}"
+                f"{where}: actuator must be one of {sorted(rules.ACTUATORS)}, "
+                f"got {actuator!r}"
             )
             actuator = "SG90"
         bearing = rj.get("bearing", "none")
@@ -289,8 +297,12 @@ def parse_mechanism_spec(raw: str | dict[str, Any]) -> MechanismSpec:
     else:
         for key in sorted(set(tool) - {"length_mm", "mass_g"}):
             errors.append(f"tool: unknown key {key!r}")
-        tool_len = _number(errors, "tool.length_mm", tool.get("length_mm", 0), 0, 300) or 0.0
-        tool_mass = _number(errors, "tool.mass_g", tool.get("mass_g", 0), 0, 2000) or 0.0
+        tool_len = _number(
+            errors, "tool.length_mm", tool.get("length_mm", 0), 0, 300
+        ) or 0.0
+        tool_mass = _number(
+            errors, "tool.mass_g", tool.get("mass_g", 0), 0, 2000
+        ) or 0.0
     material = data.get("material", "PLA")
     if material not in MATERIALS:
         errors.append(f"material must be one of {MATERIALS}, got {material!r}")

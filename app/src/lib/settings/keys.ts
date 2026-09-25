@@ -16,6 +16,28 @@ export const SETUP_VERSION = 1;
 
 export type NotifyOs = "always" | "not_focused" | "never";
 
+/** The Ada Pro verdict this device last saw; `unknown` is "never checked". */
+export type PurchasesVerdict = "entitled" | "free" | "unknown";
+
+export interface PurchasesLastVerdict {
+  verdict: PurchasesVerdict;
+  /** When it was seen, ISO 8601 UTC; "" for the default that was never seen. */
+  at: string;
+}
+
+/**
+ * RFC 4122 UUID, any version, the form `crypto.randomUUID()` mints. The app
+ * user id sent to RevenueCat is validated against this on read and write, so
+ * the engine's bearer token, an `ada_` API key (`service/auth.py`) or
+ * RevenueCat's own `$RCAnonymousID:` form (`billing/accounts.py` refuses a
+ * `$`) can never be stored where a customer id belongs.
+ */
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
 export interface SettingsSchema {
   /** Native banners on or off. Default off: the test button is the opt-in. */
   "notify.enabled": boolean;
@@ -34,6 +56,14 @@ export interface SettingsSchema {
   /** Epoch ms when setup finished, 0 when it never has. */
   "setup.completedAt": number;
   "tour.completed": boolean;
+  /**
+   * The RevenueCat app user id: one UUID minted on this desktop the first
+   * time purchases are configured, then kept. "" until minted. Never the
+   * engine token, never an `ada_` key, never RevenueCat's anonymous form.
+   */
+  "purchases.appUserId": string;
+  /** The last entitlement verdict seen here, with when; shown, never enforced. */
+  "purchases.lastVerdict": PurchasesLastVerdict;
 }
 
 export type SettingKey = keyof SettingsSchema;
@@ -48,6 +78,8 @@ export const SETTING_DEFAULTS: Readonly<SettingsSchema> = Object.freeze({
   "setup.skipped": [],
   "setup.completedAt": 0,
   "tour.completed": false,
+  "purchases.appUserId": "",
+  "purchases.lastVerdict": Object.freeze({ verdict: "unknown", at: "" }),
 });
 
 export const SETTING_KEYS: readonly SettingKey[] = Object.freeze(
@@ -72,6 +104,17 @@ export function settingOfMirrorKey(storageKey: string | null): SettingKey | null
 }
 
 const NOTIFY_OS_VALUES: readonly NotifyOs[] = ["always", "not_focused", "never"];
+const PURCHASES_VERDICTS: readonly PurchasesVerdict[] = ["entitled", "free", "unknown"];
+
+function isPurchasesLastVerdict(value: unknown): value is PurchasesLastVerdict {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.verdict === "string" &&
+    (PURCHASES_VERDICTS as readonly string[]).includes(record.verdict) &&
+    typeof record.at === "string"
+  );
+}
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((v) => typeof v === "string");
@@ -98,6 +141,10 @@ export function isValidSetting<K extends SettingKey>(
       return typeof value === "number" && Number.isFinite(value);
     case "setup.step":
       return typeof value === "string";
+    case "purchases.appUserId":
+      return value === "" || isUuid(value);
+    case "purchases.lastVerdict":
+      return isPurchasesLastVerdict(value);
     default:
       return typeof value === typeof SETTING_DEFAULTS[key];
   }

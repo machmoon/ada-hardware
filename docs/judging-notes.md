@@ -1,5 +1,7 @@
 # Judging notes — anticipated questions, honest answers
 
+Written for the All Things Agentic hackathon (2026-08-31); the Shipaton entry is described in `DEVPOST.md` and `docs/purchases.md`.
+
 Prepared answers for the questions judges actually ask. Every claim below is
 grounded in a file in this repository (or the named branch/release); where
 something is pending or modest, it says so. Do not improve on these answers by

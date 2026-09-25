@@ -1,37 +1,53 @@
 # Ada
 
-[![CI](https://github.com/machmoon/silkscreen/actions/workflows/ci.yml/badge.svg)](https://github.com/machmoon/silkscreen/actions/workflows/ci.yml)
+[![CI](https://github.com/machmoon/Ada/actions/workflows/ci.yml/badge.svg)](https://github.com/machmoon/Ada/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![KiCad 7–8](https://img.shields.io/badge/KiCad-7--8%20file%20format-brightgreen)](https://www.kicad.org/download/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 
-**End-to-end PCB design. Describe a board in plain language, get a placed KiCad
-layout back — with the reasoning shown and every claim cited.**
+**Ada is an AI hardware engineer that works beside KiCad: describe a board, get a
+schematic, a placed and routed board and a printable case, each checked by KiCad's own
+ERC and DRC.** For a beginner before the first dead board, and a senior engineer before
+fab.
 
-**Two names, one thing.** *Ada* is who you talk to — the AI hardware engineer and
-the desktop app in [`app/`](app/). (The spoken wake word is still "Ada", from the
-app's previous name.) *Silkscreen* is the engine underneath: the Python package, the
-`silkscreen` command, and this repository. Ada is a client of Silkscreen; either
-can be used without the other.
+- **The problem.** A first board usually comes back dead over something its datasheet
+  stated plainly. Every EDA tool checks that a wire reaches a pin; none checks that it
+  was the right pin.
+- **Who it is for.** A beginner who cannot yet tell a correct schematic from a plausible
+  one, and a senior engineer who can but wants a second reader that cites the page.
+- **What it lets them do.** Describe a board in the desktop app next to a running KiCad
+  and press each step in turn: datasheets read, a validated circuit, a `.kicad_sch`,
+  CP-SAT placement, routed copper with a ground pour, a printable case with measured
+  clauses, a BOM, and a review with citations. Every step the engineer runs waits for a
+  press; the case and sourcing designs are prefetched when placement lands, and the step
+  envelope says so (`background: ["case", "sourcing"]`). `kicad-cli` runs ERC, DRC and
+  schematic parity on the result;
+  [`docs/measurements/board-eval-2026-09-16.json`](docs/measurements/board-eval-2026-09-16.json)
+  records six circuits with 0 errors on all three and an 18-part ESP32 dev board 100 %
+  routed with DRC 0 (a scripted circuit through the real engine).
+- **How it makes money.** **Ada Pro** is one entitlement, `pro`, bought inside the
+  desktop app through the RevenueCat Web SDK; it unlocks the **Prepare fab order** step,
+  gated on the client and, when `REVENUECAT_SECRET_API_KEY` is set, on the service. Today
+  it is a RevenueCat Test Store purchase: simulated, no money moves. The Stripe usage
+  metering in [`billing/`](billing/) is the launch path and is off unless `KALEO_METERING`
+  is set.
+- **What makes it different.** Verification is the product. The model proposes; KiCad's
+  own checks, a SPICE verifier and a CAD kernel decide, each with a signed margin, and
+  every integration reports what actually happened in a fixed vocabulary. The KiCad
+  integration is a file format, not a plugin or a robot arm.
 
-Silkscreen reads the datasheets, proposes a circuit, refuses to build it if it does
-not validate, **draws a schematic**, generates the footprints, places the board with a
-CP-SAT solver, **routes the copper**, and then argues against its own design and tells
-you what it thinks is wrong.
+**Two names, one thing.** *Ada* is who you talk to: the AI hardware engineer and the
+desktop app in [`app/`](app/). *Silkscreen* is the engine underneath: the Python package,
+the `silkscreen` command, and most of this repository. Ada is a client of Silkscreen;
+either can be used without the other.
 
-**▶ [Watch the demo video](https://drive.google.com/drive/folders/1rnSlTHrJ7pleJYoMAmtVkpkHFm6PlOE_?usp=sharing)**
+Demo video: (YouTube link to be added before submission)
 
-## Hackathon submission
+The earlier entry, for the All Things Agentic hackathon on 2026-08-31 (Gemini, ADK, Cloud
+Run), is kept in [docs/google-hackathon.md](docs/google-hackathon.md). The Shipaton
+entry text is [DEVPOST.md](DEVPOST.md).
 
-**What it is.** Ada is a multi-step AI hardware engineer. You describe a board (typed,
-spoken, in a Google Meet, or in Slack); it proposes a circuit with Gemini, validates it,
-places parts with a CP-SAT solver, routes copper, designs a 3D-printable case with a
-CAD kernel, sources parts, reviews its own design, and hands you a real KiCad project.
-Every paid step waits for your approval in a desktop overlay. The problem: going from
-an idea to a buildable board takes an engineer days of datasheets, schematic capture,
-layout and enclosure work.
-
-**External apps it connects to.**
+## What it connects to
 
 | App | What Ada does with it | Verified live today |
 |---|---|---|
@@ -80,7 +96,9 @@ CLI only: `./.venv/bin/silkscreen "a 3.3V LDO board" --model gemini-3.5-flash -o
   (`verified` / `proposed` / `unavailable`, `spoken: true` only when audio really played),
   and the demo recordings document what broke.
 
-![Ada desktop workflow demo](docs/img/hardy-desktop-demo.gif)
+![The browser SPA driving a run: intent, live stages, review](docs/img/ada-desktop-demo.gif)
+
+The recording above is the browser SPA (`frontend/`), not the desktop overlay in `app/`.
 
 ![Generated STM32 board layout in KiCad](docs/img/board.png)
 
@@ -106,7 +124,7 @@ with its extras, and builds the web UI if Node 22+ is on your PATH (skipped, not
 if it isn't). Nothing is written outside the repo and it never uses `sudo`:
 
 ```bash
-git clone https://github.com/machmoon/silkscreen && cd silkscreen
+git clone https://github.com/machmoon/Ada && cd Ada
 ./scripts/install.sh                                           # macOS / Linux
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1   # Windows
 ```
@@ -171,13 +189,13 @@ Every stage is a real KiCad file you can open and inspect on its own, so you can
 where a design went wrong instead of only seeing the last artifact.
 
 ```
-3807 tests collected — no network, no API key, no KiCad install
+3899 tests collected — no network, no API key, no KiCad install
 ```
 
 **Next:** [full install guide and troubleshooting](docs/install.md) ·
 [contributing](CONTRIBUTING.md) · [how it works](#prompt-to-pcb)
 
-**Download:** [tagged releases](https://github.com/machmoon/silkscreen/releases) carry the
+**Download:** [tagged releases](https://github.com/machmoon/Ada/releases) carry the
 Python wheel and built web UI. The native **Ada** macOS shell currently runs
 from a checkout; `.dmg` packaging, signing, and notarization are not yet built.
 
@@ -259,7 +277,7 @@ Platform-by-platform commands are in [docs/install.md](docs/install.md#kicad-opt
 | Voice / talk input | **Working** · push-to-talk and "Ada" wake word in the desktop overlay (ear toggle, off by default, paid windows capped at 15); the web SPA's separate browser Web Speech dictation and read-aloud are listed under `frontend/` |
 | `app/` — the Ada desktop overlay (Tauri) | **Working** · approval-gated step strip over a live KiCad, order step with GLB export, in-app 3D board viewer (`ModelViewer`), Workspace delivery panel |
 | Guided cursor | **Half built** · the in-webview pointer ships (`frontend/src/lib/guide.js`, `GuidePointer.svelte`, "Show me" on a finding); pointing at anything *outside* our own window — KiCad, a terminal, the OS — is **not built**, and there is no screen capture, accessibility-tree read or OS overlay behind it |
-| `spice/` — typed testbenches, decks, measurements, signed-margin assertions | **Working as a library** · reached today only by the MCP tools, `scripts/simulate_demo.py` and direct calls; **no pipeline stage, ADK node, CLI flag or service route builds a deck**, so a generated board is never simulated |
+| `spice/` — typed testbenches, decks, measurements, signed-margin assertions | **Working** · opt-in simulation stage since 2026-09-06 (`--simulate` on the CLI, `"simulate": true` on `/generate`, the `simulate` nodes in the ADK graph), plus the MCP tools, `scripts/simulate_demo.py` and direct calls; needs ngspice on PATH, and a circuit holding a `Device` or a crystal is reported `unsimulatable` by name |
 
 Every module above is covered by tests that run with no network, no API key, and no
 KiCad install. The count is deliberately not quoted here — it drifts, and
@@ -588,7 +606,7 @@ treats the board file as the interface.
 | Requires KiCad running | Yes | **No** |
 | Headless / CI | Hard | **Native** |
 | Platform lock | KiCad's plugin loader | **None — pure Python** |
-| Testable without KiCad | No | **Yes, all 3807 tests** |
+| Testable without KiCad | No | **Yes, all 3899 tests** |
 
 ### What it reads
 
@@ -1236,7 +1254,7 @@ engine/
       adk/          ADK dynamic workflow over the same stage bodies
     audit/        optional visual review of a finished board
     specreview.py validated meeting agenda for what a run could not settle
-  tests/          3807 tests — no network, no API keys, no KiCad
+  tests/          3899 tests — no network, no API keys, no KiCad
     fixtures/     ref.kicad_pcb -- 11-footprint board fixture
 scripts/
   demo.py         end-to-end: read -> place -> write -> verify
@@ -1312,8 +1330,8 @@ the test suite and the demo both run fully offline.
 ### From a clean clone
 
 ```bash
-git clone https://github.com/machmoon/silkscreen.git
-cd silkscreen
+git clone https://github.com/machmoon/Ada.git
+cd Ada
 python3 -m venv .venv
 ./.venv/bin/pip install -e ".[dev,agents,cloud,adk,cad]"
 ```

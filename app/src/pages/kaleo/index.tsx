@@ -1728,8 +1728,10 @@ const Kaleo = () => {
             >
               <span className="line-clamp-2 min-w-0 text-[11px] leading-tight">
                 <span className="font-medium">Engine unreachable</span> at{" "}
-                <span className="font-mono">{run.baseUrl}</span>. Start it with{" "}
-                <span className="font-mono">PORT=8081 python -m service.app</span>
+                <span className="font-mono">{run.baseUrl}</span>. Press Start engine on
+                the Engine tab, or run{" "}
+                <span className="font-mono">silkscreen serve --port 8081</span> (both
+                read <span className="font-mono">.env</span>).
               </span>
               <Button
                 size="sm"

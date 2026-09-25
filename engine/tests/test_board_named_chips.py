@@ -296,5 +296,6 @@ def test_an_esp32_wired_by_its_used_pins_ties_the_stacked_ground():
     assert {"1", "15", "38", "39"} <= set(esp.pins.values())
     gnd = next(c for c in tied.connections if c.net == "GND")
     assert {e for e in gnd.endpoints if e.startswith("ESP32")} == {
-        f"ESP32-WROOM-32E.{name}" for name, n in esp.pins.items() if n in ("1", "15", "38", "39")}
+        f"ESP32-WROOM-32E.{name}"
+        for name, n in esp.pins.items() if n in ("1", "15", "38", "39")}
     assert len(notes) == 3 and package_errors(tied) == []

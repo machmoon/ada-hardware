@@ -6,6 +6,7 @@ export * from "./Notifications";
 export * from "./RunSetupAgain";
 export * from "./WakeWordToggle";
 export * from "./BillingSetup";
+export * from "./AdaPro";
 export * from "./OverlaySkin";
 export * from "./CliTools";
 export * from "./CalmOutputToggle";

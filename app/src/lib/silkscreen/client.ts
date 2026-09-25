@@ -30,6 +30,7 @@ import type {
   CancelResponse,
   StreamFrame,
 } from "./types";
+import { appUserIdHeader } from "@/lib/purchases/app-user-id";
 
 export const DEFAULT_BASE_URL = "http://127.0.0.1:8081";
 
@@ -52,8 +53,14 @@ export type ErrorKind =
   | "request" // 400/413 — the prompt or its options were rejected
   | "upstream" // 502/503 — the model provider failed
   | "server" // 500 — a bug on the engine side, carries an error_id
+  | "entitlement" // 402 with reason entitlement_required: the order step needs Ada Pro
   | "timeout"
   | "cancelled";
+
+/** The service's reason word for a 402 the desktop answers with Ada Pro. */
+export const ENTITLEMENT_REQUIRED = "entitlement_required";
+/** What the error says when the service sent no sentence of its own. */
+export const ENTITLEMENT_REQUIRED_LINE = "Ada Pro is required to prepare a fab order.";
 
 export class SilkscreenError extends Error {
   kind: ErrorKind;
@@ -187,6 +194,13 @@ export function normalizeRequest(request: GenerateRequest): GenerateRequest {
  */
 function kindForStatus(status: number, body: Partial<RunError>): ErrorKind {
   const text = `${body.error ?? ""} ${body.detail ?? ""}`;
+  // The service's Ada Pro gate on the order step (`service/entitlements.py`,
+  // applied in `service/app.py`'s step route): a 402 whose `reason` is
+  // `entitlement_required`. The other 402, reason `insufficient_credit`
+  // (metering, `service/app.py`), keeps the handling it had.
+  if (status === 402 && (body as { reason?: unknown }).reason === ENTITLEMENT_REQUIRED) {
+    return "entitlement";
+  }
   if (status === 502 || status === 503) {
     return /GOOGLE_API_KEY|api key/i.test(text) ? "setup" : "upstream";
   }
@@ -197,8 +211,17 @@ function kindForStatus(status: number, body: Partial<RunError>): ErrorKind {
 }
 
 function errorFromBody(status: number, body: Partial<RunError>): SilkscreenError {
+  const kind = kindForStatus(status, body);
+  if (kind === "entitlement") {
+    // The detail is the sentence the service wrote for the person, so it is
+    // the message; `detail` stays empty so the panel does not print it twice.
+    return new SilkscreenError(kind, body.detail || body.error || ENTITLEMENT_REQUIRED_LINE, {
+      status,
+      errorId: body.error_id ?? "",
+    });
+  }
   return new SilkscreenError(
-    kindForStatus(status, body),
+    kind,
     body.error || `The engine answered ${status}.`,
     { status, errorId: body.error_id ?? "", detail: body.detail ?? "" }
   );
@@ -735,6 +758,10 @@ async function stepPostOnce(
         "Content-Type": "application/json",
         ...authHeaders(token),
         ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}),
+        // Every `/steps` request names the customer this desktop buys as
+        // (`X-Kaleo-App-User-Id`); the service reads it only for the order
+        // step. No id yet means no header, never an invented one.
+        ...(path.startsWith("/steps") ? appUserIdHeader() : {}),
       },
       body: JSON.stringify(payload),
       signal: deadline.signal,
@@ -926,7 +953,7 @@ export async function stepStatus(
   try {
     response = await tauriFetch(`${baseUrl}/steps/${encodeURIComponent(session)}`, {
       method: "GET",
-      headers: authHeaders(token),
+      headers: { ...authHeaders(token), ...appUserIdHeader() },
       signal: deadline.signal,
     });
   } catch (error) {

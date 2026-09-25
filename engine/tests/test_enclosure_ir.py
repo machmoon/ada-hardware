@@ -327,7 +327,9 @@ def test_spec_to_dict_round_trips_through_the_parser():
     assert as_json["wall_mm"] == 2.4 and as_json["cutouts"][0]["face"] == "left"
     assert parse_enclosure_spec(as_json) == spec
     # A label of None survives as None, not as the string "None".
-    assert spec_to_dict(EnclosureSpec(**{**spec.__dict__, "label": None}))["label"] is None
+    assert spec_to_dict(
+        EnclosureSpec(**{**spec.__dict__, "label": None})
+    )["label"] is None
 
 
 def test_apply_edits_lays_the_edit_over_the_spec_and_batches_every_failure():

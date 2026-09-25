@@ -3,8 +3,9 @@
 One read-only, aggregated, always-200 view of every front end and optional
 tool the repo carries: the Workspace delivery routes, the Slack bot, the Meet
 / Zoom / Teams meeting front ends, the enclosure kernel, the sourcing BOM, the
-MCP server, SPICE, ``kicad-cli`` and the Anthropic (Claude) model provider. The desktop overlay renders it as a
-settings panel, so the contract is that it never fails and never lies.
+MCP server, SPICE, ``kicad-cli`` and the Anthropic (Claude) model provider.
+The desktop overlay renders it as a settings panel, so the contract is that it
+never fails and never lies.
 
 Four states, and the distinction is the whole point (a missing package, a
 missing credential and a half-filled one are three different problems):

@@ -1,14 +1,14 @@
 [package]
 name = "kaleo"
 version = "0.3.1"
-description = "Ada: silkscreen's desktop app - describe a board, the engine generates it, review the result. A GPL-3.0 fork of Pluely."
-authors = ["Pat Liu <liujkaleo@gmail.com>", "Srikanth Nani <mail@srikanthnani.com> (upstream Pluely)"]
+description = "Ada is an AI hardware engineer that works beside KiCad: describe a board, get a schematic, a placed and routed board and a printable case, each checked by KiCad's own ERC and DRC. This crate is the desktop app, a GPL-3.0 fork of Pluely (see NOTICE.md)."
+authors = ["Patrick Liu"]
 license = "GPL-3.0"
-repository = "https://github.com/machmoon/silkscreen"
-homepage = "https://github.com/machmoon/silkscreen"
-documentation = "https://github.com/machmoon/silkscreen"
+repository = "https://github.com/machmoon/Ada"
+homepage = "https://github.com/machmoon/Ada"
+documentation = "https://github.com/machmoon/Ada"
 readme = "../README.md"
-keywords = ["ai-assistant", "tauri", "desktop-app", "privacy-first", "meeting-assistant"]
+keywords = ["ai-assistant", "tauri", "desktop-app", "pcb", "kicad"]
 categories = ["gui", "multimedia", "accessibility", "science", "development-tools"]
 edition = "2021"
 # The executable is "Ada" so an unbundled dev build is named Ada in the Dock

@@ -543,9 +543,11 @@ def test_a_large_board_is_compact_not_the_solvers_first_loose_answer():
     from silkscreen.netlist import parse_circuit_spec
 
     devices = {
-        "ESP32-WROOM-32E": {"pins": {"GND": "1", "VDD": "2", "IO21": "33", "IO22": "36"}},
+        "ESP32-WROOM-32E": {"pins": {"GND": "1", "VDD": "2", "IO21": "33",
+                                     "IO22": "36"}},
         "PCA9685PW": {"pins": {"VSS": "14", "VDD": "28", "SDA": "27", "SCL": "26",
-                               **{f"LED{i}": str(6 + i if i < 8 else 7 + i) for i in range(16)}}},
+                               **{f"LED{i}": str(6 + i if i < 8 else 7 + i)
+                                  for i in range(16)}}},
     }
     passives, nets = {}, {
         "GND": ["ESP32-WROOM-32E.GND", "PCA9685PW.VSS"],

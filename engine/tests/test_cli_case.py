@@ -160,7 +160,9 @@ def test_board_only_case_into_a_missing_directory_writes_the_board(
     monkeypatch.setenv("SILKSCREEN_ENGINE", "sdk")
     model = _scripted_pipeline_model()
     model.by_marker["ENCLOSURE-SPEC v1"] = json.dumps(GOOD_ENCLOSURE)
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: model, **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: model, **k: _f(None)
+    )
 
     out = tmp_path / "does" / "not" / "exist" / "board.kicad_pcb"
     assert not out.parent.exists()
@@ -213,7 +215,9 @@ def captured_generate(monkeypatch):
         return _fake_result()
 
     monkeypatch.setattr(cli, "generate_pcb", fake_generate_pcb)
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None)
+    )
     return seen
 
 
@@ -259,7 +263,9 @@ def test_case_success_prints_the_kernel_receipt(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         cli, "generate_pcb", lambda model, intent, **kw: _fake_result(enclosure)
     )
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None)
+    )
 
     code = cli.main(["an ldo", "-o", str(tmp_path / "b.kicad_pcb"), "--case"])
 
@@ -290,7 +296,9 @@ def test_the_cli_prints_that_the_review_produced_no_verdict(
         "generate_pcb",
         lambda model, intent, **kw: _fake_result(review=failed),
     )
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None)
+    )
 
     assert cli.main(["an ldo", "-o", str(tmp_path / "b.kicad_pcb")]) == 0
     out = capsys.readouterr().out
@@ -304,7 +312,9 @@ def test_the_cli_says_nothing_extra_for_a_review_that_found_nothing(
     monkeypatch.setattr(
         cli, "generate_pcb", lambda model, intent, **kw: _fake_result()
     )
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None)
+    )
     assert cli.main(["an ldo", "-o", str(tmp_path / "b.kicad_pcb")]) == 0
     assert "Review:" not in capsys.readouterr().out
 
@@ -372,7 +382,9 @@ def _install_kernel_case(monkeypatch, *, report, render=None):
     monkeypatch.setattr(agent_enclosure, "propose_enclosure", fake_propose)
     monkeypatch.setattr(cad, "export_model", fake_export)
     monkeypatch.setattr(snapshot, "render_packet", render or fake_render)
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None)
+    )
     return seen
 
 
@@ -447,7 +459,9 @@ def test_generate_tail_prints_the_kernel_report(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         cli, "generate_pcb", lambda model, intent, **kw: _fake_result(enclosure)
     )
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None)
+    )
     code = cli.main(["an ldo", "-o", str(tmp_path / "b.kicad_pcb"), "--case"])
     assert code == 0
     out = capsys.readouterr().out
@@ -500,7 +514,9 @@ def test_bom_success_prints_the_counts_line(tmp_path, monkeypatch, capsys):
         cli, "generate_pcb",
         lambda model, intent, **kw: _fake_result(sourcing=sourcing),
     )
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None)
+    )
 
     out = tmp_path / "board.kicad_pcb"
     assert cli.main(["an ldo board", "-o", str(out), "--bom"]) == 0
@@ -524,7 +540,9 @@ def test_board_only_bom_says_the_file_was_not_written(tmp_path, monkeypatch, cap
         cli, "generate_pcb",
         lambda model, intent, **kw: _fake_result(sourcing=sourcing),
     )
-    monkeypatch.setattr(cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None))
+    monkeypatch.setattr(
+        cli, "worker_model", lambda *a, _f=lambda name: object(), **k: _f(None)
+    )
 
     out = tmp_path / "board.kicad_pcb"
     assert cli.main(["an ldo board", "-o", str(out), "--bom", "--board-only"]) == 0

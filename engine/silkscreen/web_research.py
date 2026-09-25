@@ -189,7 +189,9 @@ class ResearchBudget:
         if isinstance(wall, bool) or not isinstance(wall, (int, float)):
             errors.append(f"wall_clock_s must be a number, got {wall!r}")
         elif not (math.isfinite(wall) and 0 < wall <= MAX_WALL_CLOCK_S):
-            errors.append(f"wall_clock_s must be in (0, {MAX_WALL_CLOCK_S:g}], got {wall}")
+            errors.append(
+                f"wall_clock_s must be in (0, {MAX_WALL_CLOCK_S:g}], got {wall}"
+            )
         if errors:
             raise ValueError("research budget refused: " + "; ".join(errors))
 
@@ -341,7 +343,9 @@ class WebResearchResult:
         for fact in facts:
             label = f" {fact.label}:" if fact.label else ""
             qty = f" x{fact.quantity}" if fact.quantity is not None else ""
-            lines.append(f"- {fact.field}:{label} {fact.value}{qty} [{index[fact.url]}]")
+            lines.append(
+                f"- {fact.field}:{label} {fact.value}{qty} [{index[fact.url]}]"
+            )
         lines.append("Sources:")
         for i, url, title in numbered:
             lines.append(f"[{i}] {(title or url)[:MAX_TITLE_CHARS]}: {url}")
@@ -377,7 +381,8 @@ class WebResearchResult:
             "sources": [s.as_dict() for s in self.sources],
             "findings": [f.as_dict() for f in self.findings],
             "dropped": [
-                {"source": d.repo, "field": d.field, "value": d.value, "reason": d.reason}
+                {"source": d.repo, "field": d.field, "value": d.value,
+                 "reason": d.reason}
                 for d in self.dropped
             ],
             "stops": list(self.stops),
@@ -528,7 +533,9 @@ def parse_learnings(
         else:
             follow_ups.append(" ".join(question.split()))
     if len(follow_ups) > max_follow_ups:
-        errors.append(f"{len(follow_ups)} follow-up questions; at most {max_follow_ups}")
+        errors.append(
+            f"{len(follow_ups)} follow-up questions; at most {max_follow_ups}"
+        )
     if errors:
         raise WebResearchValidationError(errors)
     return facts, follow_ups

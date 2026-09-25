@@ -9,7 +9,16 @@ import sys
 import threading
 import urllib.request
 
+import pytest
+
 from desktop import sidecar
+
+# The whole module is skipped before any test body runs, so nothing here can
+# spawn the retired sidecar process (a macOS CI run hung on it for 1h37m).
+pytestmark = pytest.mark.skip(
+    reason="desktop/ sidecar is retired; the live desktop app is app/ "
+    "(CLAUDE.md, 2026-09-06)"
+)
 
 
 class _FakeServer:

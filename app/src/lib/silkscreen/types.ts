@@ -207,6 +207,12 @@ export interface RunError {
   error: string;
   detail?: string;
   error_id?: string;
+  /**
+   * A machine-readable reason beside the sentence, on the two 402s:
+   * `insufficient_credit` (metering) and `entitlement_required` (the Ada Pro
+   * gate on the order step, `service/entitlements.py`). Absent elsewhere.
+   */
+  reason?: string;
   /** Only the `run.error` stream frame carries this; error bodies do not. */
   status?: number;
 }
@@ -585,6 +591,22 @@ export interface StepResponse {
    * older engines; null when it was shown or nothing was asked.
    */
   shown_detail?: string | null;
+  /**
+   * Only on the `order` envelope: what the service did about Ada Pro. Off
+   * (`checked: false`, `reason: "not_configured"`) when it holds no RevenueCat
+   * key; `checked: true` with `active` when it asked RevenueCat; a fail-open
+   * verdict carries `reason` and `detail` in words. Absent from older engines
+   * and from every other step. The strip acts on its own verdict and on the
+   * 402, not on this block; it is here so the dashboard can show it.
+   */
+  entitlement?: {
+    checked: boolean;
+    reason?: string;
+    detail?: string;
+    entitlement?: string;
+    active?: boolean;
+    checked_at?: string;
+  };
   events: StreamFrame[];
   duration_s: number;
   // plan

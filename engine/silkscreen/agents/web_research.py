@@ -111,6 +111,14 @@ _HEADER = (
     f"people actually build what the engineer asked for ({WEB_RESEARCH_MARKER})."
 )
 
+# Two placeholder descriptions the prompts below interpolate; kept apart only
+# so the prompt source stays within the line limit (the text is unchanged).
+_GOAL_HINT = (
+    "<first the goal this query serves, then how to go deeper once results are "
+    "found, and further research directions; be specific>"
+)
+_QUANTITY_HINT = "<a count of parts stated in the same quote, for part fields only>"
+
 QUERY_PROMPT = f"""\
 {_HEADER} Step: {QUERY_MARKER}.
 Generate web search queries to research how this device is really built: the
@@ -121,7 +129,7 @@ Make each query unique and not similar to the others. Respond with ONE JSON
 object -- no prose, no code fence:
 
 {{"queries": [{{"query": "<a search engine query>",
-               "research_goal": "<first the goal this query serves, then how to go deeper once results are found, and further research directions; be specific>"}}]}}
+               "research_goal": "{_GOAL_HINT}"}}]}}
 """
 
 LEARN_PROMPT = f"""\
@@ -136,7 +144,7 @@ Respond with ONE JSON object -- no prose, no code fence:
    {{"field": "<one of the fields below>",
     "value": "<copied verbatim from inside the quote>",
     "label": "<what it measures, for link_length/joint_range>" | null,
-    "quantity": <a count of parts stated in the same quote, for part fields only> | null,
+    "quantity": {_QUANTITY_HINT} | null,
     "quote": "<the exact text, copied character for character, max 400 chars>",
     "source": "<the PAGE url exactly as given>"}}
  ],
@@ -181,7 +189,9 @@ def _ask(
     errors: list[str] = []
     for round_no in range(max_repairs + 1):
         counter[0] += 1
-        raw = model.generate(prompt, temperature=0.0, max_output_tokens=max_output_tokens)
+        raw = model.generate(
+            prompt, temperature=0.0, max_output_tokens=max_output_tokens
+        )
         try:
             return parse(raw), []
         except WebResearchValidationError as exc:
@@ -355,7 +365,8 @@ def research_web(
                 detail = "; ".join(errors)[:_WARNING_CHARS]
                 if parent is None:
                     queries = [
-                        SerpQuery(q, "how this device is built") for q in fallback_queries(intent)
+                        SerpQuery(q, "how this device is built")
+                        for q in fallback_queries(intent)
                     ]
                     result.warnings.append(
                         "the model gave no usable search queries, so the request's "
@@ -377,8 +388,8 @@ def research_web(
                 pages_left = budget.max_pages - result.pages
                 if pages_left <= 0:
                     stop(
-                        f"the {budget.max_pages}-page budget was spent at depth {depth}; "
-                        f"not run: {'; '.join(repr(q) for q in not_run)}"
+                        f"the {budget.max_pages}-page budget was spent at depth "
+                        f"{depth}; not run: {'; '.join(repr(q) for q in not_run)}"
                     )
                     exhausted = True
                     break
@@ -529,7 +540,9 @@ def research_web(
             said = f"Firecrawl could not be searched ({stopped})"
         if not read_any:
             result.status = (
-                "rate_limited" if isinstance(stopped, FirecrawlRateLimited) else "unavailable"
+                "rate_limited"
+                if isinstance(stopped, FirecrawlRateLimited)
+                else "unavailable"
             )
             result.warnings.append(said)
             return finish()

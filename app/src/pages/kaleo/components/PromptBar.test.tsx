@@ -17,7 +17,7 @@ vi.mock("@/contexts", () => ({ useSilkscreenRun: () => ({ token: undefined }) })
 
 import type { EngineHealth } from "@/hooks";
 import type { RunRequestDraft } from "@/contexts";
-import { PromptBar } from "./PromptBar";
+import { EXAMPLE_PROMPTS, PromptBar } from "./PromptBar";
 import { speaker } from "@/lib/speech";
 
 const engine = {
@@ -58,6 +58,32 @@ afterEach(() => {
   // The summary control remembers its mode in localStorage; one test's click
   // must not seed the next test's default.
   localStorage.clear();
+});
+
+describe("example prompts", () => {
+  it("offers the three examples on an empty focused field and fills the one clicked", () => {
+    const onRequestChange = vi.fn();
+    draw({ onRequestChange });
+    const input = screen.getByTestId("prompt-input");
+    fireEvent.focus(input);
+    const chips = screen.getAllByTestId("prompt-example");
+    expect(chips.map((c) => c.textContent)).toEqual([...EXAMPLE_PROMPTS]);
+    // mousedown is prevented so WebKit does not blur the field (and unmount
+    // the row) before the click lands.
+    expect(fireEvent.mouseDown(chips[0])).toBe(false);
+    fireEvent.click(chips[0]);
+    expect(onRequestChange).toHaveBeenCalledWith({ intent: EXAMPLE_PROMPTS[0] });
+  });
+
+  it("keeps the examples out of the way once the field has text or the bar is busy", () => {
+    draw({ request: { ...request, intent: "a 555 blinker" } as RunRequestDraft });
+    fireEvent.focus(screen.getByTestId("prompt-input"));
+    expect(screen.queryAllByTestId("prompt-example")).toHaveLength(0);
+    cleanup();
+    draw({ busy: true });
+    fireEvent.focus(screen.getByTestId("prompt-input"));
+    expect(screen.queryAllByTestId("prompt-example")).toHaveLength(0);
+  });
 });
 
 describe("PromptBar", () => {

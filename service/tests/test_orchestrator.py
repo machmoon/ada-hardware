@@ -292,7 +292,9 @@ def test_the_ladder_steps_down_through_flash_and_flash_lite_without_repeats():
 
 def test_a_503_on_the_root_fails_over_and_says_so():
     down = DownLlm(model="gemini-3.7-flash", error=UNAVAILABLE)
-    backup = FakeLlm(model="gemini-3.5-flash", responses=[text_response("Which voltage?")])
+    backup = FakeLlm(
+        model="gemini-3.5-flash", responses=[text_response("Which voltage?")]
+    )
     events: list[dict] = []
     model = _ladder(down, backup)
 

@@ -79,7 +79,8 @@ def test_a_cap_on_a_signal_or_a_connector_rail_is_not_decoupling():
         {
             "devices": {
                 "ATtiny85": {"pins": TINY},
-                "J1": {"kind": "connector", "package": "PinHeader_1x02_P2.54mm", "pins": {"VBUS": "1", "GND": "2"}},
+                "J1": {"kind": "connector", "package": "PinHeader_1x02_P2.54mm",
+                       "pins": {"VBUS": "1", "GND": "2"}},
             },
             "passives": {
                 "C1": {"type": "capacitor", "value": "10u"},

@@ -130,7 +130,9 @@ def outstretched_pose(spec: MechanismSpec) -> list[float]:
     return q
 
 
-def max_reach_nm(spec: MechanismSpec, offsets_nm: Sequence[int], steps: int = 12) -> tuple[int, list[float]]:
+def max_reach_nm(
+    spec: MechanismSpec, offsets_nm: Sequence[int], steps: int = 12
+) -> tuple[int, list[float]]:
     """Largest horizontal distance of the tool point from the base axis over a
     grid of hinge angles inside their ranges (twists do not change it).
 

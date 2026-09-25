@@ -520,7 +520,9 @@ def test_bridge_command_names_the_stage_and_the_board(tmp_path, monkeypatch):
     monkeypatch.setenv("SILKSCREEN_KICAD_LIVE_PYTHON", str(py))
     argv = steps.bridge_command(tmp_path / "b.kicad_pcb", "routing")
     assert argv is not None
-    assert argv[0] == str(py) and argv[1].endswith("desktop/kicad_live.py")
+    assert argv[0] == str(py)
+    # Compared as path parts: the separator is a backslash on Windows.
+    assert Path(argv[1]).parts[-2:] == ("desktop", "kicad_live.py")
     assert argv[2:] == [str(tmp_path / "b.kicad_pcb"), "routing"]
 
 
@@ -1906,7 +1908,8 @@ def test_plan_first_stops_at_the_brief_and_propose_takes_the_answers(server):
         by_marker={**scripted().by_marker, PLAN_MARKER: json.dumps(plan)}, calls=log))
 
     planned = _start(server, plan_first=True)
-    assert (planned["step"], planned["stage"], planned["next"]) == ("plan", "planned", ["propose"])
+    assert (planned["step"], planned["stage"], planned["next"]) == (
+        "plan", "planned", ["propose"])
     assert [q["ask"] for q in planned["plan"]["plan"]["questions"]] == [
         "How many degrees of freedom?", "Budget?"]
     assert "schematic" not in planned["files"]
@@ -1914,7 +1917,8 @@ def test_plan_first_stops_at_the_brief_and_propose_takes_the_answers(server):
     status, early = post(server, f"/steps/{sid}/place", {})
     assert status == 409, early
 
-    status, proposed = post(server, f"/steps/{sid}/propose", {"answers": {"0": "6 DOF"}})
+    status, proposed = post(
+        server, f"/steps/{sid}/propose", {"answers": {"0": "6 DOF"}})
     assert status == 200, proposed
     assert proposed["stage"] == "proposed" and proposed["next"] == ["place"]
     propose_prompt = next(c["prompt"] for c in log if PLAN_MARKER not in c["prompt"]

@@ -91,8 +91,11 @@ Desktop.ini
 placed.kicad_pcb
 generated.kicad_pcb
 
-# Local training traces and checkpoints
-artifacts/
+# Local training traces and checkpoints, at the repo root only. Unanchored,
+# this rule dropped app/src/components/artifacts/ (the order panel and the
+# artifact tabs the workbench imports) from the ada-v1 snapshot branch;
+# origin/main tracks those files.
+/artifacts/
 
 # Seeded design canvas — generated from design/*.dc.html, 2MB of bundled editor
 design/silkscreen-ui.html
@@ -119,3 +122,8 @@ enclosure.png
 # Agent scratch space, never part of the project.
 scratchpad/
 data/voice_samples/
+
+# Claude Code session files for this checkout; per-machine, never repository content.
+.claude/
+# AWS CloudFormation templates for the site's account; deployed by hand, kept out of the public tree.
+infra/

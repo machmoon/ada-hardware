@@ -122,7 +122,9 @@ class _K:
         ``centre`` gives the other two coordinates (the axis entry is ignored)."""
         b = self.b
         lo, hi = min(a0, a1), max(a0, a1)
-        c = b.Cylinder(d / 2, hi - lo, align=(b.Align.CENTER, b.Align.CENTER, b.Align.MIN))
+        c = b.Cylinder(
+            d / 2, hi - lo, align=(b.Align.CENTER, b.Align.CENTER, b.Align.MIN)
+        )
         if axis == "z":
             return b.Pos(centre[0], centre[1], lo) * c
         if axis == "y":
@@ -181,7 +183,8 @@ def _housing(k: _K, sp: ServoPlacement, act: rules.Actuator, width_nm: int,
     """``(outer solid or None, [cutters])`` for a servo housing."""
     d = housing_dims(act, top_wall=top_wall)
     c = rules.POCKET_CLEARANCE_NM
-    e, L_, h, back = act.shaft_from_end_nm, act.body_l_nm, act.body_h_nm, act.back_boss_nm
+    e, L_, h = act.shaft_from_end_nm, act.body_l_nm, act.body_h_nm
+    back = act.back_boss_nm
     half_w = width_nm / 2
     big = half_w + 1_000_000
     solid = None
@@ -200,14 +203,17 @@ def _housing(k: _K, sp: ServoPlacement, act: rules.Actuator, width_nm: int,
     if act.ear_len_nm:
         s0 = -h + act.ear_s_nm - c
         s1 = (-h + act.ear_s_nm + act.ear_t_nm + c) if top_wall else s_top
-        vr = (-big, big) if top_wall else (-act.body_w_nm / 2 - c, act.body_w_nm / 2 + c)
+        vr = ((-big, big) if top_wall
+              else (-act.body_w_nm / 2 - c, act.body_w_nm / 2 + c))
         cutters.append(_sbox(k, sp, (s0, s1),
-                             (-e - act.ear_len_nm - c, L_ - e + act.ear_len_nm + c), vr))
+                             (-e - act.ear_len_nm - c, L_ - e + act.ear_len_nm + c),
+                             vr))
         pilot = act.ear_hole_d_nm - rules.SELF_TAP_UNDERSIZE_NM
         for u in (-e - act.ear_hole_from_end_nm, L_ - e + act.ear_hole_from_end_nm):
             for v in act.ear_hole_v_nm:
                 cutters.append(_scyl(k, sp, "s", (u, v),
-                                     (s0 - rules.EAR_SCREW_DEPTH_NM, s0 + 10_000), pilot))
+                                     (s0 - rules.EAR_SCREW_DEPTH_NM, s0 + 10_000),
+                                     pilot))
     if top_wall:
         span = (c - 10_000, d.s_max_nm + 10_000)
         cutters.append(_scyl(k, sp, "s", (0, 0), span, d.opening_d_nm))
@@ -265,7 +271,8 @@ def _build_link(k: _K, spec: MechanismSpec, lay: Layout, idx: int):
         solids.append(k.box(-hw, hw, -yc - tc, yc + tc, zb, ztop))
         face = yc - _mm(ll.hub_len_nm)
         if ll.hub_len_nm > 0:
-            solids.append(k.cyl("y", (0.0, 0.0, 0.0), face, yc + _EPS, _mm(ll.hub_d_nm)))
+            solids.append(k.cyl("y", (0.0, 0.0, 0.0), face, yc + _EPS,
+                                _mm(ll.hub_d_nm)))
         cutters.append(k.cyl("y", (0.0, 0.0, 0.0), face - _EPS,
                              face + _mm(act.spline_h_nm),
                              _mm(act.spline_d_nm + 2 * rules.FIT_SLIDE_NM)))
@@ -306,7 +313,8 @@ def _build_link(k: _K, spec: MechanismSpec, lay: Layout, idx: int):
     if ll.distal in ("hinge", "twist"):
         nxt = spec.joints[idx]
         nact = rules.ACTUATORS[nxt.actuator]
-        solid, cut = _housing(k, ll.servo, nact, ll.width_nm, nxt.bearing, top_wall=True)
+        solid, cut = _housing(k, ll.servo, nact, ll.width_nm, nxt.bearing,
+                              top_wall=True)
         solids.append(solid)
         cutters.extend(cut)
     else:
@@ -368,11 +376,15 @@ def matrix_location(m: Mat):
     return b.Location(t)
 
 
-def posed_parts(model: MechanismModel, q_rad: Sequence[float] | None = None) -> list[tuple[str, Any]]:
+def posed_parts(
+    model: MechanismModel, q_rad: Sequence[float] | None = None
+) -> list[tuple[str, Any]]:
     """Every part moved to the world frame at pose ``q_rad`` (default home)."""
     q = [0.0] * len(model.spec.joints) if q_rad is None else list(q_rad)
     frames = link_frames(model.spec, model.layout.offsets_nm, q)
-    return [(p.name, p.local.moved(matrix_location(frames[p.link]))) for p in model.parts]
+    return [
+        (p.name, p.local.moved(matrix_location(frames[p.link]))) for p in model.parts
+    ]
 
 
 def export_mechanism(
@@ -384,7 +396,9 @@ def export_mechanism(
     b = require_kernel()
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    children = [b.Part(shape.wrapped, label=name) for name, shape in posed_parts(model, q_rad)]
+    children = [
+        b.Part(shape.wrapped, label=name) for name, shape in posed_parts(model, q_rad)
+    ]
     step = directory / f"{stem}.step"
     try:
         b.export_step(b.Compound(label=stem, children=children), step)

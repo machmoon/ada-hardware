@@ -447,11 +447,11 @@ export const BillingSetup = ({
         <div id="billing" className="space-y-3" data-testid="billing-settings">
             <Header
                 isMainTitle
-                title="Billing"
+                title="Usage metering (Stripe, operator setup)"
                 description={
                     report?.ready
                         ? `Configured in ${report.mode} mode. Runs draw down credits.`
-                        : "Not set up yet. Runs are free and unmetered until it is."
+                        : "Not set up yet. Runs are free and unmetered until it is. This is not the Ada Pro purchase above."
                 }
             />
             {body}

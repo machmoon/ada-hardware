@@ -2,20 +2,18 @@
   "name": "kaleo",
   "private": false,
   "version": "0.3.1",
-  "description": "Ada - the AI hardware engineer. A desktop overlay for the Silkscreen PCB engine: describe a circuit, watch it get designed, reviewed, and written out as a KiCad board.",
+  "description": "Ada is an AI hardware engineer that works beside KiCad: describe a board, get a schematic, a placed and routed board and a printable case, each checked by KiCad's own ERC and DRC. This is the desktop app; the engine is the silkscreen package at the repository root.",
   "author": {
-    "name": "Srikanth Nani",
-    "email": "mail@srikanthnani.com",
-    "url": "https://www.srikanthnani.com"
+    "name": "Patrick Liu"
   },
   "license": "GPL-3.0",
-  "homepage": "https://github.com/iamsrikanthnani/pluely#readme",
+  "homepage": "https://github.com/machmoon/Ada#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/iamsrikanthnani/pluely.git"
+    "url": "git+https://github.com/machmoon/Ada.git"
   },
   "bugs": {
-    "url": "https://github.com/iamsrikanthnani/pluely/issues"
+    "url": "https://github.com/machmoon/Ada/issues"
   },
   "keywords": [
     "ai-assistant",
@@ -49,6 +47,7 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
+    "@revenuecat/purchases-js": "^1.64.0",
     "@tailwindcss/vite": "^4.1.12",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-autostart": "^2.5.0",

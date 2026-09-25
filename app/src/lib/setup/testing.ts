@@ -19,6 +19,8 @@ export const STUB_DEFAULTS: StubSettings = {
   "setup.skipped": [],
   "setup.completedAt": 0,
   "tour.completed": false,
+  "purchases.appUserId": "",
+  "purchases.lastVerdict": { verdict: "unknown", at: "" },
 };
 
 export function makeSettingsStub(initial: StubSettings = {}) {

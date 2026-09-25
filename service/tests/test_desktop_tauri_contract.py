@@ -3,6 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+# The whole module is skipped at collection: it pins the retired desktop/
+# Tauri shell's config, which nothing in the product path reaches.
+pytestmark = pytest.mark.skip(
+    reason="desktop/ sidecar is retired; the live desktop app is app/ "
+    "(CLAUDE.md, 2026-09-06)"
+)
+
 ROOT = Path(__file__).resolve().parents[2]
 TAURI = ROOT / "desktop" / "src-tauri"
 

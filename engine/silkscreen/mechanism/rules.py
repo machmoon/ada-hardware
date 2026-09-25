@@ -194,7 +194,8 @@ ACTUATORS: dict[str, Actuator] = {
         spline_d_nm=mm(9.0), spline_h_nm=mm(1.5), back_boss_nm=mm(3.5),
         ear_len_nm=0, ear_t_nm=0, ear_s_nm=0, ear_hole_d_nm=0,
         ear_hole_from_end_nm=0, ear_hole_v_nm=(),
-        stall_unmm=int(16.5 * KGCM_TO_UNMM), stall_note="16.5 kg-cm at 6 V (7.4 V C001)",
+        stall_unmm=int(16.5 * KGCM_TO_UNMM),
+        stall_note="16.5 kg-cm at 6 V (7.4 V C001)",
         mass_mg=55_000, interface="serial_bus",
     ),
     "STS3215_12V": Actuator(

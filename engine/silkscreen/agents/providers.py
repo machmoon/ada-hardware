@@ -105,7 +105,9 @@ def provider_order(env: Mapping[str, str] | None = None) -> list[str]:
     if missing:
         raise NoProviderConfigured(
             f"{PROVIDER_ENV_VAR}={raw!r} names "
-            + "; ".join(f"{p}, which is not configured ({_missing(p, env)})" for p in missing)
+            + "; ".join(
+                f"{p}, which is not configured ({_missing(p, env)})" for p in missing
+            )
         )
     return order
 

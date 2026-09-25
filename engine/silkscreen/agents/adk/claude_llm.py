@@ -65,7 +65,9 @@ _NON_STREAMING_MAX_TOKENS = 20_000
 class SilkscreenClaudeLlm(AnthropicLlm):
     """ADK's ``AnthropicLlm`` with the request corrections described above."""
 
-    def _build_anthropic_kwargs(self, llm_request, messages, tools, tool_choice, thinking):
+    def _build_anthropic_kwargs(
+        self, llm_request, messages, tools, tool_choice, thinking
+    ):
         with warnings.catch_warnings():
             # The adapter warns that ``thinking_level`` is ignored; it is not
             # ignored here, it is translated below.
@@ -87,7 +89,8 @@ class SilkscreenClaudeLlm(AnthropicLlm):
             if word in ("low", "medium", "high") and "output_config" not in kwargs:
                 kwargs["output_config"] = {"effort": word}
             kwargs["max_tokens"] = min(
-                int(kwargs.get("max_tokens") or self.max_tokens) + THINKING_HEADROOM_TOKENS,
+                int(kwargs.get("max_tokens") or self.max_tokens)
+                + THINKING_HEADROOM_TOKENS,
                 _NON_STREAMING_MAX_TOKENS,
             )
         return kwargs

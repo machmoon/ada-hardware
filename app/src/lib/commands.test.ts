@@ -142,16 +142,17 @@ describe("the menu and the interpreter share one vocabulary", () => {
   });
 
   it("the vocabulary covers every step plus the restart, and nothing else", () => {
-    expect(COMMAND_VOCABULARY.map((entry) => entry.command.kind)).toEqual([
-      "approve",
-      "approve",
-      "approve",
-      "approve",
-      "approve",
-      "approve",
-      "approve",
-      "restart",
+    // Stated here rather than derived from STEP_ORDER, which is what the
+    // vocabulary is built from: a step added to the pipeline must be added
+    // here too, on purpose, or this fails (plan, 2026-09-16, is the precedent).
+    const steps = ["plan", "propose", "place", "route", "review", "sourcing", "order", "case"] as const;
+    expect(COMMAND_VOCABULARY.map((entry) => entry.command)).toEqual([
+      ...steps.map((step) => ({ kind: "approve", step })),
+      { kind: "restart" },
     ]);
+    // A step with no words could never be spoken or typed, so the menu
+    // would offer it and the interpreter would refuse it.
+    for (const entry of COMMAND_VOCABULARY) expect(entry.phrases.length).toBeGreaterThan(0);
     expect(phrasesFor({ kind: "approve", step: "route" })).toContain("copper");
     expect(phrasesFor({ kind: "restart" })).toContain("start over");
     // The kinds the vocabulary has no words for: nothing selects them by

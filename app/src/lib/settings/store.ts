@@ -34,10 +34,12 @@ import {
 
 export type {
   NotifyOs,
+  PurchasesLastVerdict,
+  PurchasesVerdict,
   SettingKey,
   SettingsSchema,
 } from "./keys";
-export { SETTING_DEFAULTS, SETTINGS_STORE_FILE, SETUP_VERSION } from "./keys";
+export { SETTING_DEFAULTS, SETTINGS_STORE_FILE, SETUP_VERSION, UUID_RE, isUuid } from "./keys";
 
 /** The Tauri event the Rust side emits when it wrote `setup.*` itself. */
 export const SETUP_CHANGED_EVENT = "kaleo-setup-changed";
