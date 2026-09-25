@@ -6,31 +6,31 @@ experience, the purchase, then the category. It was recorded on 2026-09-25 as on
 run of the golden intent (below) through Ada's desktop UI against the local engine.
 
 **One-line pitch:** Ada is an AI hardware engineer that works beside KiCad:
-describe a board, get a schematic, a placed and routed board and a printable
-case, each checked by KiCad's own ERC and DRC.
+describe a board, get a schematic and a placed and routed board checked by KiCad's
+own ERC and DRC, and a printable case checked clause by clause on the solid.
 
 ---
 
-## The cut (about 100 s)
+## The cut (about 110 s)
 
 Every row after the title is the same run. Waits are sped up and labelled with the
 factor; the narration is Kokoro text-to-speech (`af_heart`, the voice Ada speaks with).
 
 | Beat | On screen | Narration |
 |---|---|---|
-| Title | Title card | "A new circuit board starts with a day of datasheets and drawing. Ada does that day, beside KiCad." |
-| Intent | The strip: the golden intent typed, run options opened, the AMS1117 datasheet URL added, submit | "Describe the board in one sentence, and hand Ada the regulator's datasheet." |
-| Plan | Planning (sped up), then the plan's questions with their defaults; "No" typed into the input-protection question; Propose circuit | "Ada plans before it draws, and asks only what changes the design. Input protection? No." |
-| Build | Propose, Place, Route on the step rail (sped up) | "It proposes a circuit that has to pass validation, places the parts with a constraint solver, and routes the copper. Sped up here." |
-| KiCad | `kicad-cli sch export svg` of the run's schematic, then `kicad-cli pcb render` of the routed board | "These are KiCad's own renders of the files Ada wrote. Ground is a connected copper pour." |
-| Review | Review on the strip, then the output-capacitor finding with its datasheet citation | "Then Ada argues against its own design. The output capacitor's type is unspecified, and a low-ESR ceramic would make this regulator oscillate. It cites page four." |
-| Checks | A terminal replaying `kicad-cli` ERC, DRC and schematic parity on the run's files, with their real output | "KiCad's own checks on those files: zero ERC errors, zero DRC errors, zero parity issues." |
-| Parts and case | Source the parts, Design the case, the rail rows with their receipts | "It proposes a part number for every line, and a printable case, checked clause by clause." |
-| Gate | "Prepare fab order · Ada Pro" on the strip, pressed | "Preparing the fab order is the one paid step: Ada Pro, twelve dollars a month." |
-| Purchase | Settings › Ada Pro, Buy, the RevenueCat Test Store modal, `pro` active in `CustomerInfo` | "The purchase runs through the RevenueCat SDK, and the pro entitlement unlocks the step. This is the Test Store, so no money moved." |
-| Order | Back on the strip, Prepare fab order runs; "Every stage has run. Nothing was ordered." | "The order pack is ready for a person to review and send. Ada never orders on its own." |
-| ESP32 | The 2026-09-16 ESP32 card (scripted circuit, real engine) | "Same engine on an ESP32 board: eighteen parts, every net routed, zero DRC errors." |
-| Close | Repo URL, licences, Next Gen, Test Store note | "Ada is open source, built by a student, and entered in Next Gen." |
+| Title | Title card | "A first circuit board costs a day of datasheets and drawing. Ada, an AI hardware engineer, does that day beside KiCad." |
+| Intent | The strip: the golden intent typed, then shown whole with the ceramic output capacitor highlighted; run options opened, the AMS1117 datasheet URL added, submit | "Describe the board in one sentence, and hand Ada the regulator's datasheet." |
+| Plan | Planning (sped up), then the plan's three questions with their defaults; "300 mA" and "No" typed; Propose circuit | "Ada plans before it draws, and asks only what changes the design: the load current, the connector, a power switch." |
+| Build | Propose, Place, Route on the step rail (sped up) | "It proposes a circuit that has to pass validation, places the parts with a constraint solver, and routes the copper." |
+| KiCad | `kicad-cli sch export svg` of the run's schematic, then `kicad-cli pcb render` of the routed board with its ground pour filled by KiCad | "These are KiCad's own renders of the files Ada wrote, with ground as a filled copper pour." |
+| Review | Review on the strip; the blocker (power LED wired backwards), then the output-capacitor finding with its datasheet p.4 citation | "Then Ada argues against its own design. It catches the power LED wired backwards, a blocker. And it questions the ceramic output capacitor the prompt asked for, citing the datasheet, page four." |
+| Checks | A terminal replaying `kicad-cli` ERC, DRC and schematic parity on the run's files, with their real output | "KiCad's own checks on those files: zero ERC errors, zero DRC errors, and the schematic and board agree." |
+| ESP32 | The ESP32 card: that board rendered by KiCad, numbers from `board_eval.py --only esp32_devboard` on 2026-09-25 (scripted circuit, real engine) | "Same engine, bigger board: an eighteen-part ESP32, every net connected, all three KiCad checks at zero." |
+| Parts and case | Source the parts, Design the case, the rail rows with their receipts; the case kernel's own render of the case | "It proposes part numbers for eleven of twelve parts, none confirmed yet, and a printable case: twelve of thirteen checks pass." |
+| Gate | "Prepare fab order · Ada Pro" on the strip, pressed | "Nothing up to here needs Ada Pro. Preparing the fab order is the one paid step: twelve dollars a month." |
+| Purchase | Settings › Ada Pro (`active: no`, Buy), the RevenueCat Test Store modal, `pro` active in `CustomerInfo` | "The purchase runs through the RevenueCat SDK, and the pro entitlement unlocks the step. This is the Test Store, so no money moved." |
+| Order | Back on the strip, "Prepare fab order · 1 call" (unlocked) is pressed; the order row reads not orderable, 1 blocker; "Every stage has run. Nothing was ordered." | "The fab pack is prepared, and it says what still blocks an order. Ada never orders on its own." |
+| Close | Repo URL, licences, Next Gen, Test Store note | "Ada is open source, and the engine is free. Ada Pro, through RevenueCat, is the one paid step." |
 
 ### How it was recorded
 

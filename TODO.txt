@@ -1843,3 +1843,22 @@ verifier set (engine/silkscreen/verify/) plus a receipt.
   which now fails. Decide whether delivery should require that scope.
 - open: meetbot/tests/test_session.py::test_init_scripts_run_before_the_page_scripts
   needs `playwright install` on this machine (environment, not code).
+
+- open (found 2026-09-25, Shipaton recording review): the order pack's Gerbers
+  (fab.gerber_copper) plot pads, tracks and vias and never a zone, so a board whose
+  ground is a pour (every generated board since 2026-09-15) ships Gerbers with no
+  GND copper. The order gate now blocks on it under `pour-unfilled` with that
+  reason (it used to block under `unrouted-nets`, blaming the router).
+  test_order.py::test_the_pack_gerbers_really_carry_no_pour pins the premise; when
+  the writer draws pours (region G36/G37 of the outline minus clearance cut-outs,
+  with thermal reliefs), that test fails and the issue can drop to a warning. The
+  alternative is plotting the pack's Gerbers with kicad-cli after a zone refill
+  when KiCad is installed.
+- open (same review): order.preflight never sees the review. In the recorded run
+  the critic's blocker (a ceramic 22 uF output cap on an AMS1117) stood while the
+  order manifest's own gate had nothing to say about it, and the BOM in the pack
+  sourced exactly that ceramic. Pass session review blockers into the order gate
+  in service/steps.py::_order.
+- open (same review): the order manifest's board width/height/area are the
+  solver's box; the Edge.Cuts outline is 2 * fab._MARGIN_NM larger each way. Read
+  them from the outline so a fab quote is priced on the real board.

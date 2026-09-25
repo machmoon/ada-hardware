@@ -3244,9 +3244,13 @@ def test_an_unrouted_board_is_not_orderable(server, unrouted_boards):
 
     assert order["orderable"] is False
     blockers = [i for i in order["issues"] if i["severity"] == "blocker"]
-    assert [i["code"] for i in blockers] == ["unrouted-nets"]
+    codes = [i["code"] for i in blockers]
+    assert "unrouted-nets" in codes
+    # A ground pour is not "unrouted", but the pack's own Gerbers do not draw
+    # it, so it blocks under its own code (order.py, ``pour-unfilled``).
+    assert set(codes) <= {"unrouted-nets", "pour-unfilled"}
 
-    issue = blockers[0]
+    issue = next(i for i in blockers if i["code"] == "unrouted-nets")
     assert set(issue) == {"code", "severity", "title", "detail", "parts"}
     # Substrings taken from the detail this build actually emits.
     assert "no copper between them" in issue["detail"]

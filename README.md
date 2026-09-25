@@ -6,9 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
 
 **Ada is an AI hardware engineer that works beside KiCad: describe a board, get a
-schematic, a placed and routed board and a printable case, each checked by KiCad's own
-ERC and DRC.** For a beginner before the first dead board, and a senior engineer before
-fab.
+schematic and a placed and routed board checked by KiCad's own ERC and DRC, and a
+printable case checked clause by clause on the solid.** For a beginner before the first
+dead board, and a senior engineer before fab.
 
 - **The problem.** A first board usually comes back dead over something its datasheet
   stated plainly. Every EDA tool checks that a wire reaches a pin; none checks that it
@@ -189,7 +189,7 @@ Every stage is a real KiCad file you can open and inspect on its own, so you can
 where a design went wrong instead of only seeing the last artifact.
 
 ```
-3902 tests collected — no network, no API key, no KiCad install
+3903 tests collected — no network, no API key, no KiCad install
 ```
 
 **Next:** [full install guide and troubleshooting](docs/install.md) ·
@@ -606,7 +606,7 @@ treats the board file as the interface.
 | Requires KiCad running | Yes | **No** |
 | Headless / CI | Hard | **Native** |
 | Platform lock | KiCad's plugin loader | **None — pure Python** |
-| Testable without KiCad | No | **Yes, all 3902 tests** |
+| Testable without KiCad | No | **Yes, all 3903 tests** |
 
 ### What it reads
 
@@ -1254,7 +1254,7 @@ engine/
       adk/          ADK dynamic workflow over the same stage bodies
     audit/        optional visual review of a finished board
     specreview.py validated meeting agenda for what a run could not settle
-  tests/          3902 tests — no network, no API keys, no KiCad
+  tests/          3903 tests — no network, no API keys, no KiCad
     fixtures/     ref.kicad_pcb -- 11-footprint board fixture
 scripts/
   demo.py         end-to-end: read -> place -> write -> verify

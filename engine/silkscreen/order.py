@@ -316,12 +316,12 @@ def preflight(
     # whole point of the gate.
     #
     # A net ``route_board`` handed to a copper pour (``filled_nets``, ground
-    # by default since 2026-09-15) is carried by copper too, just not by
-    # tracks: the router never routes it and never calls it unrouted. Before
-    # this line the gate read "no tracks" as "no copper" and blocked every
-    # generated board on GND. It clears here and is named below instead,
-    # because the pour is saved unfilled and a fab file plotted before a
-    # refill would carry no ground at all.
+    # by default since 2026-09-15) is not *unrouted*: the router never routes
+    # it and never calls it unrouted, and in KiCad, with the zone filled, it
+    # is connected (``kicad-cli pcb drc --refill-zones`` reports 0
+    # unconnected). So it does not count here, where the complaint is "the
+    # router left this open". It is not orderable from this pack either,
+    # though, and ``pour-unfilled`` below says why in its own words.
     carried = set(board.routed_nets) | set(board.filled_nets)
     open_nets = tuple(
         net for net in _nets_needing_copper(board, spec) if net not in carried
@@ -350,21 +350,29 @@ def preflight(
         net for net in _nets_needing_copper(board, spec) if net in filled
     )
     if poured:
+        # A blocker, not a warning: the fab files in this pack come from
+        # :func:`silkscreen.fab.gerber_copper`, which plots pads, tracks and
+        # vias and never a zone, so the Gerbers a person would send carry no
+        # copper for these nets at all. The .kicad_pcb in the pack is right
+        # (KiCad fills the pour); the pack's own Gerbers are not. Measured
+        # 2026-09-25: the golden LDO intent's F.Cu Gerber has no G36/G37
+        # region, and every GND pad reaches only its own stitching via.
         issues.append(
             OrderIssue(
                 code="pour-unfilled",
-                severity=OrderIssueSeverity.WARNING,
+                severity=OrderIssueSeverity.BLOCKER,
                 title=(
-                    f"{len(poured)} net(s) are carried by a copper pour "
-                    f"saved unfilled"
+                    f"{len(poured)} net(s) are carried by a copper pour this "
+                    f"pack's Gerbers do not contain"
                 ),
                 detail=(
                     f"{_summarise_nets(poured)} reach their pads through a "
-                    f"copper pour, not tracks. The board file stores the pour "
-                    f"outline and KiCad computes the copper: fill all zones "
-                    f"(B in the board editor, or kicad-cli with "
-                    f"--refill-zones) before plotting Gerbers, or the fab "
-                    f"files carry no copper for these nets."
+                    f"copper pour, not tracks. The board file carries the pour "
+                    f"and KiCad fills it, but the Gerbers in this pack are "
+                    f"plotted by Ada's own writer, which does not draw pours "
+                    f"yet, so they carry no copper for these nets. Open the "
+                    f"board in KiCad, fill all zones (B), and plot the Gerbers "
+                    f"from KiCad; do not send this pack's Gerbers."
                 ),
             )
         )

@@ -198,11 +198,12 @@ def test_single_pad_nets_do_not_trigger_unrouted_nets():
     assert "unrouted-nets" not in codes
 
 
-def test_a_net_carried_by_a_pour_is_not_unrouted():
+def test_a_net_carried_by_a_pour_is_not_unrouted_but_still_blocks():
     """Ground is poured, not tracked (``route_board(ground_fill=True)``), so
     the router lists it in ``filled_nets`` and in neither routed nor unrouted.
-    The gate used to read that as "no copper" and block every generated
-    board on GND; the pour is copper, so it clears, and says it is unfilled."""
+    It is not "unrouted", but the pack's own Gerbers (``fab.gerber_copper``)
+    never draw a zone, so the order still blocks, under ``pour-unfilled``,
+    which says to plot Gerbers from KiCad after filling the zones."""
     parts = [_placed("R1", "GND"), _placed("R2", "GND", x_nm=mm(3))]
     board = _board(parts)
     board.filled_nets = ["GND"]
@@ -210,9 +211,22 @@ def test_a_net_carried_by_a_pour_is_not_unrouted():
     codes = {issue.code for issue in pre.issues}
     assert "unrouted-nets" not in codes
     pour = next(i for i in pre.issues if i.code == "pour-unfilled")
-    assert pour.severity == OrderIssueSeverity.WARNING
-    assert "GND" in pour.detail and "refill" in pour.detail
-    assert pre.orderable is True
+    assert pour.severity == OrderIssueSeverity.BLOCKER
+    assert "GND" in pour.detail and "KiCad" in pour.detail
+    assert pre.orderable is False
+
+
+def test_the_pack_gerbers_really_carry_no_pour():
+    """The premise of the blocker above, checked on the writer itself: a
+    board whose only copper for GND is a pour gets no region (G36/G37) in
+    its copper Gerber. When the writer learns to draw pours this test fails,
+    and ``pour-unfilled`` can go back to being a warning."""
+    from silkscreen.fab import gerber_copper
+
+    parts = [_placed("R1", "GND"), _placed("R2", "GND", x_nm=mm(3))]
+    board = _board(parts)
+    board.filled_nets = ["GND"]
+    assert "G36" not in gerber_copper(board)
 
 
 def test_a_pour_clears_only_its_own_net():
@@ -231,10 +245,12 @@ def test_a_pour_clears_only_its_own_net():
     assert pre.orderable is False
 
 
-def test_a_routed_board_with_a_ground_pour_is_orderable():
+def test_a_routed_board_with_a_ground_pour_names_the_pour_not_unrouted_nets():
     """End to end on the real emitter path: build, route with the default
     ground pour, then preflight. Measured 2026-09-25: a desktop step run of
-    the golden LDO intent answered "not orderable, 1 blocker: GND" here."""
+    the golden LDO intent said "GND has no copper connecting them", which
+    blamed the router for a net it had handed to the pour. The blocker that
+    remains is the true one: the pack's Gerbers do not draw the pour."""
     from silkscreen.board import route_board
 
     spec = parse_circuit_spec(
@@ -258,6 +274,7 @@ def test_a_routed_board_with_a_ground_pour_is_orderable():
     codes = {issue.code for issue in pre.issues}
     assert "unrouted-nets" not in codes, [i.detail for i in pre.issues]
     assert "pour-unfilled" in codes
+    assert pre.orderable is False
 
 
 # --------------------------------------------------- preflight: structural blockers
