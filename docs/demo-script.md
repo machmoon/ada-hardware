@@ -1,14 +1,9 @@
-# The 115-second demo video
+# The demo video
 
-The Shipaton entry is a video under two minutes, not a live run on stage. The
-shot list below is in the order RevenueCat's judging guide asks for: the pitch,
-the core experience, the purchase, then the category. Every row names what is on
-screen, one sentence of narration, and whether the take is live or pre-baked.
-Live means the engine runs in the take; pre-baked means a recording or a file
-made before the take, and the narration says so where a viewer could be misled.
-
-The hazards list at the bottom is what is true on this Mac today (2026-09-24).
-Read it before recording; every item on it has caused a wasted take.
+The Shipaton entry is a video under two minutes, not a live run on stage. The cut
+below is in the order RevenueCat's judging guide asks for: the pitch, the core
+experience, the purchase, then the category. It was recorded on 2026-09-25 as one live
+run of the golden intent (below) through Ada's desktop UI against the local engine.
 
 **One-line pitch:** Ada is an AI hardware engineer that works beside KiCad:
 describe a board, get a schematic, a placed and routed board and a printable
@@ -16,60 +11,62 @@ case, each checked by KiCad's own ERC and DRC.
 
 ---
 
-## Shot list
+## The cut (about 100 s)
 
-RevenueCat's order: pitch, core experience, purchase, categories. The frame is Ada's first day as the hardware engineer at a company that does not exist; the people are staged, Ada is not (the seeding scripts are in `scripts/demo/`, and DEVPOST.md says which is which). Drop the ESP32 row first if the cut runs long.
+Every row after the title is the same run. Waits are sped up and labelled with the
+factor; the narration is Kokoro text-to-speech (`af_heart`, the voice Ada speaks with).
 
-| Seconds | On screen | Narration (one sentence) | Take |
-|---|---|---|---|
-| 0-8 | Title card: the product sentence, then the strip over the desktop. | "Ada is an AI hardware engineer that works beside KiCad. This is its first day at Perch Robotics." | card |
-| 8-18 | The menu-bar clock reads 02:13. A PagerDuty banner. Gmail: the PagerDuty mail. (Slack is not in this cut.) | "Two in the morning, the rev A power board browns out in the field again, and the on-call engineer is Ada. It does not sleep." | staged: `scripts/demo/page.sh --mail` |
-| 18-38 | Google Meet standup grid. Ada's tile joins (`python -m meetbot join`). Pat states the rev B board; someone says the 5 volt line; Ada answers out loud. Cut to the recap the bot posts. | "At standup Ada joins the call, listens, and takes the request out loud: a 3.3 volt regulator board off USB-C with a green LED. The 5 volt idea was not an order, so it is recorded, not built." | live; crowd tiles staged |
-| 38-58 | Gmail: the AVDD thread, twelve replies deep, and Maya's datasheet mail. The strip picks the idea from the inbox (source: meet). Propose circuit, Place parts, Route copper, sped up, the ground pour last. | "It reads the datasheet from the thread nobody could finish, proposes a validated circuit, places the parts with a constraint solver, and routes the copper with a connected ground pour." | inbox staged (`seed_gmail.py`); the run live, waiting cut with a 'sped up' label |
-| 58-72 | Review tab: the finding that cites the datasheet page. Then a terminal capture of `kicad-cli sch erc` and `pcb drc --schematic-parity` on the written project, or `docs/measurements/board-eval-2026-09-16.json` on screen if KiCad is not installed. | "Then it argues against its own design, citing the page. KiCad's own ERC and DRC, run on the files, report zero." | live review; KiCad capture only if installed |
-| 72-95 | Strip: Prepare fab order · Ada Pro. Settings, Ada Pro, Buy, the RevenueCat Test Store modal, `pro` active in CustomerInfo, back to the strip, Order runs. Gmail: 'Fab order: Feedr rev B' sent with the zip. Calendar: 'Design review, Ada attending' with a Meet link. | "The fab order is Ada Pro. The purchase runs through the RevenueCat SDK, the entitlement unlocks the step, and the order and the review invite go out by Gmail and Calendar. This is the Test Store, so no money moved." | live; rehearse twice |
-| 95-105 | ESP32 dev board from `scripts/board_eval.py --keep`: 18 parts, 100 % routed, coupled USB pair, DRC 0. On-screen label: scripted circuit, real engine. | "Same engine on an ESP32 board: eighteen parts, every net routed, USB as a coupled pair, zero DRC errors." | pre-baked |
-| 105-115 | Close card: repo URL, MIT engine and GPL-3.0 desktop app, Next Gen. One line: the colleagues are staged, everything Ada did is a real run. | "The colleagues are staged. Everything Ada did is real. I'm a student, this is a macOS app with no store release yet, so it is entered in Next Gen." | card |
+| Beat | On screen | Narration |
+|---|---|---|
+| Title | Title card | "A new circuit board starts with a day of datasheets and drawing. Ada does that day, beside KiCad." |
+| Intent | The strip: the golden intent typed, run options opened, the AMS1117 datasheet URL added, submit | "Describe the board in one sentence, and hand Ada the regulator's datasheet." |
+| Plan | Planning (sped up), then the plan's questions with their defaults; "No" typed into the input-protection question; Propose circuit | "Ada plans before it draws, and asks only what changes the design. Input protection? No." |
+| Build | Propose, Place, Route on the step rail (sped up) | "It proposes a circuit that has to pass validation, places the parts with a constraint solver, and routes the copper. Sped up here." |
+| KiCad | `kicad-cli sch export svg` of the run's schematic, then `kicad-cli pcb render` of the routed board | "These are KiCad's own renders of the files Ada wrote. Ground is a connected copper pour." |
+| Review | Review on the strip, then the output-capacitor finding with its datasheet citation | "Then Ada argues against its own design. The output capacitor's type is unspecified, and a low-ESR ceramic would make this regulator oscillate. It cites page four." |
+| Checks | A terminal replaying `kicad-cli` ERC, DRC and schematic parity on the run's files, with their real output | "KiCad's own checks on those files: zero ERC errors, zero DRC errors, zero parity issues." |
+| Parts and case | Source the parts, Design the case, the rail rows with their receipts | "It proposes a part number for every line, and a printable case, checked clause by clause." |
+| Gate | "Prepare fab order · Ada Pro" on the strip, pressed | "Preparing the fab order is the one paid step: Ada Pro, twelve dollars a month." |
+| Purchase | Settings › Ada Pro, Buy, the RevenueCat Test Store modal, `pro` active in `CustomerInfo` | "The purchase runs through the RevenueCat SDK, and the pro entitlement unlocks the step. This is the Test Store, so no money moved." |
+| Order | Back on the strip, Prepare fab order runs; "Every stage has run. Nothing was ordered." | "The order pack is ready for a person to review and send. Ada never orders on its own." |
+| ESP32 | The 2026-09-16 ESP32 card (scripted circuit, real engine) | "Same engine on an ESP32 board: eighteen parts, every net routed, zero DRC errors." |
+| Close | Repo URL, licences, Next Gen, Test Store note | "Ada is open source, built by a student, and entered in Next Gen." |
+
+### How it was recorded
+
+Headless, so nothing drove the desktop: the app's own React UI from its Vite dev server
+(`cd app && npm run dev`, port 1420) in Chrome through Playwright, with two shims applied
+from outside the page. `@tauri-apps/plugin-http`'s `fetch` became the browser's, and the
+engine's responses were fulfilled by Playwright with an allow-origin header (the service
+itself still ships no CORS, on purpose); `window.__TAURI_INTERNALS__` answered the few
+shell commands the strip asks at start. The step session was started with `kicad_live`
+off so the engine did not open KiCad windows. Two pages in one browser context stand in
+for the two webviews, so the pane request and the purchase verdict cross between them
+over `localStorage` exactly as they do in the app. Frames were captured with Playwright
+screenshots at 2x, the cursor was drawn afterwards from the logged click positions, and
+the cut was assembled with Pillow and ffmpeg. KiCad's renders and checks ran with
+`kicad-cli` 10.0.6 on the files the run wrote.
 
 ## Before recording
 
-The staged company, once, from the repo root (each script says what it did and
-what it could not):
+For a live take on the desktop (the recorded cut above was headless):
 
-- `./.venv/bin/python scripts/demo/seed_gmail.py --datasheet <AMS1117.pdf>`: one
-  browser consent for `gmail.insert` into its own token file, then the onboarding
-  mails, the AVDD thread and the datasheet mail land in the signed-in inbox.
-- `./.venv/bin/python -m meetbot.session sign-in`: the bot's Chromium profile,
-  signed into the Google account whose name the Meet tile shows.
-- At record time: `scripts/demo/page.sh --mail` for the banner and the page mail,
-  then start the Meet, then `./.venv/bin/python -m meetbot join <meet-url>` and
-  admit Ada.
-- Slack is not part of this cut; `seed_slack.py` exists for when it is.
-- On camera, show Gmail through the search `perchrobotics.example` (or a label
-  made from it), never the raw inbox: the seeded mail sits between real mail.
-
-1. Install KiCad. The 0-8, 20-32 and 32-48 beats show the schematic and the
-   board in KiCad's own editors through `desktop/kicad_live.py`; without it the
-   files are still written but nothing appears on screen for those beats, and
-   the 48-60 terminal beat is cut. Install FreeCAD too if the 60-72 beat is to
-   open the case STEP; otherwise plan to show the clause receipt only.
-2. `git fetch` and confirm the checkout is the commit you mean to show.
-3. Start the engine from the Engine tab (Start engine) or with
+1. `git fetch` and confirm the checkout is the commit you mean to show.
+2. Start the engine from the Engine tab (Start engine) or with
    `./.venv/bin/silkscreen serve --port 8081`; both read `.env`. A bare
    `python -m service.app` does not, and the strip's "Engine unreachable" notice
    says which command to use.
-4. Set the model in `.env` and run the whole shot list once, end to end, before
-   the camera is on. Rehearse the purchase too: the Test Store modal is the SDK's
-   own and its layout is not ours to change.
-5. Have the RevenueCat dashboard open on the customer page in a second window so
-   the 72-92 cut is a window switch, not a login.
-6. Pre-bake the 92-102 shot: `./.venv/bin/python scripts/board_eval.py` writes
-   `board_eval.json` at the repo root; the committed copy quoted by the docs is
-   `docs/measurements/board-eval-2026-09-16.json`. Render the ESP32 board with
-   `kicad-cli pcb render` on a machine that has KiCad, or reuse
-   `site/assets/board_top.png`, which is that board.
-7. Do Not Disturb on. Microphone off unless you are narrating into it. Close
-   Slack and mail.
+3. Set the model in `.env` and run the whole cut once, end to end, before the
+   camera is on. Rehearse the purchase too: the Test Store modal is the SDK's own
+   and its layout is not ours to change.
+4. With KiCad installed and "Review in KiCad, stage by stage" on, each stage opens
+   in KiCad's own editors through `desktop/kicad_live.py`; install FreeCAD too if
+   the case STEP is to be opened.
+5. Do Not Disturb on. Microphone off unless you are narrating into it.
+
+The staged-company scripts in `scripts/demo/` (`seed_gmail.py`, `seed_slack.py`,
+`page.sh`, and the Meet bot) were written for an earlier "first day at Perch
+Robotics" cut and are not used in this one.
 
 ## The golden intent
 
@@ -113,7 +110,7 @@ intent; that hazard is gone.
   VBUS (answer "no input protection" if you want the eight-part board); and the
   case kernel passed twelve clauses and failed `min_wall` by 0.35 mm on the lid,
   which demo-fast reports as a note, so say "twelve of thirteen" if it repeats.
-- **KiCad is not installed on this Mac today.** `/Applications/KiCad` does not
+- **KiCad (updated 2026-09-25): 10.0.6 is installed again** at `~/Applications/KiCad`, linked from `/Applications/KiCad`, and every KiCad beat above ran on it. The note that follows is what was true on 2026-09-24. **KiCad was not installed on this Mac then.** `/Applications/KiCad` does not
   exist and `kicad-cli` is not on `PATH`. The 0-8, 20-32 and 32-48 beats put
   the schematic and the board on screen in KiCad's own editors, so they have
   nothing to show without it, and the 48-60 terminal beat is cut; install KiCad

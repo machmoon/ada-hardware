@@ -116,20 +116,27 @@ Run), is kept verbatim in [docs/google-hackathon.md](docs/google-hackathon.md).
 
 ---
 
-## What is staged in the video, and what is not
+## How the video was made
 
-The video shows Ada's first day at a company that does not exist. Perch Robotics, its
-seven colleagues, their Slack lines, the "which pin is AVDD" mail thread, the datasheet
-mail and the 2 am page are seeded fixtures written by three scripts in `scripts/demo/`
-(`seed_gmail.py` inserts mail into the signed-in inbox with Gmail's `messages.insert`,
-`seed_slack.py` posts the cast through one bot token, `page.sh` fires the banner).
-PagerDuty is not an integration; the page is a message, and Ada's acknowledgement is
-posted by the same script. The people are staged. Ada is not: joining the Meet call and
-speaking in it (`meetbot/`), the recap and the progress lines in the thread, the
-proposal, placement, routing and review, the Ada Pro purchase through the RevenueCat
-SDK, the fab-order mail and the calendar invite are real runs of the code in this
-repository, recorded as they happened. The Test Store purchase is simulated by
-RevenueCat, so no money moved, and the narration says so.
+The video is one live run of the golden intent (`docs/demo-script.md`) through Ada's
+desktop UI against the local engine, recorded on 2026-09-25. It was recorded headless:
+the desktop app's own React UI, served by its Vite dev server, ran in Chrome with the
+Tauri shell stubbed for capture (engine calls went through the browser's `fetch` instead
+of Rust's, and the step session was started with `kicad_live` off so no KiCad window
+opened on the desktop). Nothing on screen is a mock-up: the plan, the proposal, the
+placement, the routing, the review, sourcing, the case, the Ada Pro purchase through
+the RevenueCat SDK's Test Store modal and the order step are that run's real responses.
+Waits are cut or sped up, and every sped-up stretch carries a label saying by how much.
+The schematic and the 3D board are KiCad's own exports (`kicad-cli sch export svg`,
+`kicad-cli pcb render`) of the files the run wrote, and the terminal shows `kicad-cli`'s
+real output on those files (KiCad 10.0.6). The ESP32 card is the 2026-09-16 measurement
+of a scripted circuit through the same engine. The cursor is drawn in the edit from the
+recorded click positions, and the narration is Kokoro text-to-speech, the voice Ada
+speaks with in the app. The Test Store purchase is simulated by RevenueCat, so no money
+moved, and the narration says so.
+
+The staging scripts in `scripts/demo/` (a seeded Gmail inbox, Slack cast and a 2 am
+page for an earlier "first day at Perch Robotics" cut) are not used in this video.
 
 ## Why "checkably right"
 
@@ -490,7 +497,7 @@ valuable engineering artifact we produced was an honest list of what was actuall
 What we're proud of in the new one:
 
 - **The deterministic kernel has no network calls.** Every correctness-critical path is tested offline.
-- **3899 tests, and the interesting ones are regressions** — each pins down a specific bug
+- **3902 tests, and the interesting ones are regressions** — each pins down a specific bug
   that shipped in the previous version and can never ship again.
 - **A validation layer whose job is to say no.** The IR makes a floating capacitor and a
   hallucinated pin unrepresentable rather than merely unlikely.
@@ -531,7 +538,7 @@ resolve — and none of its code: upstream is Windows-only Electron by its autho
 statement, and the in-window pointer we shipped (feature 8) is a fresh Svelte
 implementation. The OS-level overlay that would most resemble MudrikNow is still unbuilt.
 Nothing in `engine/`, `service/`, or `scripts/` imports from it, it is
-excluded from lint and tests, and it contributes nothing to the 3899 tests or to
+excluded from lint and tests, and it contributes nothing to the 3902 tests or to
 any figure quoted in this document.
 
 `vendor/openwhispr/` is not our code either. It is

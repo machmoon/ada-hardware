@@ -198,6 +198,68 @@ def test_single_pad_nets_do_not_trigger_unrouted_nets():
     assert "unrouted-nets" not in codes
 
 
+def test_a_net_carried_by_a_pour_is_not_unrouted():
+    """Ground is poured, not tracked (``route_board(ground_fill=True)``), so
+    the router lists it in ``filled_nets`` and in neither routed nor unrouted.
+    The gate used to read that as "no copper" and block every generated
+    board on GND; the pour is copper, so it clears, and says it is unfilled."""
+    parts = [_placed("R1", "GND"), _placed("R2", "GND", x_nm=mm(3))]
+    board = _board(parts)
+    board.filled_nets = ["GND"]
+    pre = preflight(board)
+    codes = {issue.code for issue in pre.issues}
+    assert "unrouted-nets" not in codes
+    pour = next(i for i in pre.issues if i.code == "pour-unfilled")
+    assert pour.severity == OrderIssueSeverity.WARNING
+    assert "GND" in pour.detail and "refill" in pour.detail
+    assert pre.orderable is True
+
+
+def test_a_pour_clears_only_its_own_net():
+    """The pour is not a waiver: another open net still blocks."""
+    parts = [
+        _placed("R1", "GND"),
+        _placed("R2", "GND", x_nm=mm(3)),
+        _placed("R3", "SIG", x_nm=mm(6)),
+        _placed("R4", "SIG", x_nm=mm(9)),
+    ]
+    board = _board(parts, width_mm=25.0)
+    board.filled_nets = ["GND"]
+    pre = preflight(board)
+    unrouted = next(i for i in pre.issues if i.code == "unrouted-nets")
+    assert "SIG" in unrouted.detail and "GND" not in unrouted.detail
+    assert pre.orderable is False
+
+
+def test_a_routed_board_with_a_ground_pour_is_orderable():
+    """End to end on the real emitter path: build, route with the default
+    ground pour, then preflight. Measured 2026-09-25: a desktop step run of
+    the golden LDO intent answered "not orderable, 1 blocker: GND" here."""
+    from silkscreen.board import route_board
+
+    spec = parse_circuit_spec(
+        {
+            "passives": {
+                "r1": {"type": "resistor", "value": "10k"},
+                "c1": {"type": "capacitor", "value": "100nF"},
+                "c2": {"type": "capacitor", "value": "100nF"},
+            },
+            "nets": {
+                "VCC": ["r1.1", "c1.1"],
+                "GND": ["c1.2", "c2.2"],
+                "SIG": ["r1.2", "c2.1"],
+            },
+        }
+    )
+    board = build_board(spec, time_limit_s=3.0)
+    route_board(board)
+    assert "GND" in board.filled_nets
+    pre = preflight(board, spec=spec)
+    codes = {issue.code for issue in pre.issues}
+    assert "unrouted-nets" not in codes, [i.detail for i in pre.issues]
+    assert "pour-unfilled" in codes
+
+
 # --------------------------------------------------- preflight: structural blockers
 
 

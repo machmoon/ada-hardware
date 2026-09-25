@@ -314,10 +314,17 @@ def preflight(
     # than trusting a caller to pass the good news along. Only fully routed
     # nets clear: anything the router left open keeps blocking, which is the
     # whole point of the gate.
+    #
+    # A net ``route_board`` handed to a copper pour (``filled_nets``, ground
+    # by default since 2026-09-15) is carried by copper too, just not by
+    # tracks: the router never routes it and never calls it unrouted. Before
+    # this line the gate read "no tracks" as "no copper" and blocked every
+    # generated board on GND. It clears here and is named below instead,
+    # because the pour is saved unfilled and a fab file plotted before a
+    # refill would carry no ground at all.
+    carried = set(board.routed_nets) | set(board.filled_nets)
     open_nets = tuple(
-        net
-        for net in _nets_needing_copper(board, spec)
-        if net not in set(board.routed_nets)
+        net for net in _nets_needing_copper(board, spec) if net not in carried
     )
     if open_nets:
         issues.append(
@@ -334,6 +341,30 @@ def preflight(
                     f"electrically dead -- correct parts, correct outline, no "
                     f"circuit. Run the router over it before ordering, and "
                     f"check what it reports it could not finish."
+                ),
+            )
+        )
+
+    filled = set(board.filled_nets)
+    poured = tuple(
+        net for net in _nets_needing_copper(board, spec) if net in filled
+    )
+    if poured:
+        issues.append(
+            OrderIssue(
+                code="pour-unfilled",
+                severity=OrderIssueSeverity.WARNING,
+                title=(
+                    f"{len(poured)} net(s) are carried by a copper pour "
+                    f"saved unfilled"
+                ),
+                detail=(
+                    f"{_summarise_nets(poured)} reach their pads through a "
+                    f"copper pour, not tracks. The board file stores the pour "
+                    f"outline and KiCad computes the copper: fill all zones "
+                    f"(B in the board editor, or kicad-cli with "
+                    f"--refill-zones) before plotting Gerbers, or the fab "
+                    f"files carry no copper for these nets."
                 ),
             )
         )
