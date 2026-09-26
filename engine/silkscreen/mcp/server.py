@@ -79,7 +79,8 @@ import re
 import sys
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -98,8 +99,10 @@ __all__ = [
     "SUPPORTED_PROTOCOL_VERSIONS",
     "TOOLS",
     "SPAWNED_METHODS",
+    "ENGINE",
     "RateLimiter",
     "Server",
+    "Toolset",
     "classify",
     "decode",
     "dumps",
@@ -974,6 +977,38 @@ DISPATCH: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
 }
 
 
+@dataclass(frozen=True)
+class Toolset:
+    """What one MCP endpoint exposes: its tools, their handlers, and what
+    ``initialize`` says about the server.
+
+    :func:`handle` serves the engine's own tools unless it is handed another
+    set, which is how a front end (``alexabot/``) puts a different tool list
+    behind the same protocol code -- the classification, the input and output
+    validation, the rate limit -- without importing anything of its own into
+    this module. ``tools`` and ``dispatch`` are read at call time, so a test
+    that patches an entry sees it.
+
+    ``instructions`` is ``InitializeResult.instructions`` (``schema.ts:290`` at
+    ``38c84e9``): how to use this server, which a client may put in its
+    system prompt. It is sent only when set, so the engine's ``initialize``
+    answer is unchanged. ``verdict_tools`` is :data:`_VERDICT_TOOLS` for the
+    set it belongs to.
+    """
+
+    tools: Sequence[dict[str, Any]]
+    dispatch: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]]
+    server_info: Mapping[str, str] = field(default_factory=lambda: dict(SERVER_INFO))
+    instructions: str | None = None
+    verdict_tools: frozenset[str] = frozenset()
+
+
+#: The engine's tools. The *same* list and dict objects as :data:`TOOLS` and
+#: :data:`DISPATCH`, so ``monkeypatch.setitem(DISPATCH, ...)`` still reaches a
+#: call made through :func:`handle` with no toolset.
+ENGINE = Toolset(TOOLS, DISPATCH, SERVER_INFO, None, _VERDICT_TOOLS)
+
+
 # --------------------------------------------------------------------------
 # JSON Schema: the subset the schemas above use
 # --------------------------------------------------------------------------
@@ -1356,22 +1391,28 @@ def negotiate(requested: Any) -> str:
     return LATEST_PROTOCOL_VERSION
 
 
-def _initialize(req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
-    return _ok(
-        req_id,
-        {
-            "protocolVersion": negotiate(params.get("protocolVersion")),
-            "capabilities": {"tools": {"listChanged": False}},
-            "serverInfo": SERVER_INFO,
-        },
-    )
+def _initialize(
+    req_id: Any, params: dict[str, Any], toolset: Toolset = ENGINE
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "protocolVersion": negotiate(params.get("protocolVersion")),
+        "capabilities": {"tools": {"listChanged": False}},
+        "serverInfo": dict(toolset.server_info),
+    }
+    if toolset.instructions:
+        result["instructions"] = toolset.instructions
+    return _ok(req_id, result)
 
 
-def _ping(req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
+def _ping(
+    req_id: Any, params: dict[str, Any], toolset: Toolset = ENGINE
+) -> dict[str, Any]:
     return _ok(req_id, {})
 
 
-def _tools_list(req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
+def _tools_list(
+    req_id: Any, params: dict[str, Any], toolset: Toolset = ENGINE
+) -> dict[str, Any]:
     if params.get("cursor") is not None:
         # Every tool fits on one page and no nextCursor is ever issued, so
         # any cursor is one this server did not give out
@@ -1379,18 +1420,20 @@ def _tools_list(req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         return _err(
             req_id, INVALID_PARAMS, "invalid cursor: this server never issues one"
         )
-    return _ok(req_id, {"tools": TOOLS})
+    return _ok(req_id, {"tools": list(toolset.tools)})
 
 
-def _tools_call(req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
+def _tools_call(
+    req_id: Any, params: dict[str, Any], toolset: Toolset = ENGINE
+) -> dict[str, Any]:
     # A malformed call fails the CallToolRequest schema, which is a protocol
     # error; everything after that is a tool execution error the model can
     # read and correct (server/tools.mdx:449-464).
     name = params.get("name")
     if not isinstance(name, str):
         return _err(req_id, INVALID_PARAMS, "tools/call needs 'name', a string")
-    tool = _TOOL_BY_NAME.get(name)
-    handler = DISPATCH.get(name)
+    tool = next((t for t in toolset.tools if t.get("name") == name), None)
+    handler = toolset.dispatch.get(name)
     if tool is None or handler is None:
         return _err(req_id, INVALID_PARAMS, f"unknown tool: {name!r}")
     arguments = params.get("arguments")
@@ -1398,13 +1441,18 @@ def _tools_call(req_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         arguments = {}
     elif not isinstance(arguments, dict):
         return _err(req_id, INVALID_PARAMS, "tools/call 'arguments' must be an object")
-    return _ok(req_id, _call_tool(tool, handler, arguments))
+    return _ok(
+        req_id,
+        _call_tool(tool, handler, arguments, verdict_tools=toolset.verdict_tools),
+    )
 
 
 def _call_tool(
     tool: dict[str, Any],
     handler: Callable[[dict[str, Any]], dict[str, Any]],
     arguments: dict[str, Any],
+    *,
+    verdict_tools: frozenset[str] = _VERDICT_TOOLS,
 ) -> dict[str, Any]:
     wait_s = LIMITER.acquire()
     if wait_s is not None:
@@ -1412,7 +1460,7 @@ def _call_tool(
             f"rate limited: this server takes at most {LIMITER.per_minute} tool "
             f"calls a minute ({RATE_LIMIT_ENV}); try again in {wait_s:.1f} s"
         )
-    if tool["name"] not in _VERDICT_TOOLS:
+    if tool["name"] not in verdict_tools:
         problems = schema_errors(arguments, tool["inputSchema"])
         if problems:
             return _error_result("Input validation error: " + "; ".join(problems))
@@ -1441,7 +1489,7 @@ def _call_tool(
     return result
 
 
-_METHODS: dict[str, Callable[[Any, dict[str, Any]], dict[str, Any]]] = {
+_METHODS: dict[str, Callable[[Any, dict[str, Any], Toolset], dict[str, Any]]] = {
     "initialize": _initialize,
     "ping": _ping,
     "tools/list": _tools_list,
@@ -1449,7 +1497,9 @@ _METHODS: dict[str, Callable[[Any, dict[str, Any]], dict[str, Any]]] = {
 }
 
 
-def handle(message: Any, *, batched: bool = False) -> dict[str, Any] | None:
+def handle(
+    message: Any, *, batched: bool = False, toolset: Toolset | None = None
+) -> dict[str, Any] | None:
     """Map one JSON-RPC message to its response.
 
     Returns ``None`` when the message gets no reply: a notification
@@ -1462,6 +1512,8 @@ def handle(message: Any, *, batched: bool = False) -> dict[str, Any] | None:
     ``batched`` is set by the HTTP transport for the elements of a 2025-03-26
     batch, where ``initialize`` is not allowed
     (``2025-03-26/basic/lifecycle.mdx:74-75``).
+
+    ``toolset`` is what this endpoint exposes; ``None`` is :data:`ENGINE`.
     """
     kind, why = _classify(message)
     if kind == INVALID:
@@ -1482,7 +1534,7 @@ def handle(message: Any, *, batched: bool = False) -> dict[str, Any] | None:
     if route is None:
         return _err(req_id, METHOD_NOT_FOUND, f"unknown method: {method!r}")
     try:
-        return route(req_id, params)
+        return route(req_id, params, ENGINE if toolset is None else toolset)
     except Exception as exc:
         # A bug in a method must still answer the request, not take the
         # transport down with it.

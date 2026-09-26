@@ -65,6 +65,22 @@ Deliberate deviations, stated rather than hidden:
   OAuth 2.1 authorization the spec recommends for HTTP (``basic/index.mdx:115``,
   a SHOULD).
 
+**Two seams for a front end that serves its own tools** (``alexabot/``), so
+this module never imports one. ``dispatch`` replaces :func:`.server.handle`
+(the front end passes ``handle`` bound to its own :class:`.server.Toolset`),
+and ``verify_token`` replaces the shared-token comparison with a callable that
+maps the presented credential -- possibly ``None`` -- to an
+:class:`AccessToken` or ``None`` for a 401. The names and shapes are
+python-sdk's: ``TokenVerifier.verify_token`` (``src/mcp/server/auth/
+provider.py``) and ``auth_context_var``/``get_access_token``
+(``src/mcp/server/auth/middleware/auth_context.py``), both read at main
+``f1b6589``. The principal is set in the context variable around the dispatch,
+and handling is synchronous on the connection's thread, so a tool reads it
+with :func:`get_access_token`. Deviation, stated: python-sdk's verifier is
+``async`` ASGI middleware and this one is a plain call, because
+``http.server`` is a thread per connection; and :class:`AccessToken` carries
+no token, scopes or expiry, because none of them is kept here.
+
 It binds the loopback address by default (``:83``). Reaching it from claude.ai
 takes a public HTTPS tunnel in front, and the endpoint carries no auth of its
 own unless ``MCP_HTTP_TOKEN`` is set, in which case every request must carry
@@ -86,12 +102,16 @@ import hmac
 import os
 import re
 import sys
+from collections.abc import Callable
+from contextvars import ContextVar
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import urlsplit
 
 from . import server as _server
 from .server import (
+    INTERNAL_ERROR,
     INVALID,
     INVALID_REQUEST,
     PARSE_ERROR,
@@ -105,7 +125,16 @@ from .server import (
     handle,
 )
 
-__all__ = ["ENDPOINT", "MAX_BODY_BYTES", "Handler", "main", "make_server"]
+__all__ = [
+    "ENDPOINT",
+    "MAX_BODY_BYTES",
+    "AccessToken",
+    "Handler",
+    "auth_context_var",
+    "get_access_token",
+    "main",
+    "make_server",
+]
 
 ENDPOINT = "/mcp"
 #: Larger than the stdio server ever sees in practice: a circuit plus a
@@ -140,6 +169,36 @@ _HEX = re.compile(rb"[0-9A-Fa-f]+")
 _OWS = " \t"
 
 
+@dataclass(frozen=True)
+class AccessToken:
+    """Who a request acts for, as a ``verify_token`` callable decided.
+
+    ``subject`` is the account; ``client_id`` names the credential that
+    proved it -- a key's public prefix, ``shared-token``, ``anonymous`` --
+    and is never the secret itself.
+    """
+
+    subject: str
+    client_id: str
+
+
+#: The principal of the request being handled on this thread, python-sdk's
+#: ``auth_context_var``; ``None`` when no ``verify_token`` is configured.
+auth_context_var: ContextVar[AccessToken | None] = ContextVar(
+    "mcp_auth_context", default=None
+)
+
+
+def get_access_token() -> AccessToken | None:
+    """The principal of the request being handled, or ``None``."""
+    return auth_context_var.get()
+
+
+def _engine_dispatch(message: Any, *, batched: bool = False) -> dict[str, Any] | None:
+    """The default dispatch: the engine's tools, looked up at call time."""
+    return handle(message, batched=batched)
+
+
 def _loopback_origin(origin: str) -> bool:
     host = urlsplit(origin).hostname or ""
     return host in ("localhost", "127.0.0.1", "::1")
@@ -161,6 +220,12 @@ class Handler(BaseHTTPRequestHandler):
 
     allowed_origins: frozenset[str] = DEFAULT_ORIGINS
     token: str | None = None
+    #: Maps one JSON-RPC message to its response; see the module docstring.
+    dispatch = staticmethod(_engine_dispatch)
+    #: When set, decides every request's principal in place of ``token``.
+    verify_token: Callable[[str | None], AccessToken | None] | None = None
+    #: What ``verify_token`` answered for the request being handled.
+    principal: AccessToken | None = None
     protocol_version = "HTTP/1.1"
 
     # -- helpers -----------------------------------------------------------
@@ -177,10 +242,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D401
         line = fmt % args
-        if self.token:
-            # A capability URL is the credential; it never reaches a log,
-            # the googleapps rule for the Chat webhook URL.
-            line = line.replace(self.token, "<token>")
+        secrets = [self.token]
+        if self.verify_token is not None:
+            # Whatever rode in the path is a credential under a verifier too
+            # (an ``ada_`` key in ``/mcp/<key>``), accepted or not.
+            path = str(getattr(self, "path", "") or "").split("?", 1)[0]
+            if path.startswith(ENDPOINT + "/"):
+                secrets.append(path[len(ENDPOINT) + 1 :])
+        for secret in secrets:
+            if secret:
+                # A capability URL is the credential; it never reaches a log,
+                # the googleapps rule for the Chat webhook URL.
+                line = line.replace(secret, "<token>")
         print(f"{self.address_string()} {line}", file=sys.stderr)
 
     def _presented_token(self) -> str | None:
@@ -248,9 +321,8 @@ class Handler(BaseHTTPRequestHandler):
         refusal answers ``Connection: close``.
         """
         path = self.path.split("?", 1)[0]
-        on_endpoint = path == ENDPOINT or (
-            self.token is not None and path.startswith(ENDPOINT + "/")
-        )
+        gated = self.token is not None or self.verify_token is not None
+        on_endpoint = path == ENDPOINT or (gated and path.startswith(ENDPOINT + "/"))
         if not on_endpoint:
             self._send(404, {"error": f"the MCP endpoint is {ENDPOINT}"}, close=True)
             return False
@@ -262,12 +334,44 @@ class Handler(BaseHTTPRequestHandler):
         ):
             self._refuse(403, f"origin not allowed: {origin}", close=True)
             return False
-        if self.token is not None:
+        self.principal = None
+        if self.verify_token is not None:
+            try:
+                principal = self.verify_token(self._presented_token())
+            except Exception as exc:  # noqa: BLE001 -- answered, never dropped
+                # A verifier that raises (a key store it cannot open) is a
+                # server fault, not a bad credential, so not 401. python-sdk
+                # lets it propagate out of ``BearerAuthBackend.authenticate``
+                # (``src/mcp/server/auth/middleware/bearer_auth.py`` at
+                # 0c91368) and Starlette's ServerErrorMiddleware answers a
+                # bare 500; the same here, closed like every refusal above,
+                # with the class on stderr and no exception text anywhere.
+                self.log_message("verify_token raised %s", type(exc).__name__)
+                self._refuse(
+                    500,
+                    "the credential could not be checked",
+                    rpc_code=INTERNAL_ERROR,
+                    close=True,
+                )
+                return False
+            if principal is None:
+                self._send(401, close=True, extra={"WWW-Authenticate": "Bearer"})
+                return False
+            self.principal = principal
+        elif self.token is not None:
             presented = self._presented_token()
             if presented is None or not hmac.compare_digest(presented, self.token):
                 self._send(401, close=True, extra={"WWW-Authenticate": "Bearer"})
                 return False
         return True
+
+    def _dispatch(self, message: Any, *, batched: bool = False) -> Any:
+        """``dispatch`` with this request's principal visible to the tool."""
+        ctx = auth_context_var.set(self.principal)
+        try:
+            return self.dispatch(message, batched=batched)
+        finally:
+            auth_context_var.reset(ctx)
 
     def _version_refused(self, *, close: bool = False) -> bool:
         """Answer 400 for an ``MCP-Protocol-Version`` this server does not speak.
@@ -414,7 +518,7 @@ class Handler(BaseHTTPRequestHandler):
             self._post_batch(message)
             return
         kind = classify(message)
-        response = handle(message)
+        response = self._dispatch(message)
         if kind == INVALID:
             self._send(400, response)
         elif kind == REQUEST:
@@ -437,7 +541,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         responses = [
             response
-            for response in (handle(m, batched=True) for m in messages)
+            for response in (self._dispatch(m, batched=True) for m in messages)
             if response is not None
         ]
         if not responses:
@@ -474,11 +578,23 @@ def make_server(
     *,
     token: str | None = None,
     origins: frozenset[str] = DEFAULT_ORIGINS,
+    dispatch: Callable[..., dict[str, Any] | None] | None = None,
+    verify_token: Callable[[str | None], AccessToken | None] | None = None,
 ) -> ThreadingHTTPServer:
-    """A bound server; ``port=0`` picks a free one (the tests use that)."""
-    handler = type(
-        "BoundHandler", (Handler,), {"token": token, "allowed_origins": origins}
-    )
+    """A bound server; ``port=0`` picks a free one (the tests use that).
+
+    ``dispatch`` and ``verify_token`` are the front-end seams in the module
+    docstring. ``token`` and ``verify_token`` are two answers to one question,
+    so passing both is a ``ValueError`` rather than a guess at which wins.
+    """
+    if token is not None and verify_token is not None:
+        raise ValueError("pass token or verify_token, not both")
+    attrs: dict[str, Any] = {"token": token, "allowed_origins": origins}
+    if dispatch is not None:
+        attrs["dispatch"] = staticmethod(dispatch)
+    if verify_token is not None:
+        attrs["verify_token"] = staticmethod(verify_token)
+    handler = type("BoundHandler", (Handler,), attrs)
     return ThreadingHTTPServer((host, port), handler)
 
 

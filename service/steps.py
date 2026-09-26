@@ -255,6 +255,9 @@ class Session:
     prior_art: Any = None
     research: bool = False
     max_repairs: int = 1
+    #: Whether ``place`` starts the background case and sourcing (see
+    #: ``start``); off, ``background`` stays empty and no model is called.
+    prefetch: bool = True
     cache_warnings: list[str] = field(default_factory=list)
     spec: Any = None
     #: The FreeCAD live show for this session's case (:class:`_FreeCADLive`),
@@ -1001,6 +1004,15 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
     plan_first = payload.get("plan_first", False)
     if not isinstance(plan_first, bool):
         raise ValueError("'plan_first' must be a boolean")
+    # Whether ``place`` starts the case design and the parts sourcing in the
+    # background (:func:`_prefetch_case`, :func:`_prefetch_sourcing`). On by
+    # default, which is the desktop's trade; a caller whose path never
+    # collects them -- the voice front end goes place, route, review -- turns
+    # it off rather than spend two model calls and a datasheet probe per part
+    # that nobody asked for.
+    prefetch = payload.get("prefetch", True)
+    if not isinstance(prefetch, bool):
+        raise ValueError("'prefetch' must be a boolean")
     # The thinking level, validated before anything spends time or quota and
     # never defaulted on a bad name -- ``/generate``'s rule, for the same
     # reason: a session that answers a 'thorough' request at 'fast' while
@@ -1045,6 +1057,7 @@ def start(payload: dict[str, Any], *, model, store) -> dict[str, Any]:
         kicad_live=kicad_live,
         time_limit_s=time_limit_s,
         effort=str(profile.level),
+        prefetch=prefetch,
     )
     # Addressable from the first model call, not after the last one. A start
     # is a fifteen-minute request on a slow model (measured 2026-09-16: 870 s,
@@ -1243,8 +1256,9 @@ def _place(session: Session, payload: dict[str, Any], *, model) -> dict[str, Any
         write_board(session.board, session.path(".placed.kicad_pcb"))
     )
     session.stage = "placed"
-    _prefetch_case(session, model)
-    _prefetch_sourcing(session, model)
+    if session.prefetch:
+        _prefetch_case(session, model)
+        _prefetch_sourcing(session, model)
 
     from .app import _placements_dict
 

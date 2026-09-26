@@ -1395,3 +1395,91 @@ def test_an_invalid_cancellation_is_ignored():
 def test_an_invalid_cursor_is_invalid_params():
     assert_error(rpc("tools/list", {"cursor": "page-2"}), INVALID_PARAMS)
     assert rpc("tools/list", {"cursor": None})["result"]["tools"]
+
+
+# --------------------------------------------------------------------------
+# Toolset: another tool list behind the same protocol code (alexabot/).
+# --------------------------------------------------------------------------
+
+
+def _echo_toolset(**over):
+    tool = {
+        "name": "echo",
+        "title": "Echo",
+        "description": "Say it back.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["text"],
+            "properties": {"text": {"type": "string", "minLength": 1}},
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["text"],
+            "properties": {"text": {"type": "string"}},
+        },
+    }
+
+    def echo(args):
+        body = {"text": args["text"]} if args["text"] != "bad" else {"text": 7}
+        return {
+            "content": [{"type": "text", "text": json.dumps(body)}],
+            "structuredContent": body,
+            "isError": False,
+        }
+
+    fields = {
+        "tools": [tool],
+        "dispatch": {"echo": echo},
+        "server_info": {"name": "echo-server", "version": "1"},
+        "instructions": "Use echo.",
+        **over,
+    }
+    return mcp_server.Toolset(**fields)
+
+
+def _in(toolset, method, params=None, req_id=1):
+    return handle(
+        {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params or {}},
+        toolset=toolset,
+    )
+
+
+def test_handle_with_a_toolset_lists_only_its_tools():
+    listed = _in(_echo_toolset(), "tools/list")["result"]["tools"]
+    assert [t["name"] for t in listed] == ["echo"]
+
+
+def test_initialize_carries_the_toolset_instructions_and_server_info():
+    result = _in(_echo_toolset(), "initialize")["result"]
+    assert result["serverInfo"] == {"name": "echo-server", "version": "1"}
+    assert result["instructions"] == "Use echo."
+
+
+def test_engine_initialize_is_unchanged_without_instructions():
+    result = rpc("initialize")["result"]
+    assert "instructions" not in result
+    assert result["serverInfo"] == mcp_server.SERVER_INFO
+    assert mcp_server.ENGINE.tools is TOOLS
+    assert mcp_server.ENGINE.dispatch is mcp_server.DISPATCH
+
+
+def test_a_toolset_tool_is_validated_in_and_out_like_an_engine_tool():
+    toolset = _echo_toolset()
+    good = _in(toolset, "tools/call", {"name": "echo", "arguments": {"text": "hi"}})
+    assert good["result"]["structuredContent"] == {"text": "hi"}
+    missing = _in(toolset, "tools/call", {"name": "echo", "arguments": {}})
+    assert error_text(missing).startswith("Input validation error")
+    wrong = _in(toolset, "tools/call", {"name": "echo", "arguments": {"text": "bad"}})
+    assert error_text(wrong).startswith("Output validation error")
+
+
+def test_an_unknown_tool_in_a_toolset_is_invalid_params():
+    toolset = _echo_toolset()
+    assert_error(
+        _in(toolset, "tools/call", {"name": "generate_board", "arguments": {}}),
+        INVALID_PARAMS,
+    )
+    # And the engine's own list does not grow the toolset's tool.
+    assert_error(call("echo", {"text": "hi"}), INVALID_PARAMS)

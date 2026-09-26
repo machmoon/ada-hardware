@@ -16,6 +16,7 @@ import silkscreen.mcp.http as mcp_http
 import silkscreen.mcp.server as mcp_server
 from silkscreen.mcp.http import ENDPOINT, make_server
 from silkscreen.mcp.server import (
+    INTERNAL_ERROR,
     INVALID_PARAMS,
     INVALID_REQUEST,
     LATEST_PROTOCOL_VERSION,
@@ -811,3 +812,138 @@ def test_a_tool_result_carries_structured_content_and_the_same_text(served):
     assert result["isError"] is False
     assert json.loads(result["content"][0]["text"]) == result["structuredContent"]
     assert result["structuredContent"]["name"] == "C_0805"
+
+
+# --------------------------------------------------------------------------
+# The front-end seams: an injected dispatch and verify_token (alexabot/).
+# --------------------------------------------------------------------------
+
+
+def _serve(**kwargs):
+    server = make_server("127.0.0.1", 0, **kwargs)
+    thread = threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True)
+    thread.start()
+    return server, f"http://127.0.0.1:{server.server_address[1]}"
+
+
+def _stop(server):
+    server.shutdown()
+    server.server_close()
+
+
+def test_an_injected_dispatch_answers_instead_of_the_engine():
+    seen = []
+
+    def dispatch(message, *, batched=False):
+        seen.append((message["method"], batched))
+        return {"jsonrpc": "2.0", "id": message["id"], "result": {"mine": True}}
+
+    server, base = _serve(dispatch=dispatch)
+    try:
+        status, _, body = _req(base + ENDPOINT, body=rpc("tools/list"))
+        assert status == 200 and json.loads(body)["result"] == {"mine": True}
+        assert seen == [("tools/list", False)]
+    finally:
+        _stop(server)
+
+
+def test_verify_token_none_is_401_before_the_body_is_read():
+    presented = []
+
+    def verify(token):
+        presented.append(token)
+        return None
+
+    server, base = _serve(verify_token=verify)
+    try:
+        status, headers, _ = _req(
+            base + ENDPOINT, body=rpc("ping"), headers={"Authorization": "Bearer k"}
+        )
+        assert status == 401 and headers["WWW-Authenticate"] == "Bearer"
+        assert headers["Connection"] == "close"
+        status, _, _ = _req(base + ENDPOINT, body=rpc("ping"))
+        assert status == 401
+        assert presented == ["k", None]
+    finally:
+        _stop(server)
+
+
+def test_a_verify_token_that_raises_is_a_500_with_no_exception_text(capsys):
+    """A key store that cannot be opened is a server fault: answered 500 and
+    closed, never a dropped connection or a 401 blaming the credential, and
+    its message goes nowhere (it could name a path or quote a secret)."""
+    dispatched = []
+
+    def verify(token):
+        raise RuntimeError("key store unavailable at /srv/keys.sqlite3")
+
+    def dispatch(message, *, batched=False):
+        dispatched.append(message)
+        return {"jsonrpc": "2.0", "id": message["id"], "result": {}}
+
+    server, base = _serve(dispatch=dispatch, verify_token=verify)
+    try:
+        status, headers, body = _req(
+            base + ENDPOINT, body=rpc("ping"), headers={"Authorization": "Bearer k"}
+        )
+    finally:
+        _stop(server)
+    assert status == 500 and headers["Connection"] == "close"
+    assert "WWW-Authenticate" not in headers
+    assert refusal(body, INTERNAL_ERROR)["message"] == (
+        "the credential could not be checked"
+    )
+    assert b"unavailable" not in body and b"keys.sqlite3" not in body
+    assert dispatched == []
+    err = capsys.readouterr().err
+    assert "verify_token raised RuntimeError" in err
+    assert "unavailable" not in err and "Traceback" not in err
+
+
+def test_the_principal_is_visible_to_the_tool_through_get_access_token():
+    seen = []
+
+    def dispatch(message, *, batched=False):
+        seen.append(mcp_http.get_access_token())
+        return {"jsonrpc": "2.0", "id": message["id"], "result": {}}
+
+    def verify(token):
+        return mcp_http.AccessToken(subject=f"acct-{token}", client_id="test")
+
+    server, base = _serve(dispatch=dispatch, verify_token=verify)
+    try:
+        _req(base + ENDPOINT, body=rpc("ping"), headers={"Authorization": "Bearer a"})
+        _req(base + ENDPOINT, body=rpc("ping"), headers={"Authorization": "Bearer b"})
+    finally:
+        _stop(server)
+    assert [p.subject for p in seen] == ["acct-a", "acct-b"]
+    # Reset after each request: nothing leaks to whatever runs next here.
+    assert mcp_http.get_access_token() is None
+
+
+def test_the_path_form_works_with_verify_token_and_is_masked_in_the_log(capsys):
+    def verify(token):
+        return mcp_http.AccessToken("acme", "k") if token == "ada_k.s3cret" else None
+
+    server, base = _serve(verify_token=verify)
+    try:
+        status, _, _ = _req(base + ENDPOINT + "/ada_k.s3cret", body=rpc("ping"))
+        assert status == 200
+        status, _, _ = _req(base + ENDPOINT + "/ada_k.wrong", body=rpc("ping"))
+        assert status == 401
+    finally:
+        _stop(server)
+    err = capsys.readouterr().err
+    assert "s3cret" not in err and "ada_k.wrong" not in err and "<token>" in err
+
+
+def test_token_and_verify_token_together_is_a_value_error():
+    with pytest.raises(ValueError, match="not both"):
+        make_server("127.0.0.1", 0, token="t", verify_token=lambda t: None)
+
+
+def test_the_default_dispatch_is_still_the_engine(served):
+    base, _ = served
+    status, _, body = _req(base + ENDPOINT, body=rpc("tools/list"))
+    names = [t["name"] for t in json.loads(body)["result"]["tools"]]
+    assert status == 200 and names == [t["name"] for t in mcp_server.TOOLS]

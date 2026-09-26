@@ -476,6 +476,39 @@ def test_case_is_designed_in_the_background_from_the_placed_board(server):
     assert state["next"] == ["route", "sourcing"]
 
 
+def test_prefetch_false_starts_no_background_job_at_place(server):
+    """A caller whose path never collects the case or the BOM (the voice front
+    end, ``alexabot/``) turns the prefetch off: nothing runs in the background
+    and no model is asked for either."""
+    log: list = []
+    Handler.model_factory = staticmethod(
+        lambda: _Gated(threading.Event(), log)  # a gate nothing may reach
+    )
+    sid = _start(server, prefetch=False)["session"]
+    status, placed = post(server, f"/steps/{sid}/place", {})
+    assert status == 200, placed
+    assert placed["background"] == [] and placed["background_outcome"] == {}
+    status, state = get(server, f"/steps/{sid}")
+    assert state["background"] == []
+    status, routed = post(server, f"/steps/{sid}/route", {})
+    assert status == 200, routed
+    assert _case_calls(log) == [] and _sourcing_calls(log) == []
+
+
+def test_prefetch_defaults_to_true(server):
+    gate = threading.Event()
+    Handler.model_factory = staticmethod(lambda: _Gated(gate, []))
+    sid = _start(server)["session"]
+    status, placed = post(server, f"/steps/{sid}/place", {})
+    assert status == 200 and placed["background"] == ["sourcing", "case"]
+    gate.set()
+
+
+def test_a_non_bool_prefetch_is_a_400(server):
+    status, body = post(server, "/steps", {"intent": "x", "prefetch": "no"})
+    assert status == 400 and "prefetch" in body["error"]
+
+
 def test_case_with_a_style_designs_afresh_instead_of_the_prefetch(server):
     gate = threading.Event()
     log: list = []
