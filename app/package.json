@@ -7,13 +7,13 @@
     "name": "Patrick Liu"
   },
   "license": "GPL-3.0",
-  "homepage": "https://github.com/machmoon/Ada#readme",
+  "homepage": "https://github.com/machmoon/ada-hardware#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/machmoon/Ada.git"
+    "url": "git+https://github.com/machmoon/ada-hardware.git"
   },
   "bugs": {
-    "url": "https://github.com/machmoon/Ada/issues"
+    "url": "https://github.com/machmoon/ada-hardware/issues"
   },
   "keywords": [
     "ai-assistant",

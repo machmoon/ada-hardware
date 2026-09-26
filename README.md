@@ -1,6 +1,6 @@
 # Ada
 
-[![CI](https://github.com/machmoon/Ada/actions/workflows/ci.yml/badge.svg)](https://github.com/machmoon/Ada/actions/workflows/ci.yml)
+[![CI](https://github.com/machmoon/ada-hardware/actions/workflows/ci.yml/badge.svg)](https://github.com/machmoon/ada-hardware/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![KiCad 7–8](https://img.shields.io/badge/KiCad-7--8%20file%20format-brightgreen)](https://www.kicad.org/download/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-black)](LICENSE)
@@ -124,7 +124,7 @@ with its extras, and builds the web UI if Node 22+ is on your PATH (skipped, not
 if it isn't). Nothing is written outside the repo and it never uses `sudo`:
 
 ```bash
-git clone https://github.com/machmoon/Ada && cd Ada
+git clone https://github.com/machmoon/ada-hardware && cd ada-hardware
 ./scripts/install.sh                                           # macOS / Linux
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1   # Windows
 ```
@@ -1330,7 +1330,7 @@ the test suite and the demo both run fully offline.
 ### From a clean clone
 
 ```bash
-git clone https://github.com/machmoon/Ada.git
+git clone https://github.com/machmoon/ada-hardware.git
 cd Ada
 python3 -m venv .venv
 ./.venv/bin/pip install -e ".[dev,agents,cloud,adk,cad]"

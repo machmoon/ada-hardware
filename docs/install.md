@@ -35,14 +35,14 @@ for, and what to do when something breaks.
 ## Path 1 — the install script
 
 ```bash
-git clone https://github.com/machmoon/silkscreen && cd silkscreen
+git clone https://github.com/machmoon/ada-hardware && cd ada-hardware
 ./scripts/install.sh
 ```
 
 On Windows:
 
 ```powershell
-git clone https://github.com/machmoon/silkscreen
+git clone https://github.com/machmoon/ada-hardware
 cd silkscreen
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
