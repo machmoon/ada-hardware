@@ -113,6 +113,9 @@ Hard rules -- a proposal breaking any of these is rejected automatically:
 
 1. Every endpoint is "<part>.<pin>". For a device the pin is its NAME from the
    pins map. For a passive it is "1" or "2" -- passives have exactly two legs.
+   A diode or LED is polarised: leg "1" is the ANODE and leg "2" the CATHODE,
+   so forward current flows from 1 to 2 (the schematic symbol and the
+   footprint's cathode bar both follow this).
 2. Every passive must have BOTH legs on a net. A part connected on one leg is
    floating and will be rejected.
 3. Every net needs at least two endpoints. A signal you name but wire to only

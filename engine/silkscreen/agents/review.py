@@ -799,6 +799,11 @@ Rules:
   a claim says what the circuit IS, never what it should be.
 - Use the exact part ids and net names given below. A finding naming only
   parts that are not in the circuit is thrown away.
+- A diode or LED in this netlist is a two-leg passive whose leg 1 is the
+  ANODE and leg 2 the CATHODE; the schematic symbol and the footprint's
+  cathode bar follow the same numbering. Judge polarity by that, never by a
+  library's numbering (KiCad's own diode footprints put the cathode on pad 1;
+  this netlist does not) and never by a net's name.
 - Cite a page ONLY when a supplied datasheet fact actually supports the claim.
   An invented citation is worse than none.
 - The circuit below is a NETLIST. It carries no manufacturer part numbers, no

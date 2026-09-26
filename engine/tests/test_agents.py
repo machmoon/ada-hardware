@@ -1020,6 +1020,16 @@ def test_board_only_writes_the_board_and_nothing_else(tmp_path, offline_pdf_fetc
 # ---------------------------------------------------------------- packages
 
 
+def test_propose_prompt_states_the_diode_pin_convention():
+    """The proposer is told which leg of a diode is the anode, the same
+    convention the schematic, the footprint's cathode bar and the 3D model
+    follow, so polarity is decided once and not guessed per run."""
+    from silkscreen.agents.propose import PROPOSE_PROMPT
+
+    assert 'leg "1" is the ANODE' in PROPOSE_PROMPT
+    assert 'leg "2" the CATHODE' in PROPOSE_PROMPT
+
+
 def test_propose_prompt_names_the_packages_the_builder_supports():
     """The model is told the footprint rule up front, from the rule's own text."""
     from silkscreen.board import supported_packages_text

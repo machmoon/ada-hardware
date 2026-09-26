@@ -189,7 +189,7 @@ Every stage is a real KiCad file you can open and inspect on its own, so you can
 where a design went wrong instead of only seeing the last artifact.
 
 ```
-3903 tests collected — no network, no API key, no KiCad install
+3905 tests collected — no network, no API key, no KiCad install
 ```
 
 **Next:** [full install guide and troubleshooting](docs/install.md) ·
@@ -255,7 +255,7 @@ Platform-by-platform commands are in [docs/install.md](docs/install.md#kicad-opt
 | `schematic.py` — `.kicad_sch` + `.kicad_pro` emission | **Working** · 38 tests · KiCad ERC clean |
 | `routing.py` — two-layer grid autorouter | **Working, partial by design** · 67 tests — see below |
 | `footprints.py` + `board.py` — land patterns, board emission | **Working** · 36 tests |
-| `agents/` — datasheet, propose, review, pipeline | **Working** · 73 tests |
+| `agents/` — datasheet, propose, review, pipeline | **Working** · 74 tests |
 | `agents/adk/` — ADK dynamic-workflow driver for the pipeline | **Working** · 21 tests |
 | `agents/retrieval.py` — page-cited datasheet retrieval | **Working** · 15 tests |
 | `agents/resilience.py` — provider failover | **Working** · 34 tests |
@@ -606,7 +606,7 @@ treats the board file as the interface.
 | Requires KiCad running | Yes | **No** |
 | Headless / CI | Hard | **Native** |
 | Platform lock | KiCad's plugin loader | **None — pure Python** |
-| Testable without KiCad | No | **Yes, all 3903 tests** |
+| Testable without KiCad | No | **Yes, all 3905 tests** |
 
 ### What it reads
 
@@ -1254,7 +1254,7 @@ engine/
       adk/          ADK dynamic workflow over the same stage bodies
     audit/        optional visual review of a finished board
     specreview.py validated meeting agenda for what a run could not settle
-  tests/          3903 tests — no network, no API keys, no KiCad
+  tests/          3905 tests — no network, no API keys, no KiCad
     fixtures/     ref.kicad_pcb -- 11-footprint board fixture
 scripts/
   demo.py         end-to-end: read -> place -> write -> verify

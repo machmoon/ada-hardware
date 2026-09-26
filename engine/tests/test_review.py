@@ -369,6 +369,19 @@ def test_the_prompt_forbids_the_finding_that_is_true_of_every_netlist():
     assert "NETLIST" in REVIEW_PROMPT
 
 
+def test_the_prompt_states_the_diode_pin_convention():
+    """Measured 2026-09-25 (the Shipaton recording, take 6): the critic filed
+    a BLOCKER that the power LED was wired backwards. D1.1 was on +3V3 and
+    D1.2 went through the resistor to GND, which is correct here, because
+    this pipeline's diode has the anode on pin 1 (footprints.py,
+    models3d.py, schematic.py). The critic had assumed KiCad's library
+    numbering, where pad 1 is the cathode, and a net named LED_ANODE_K did
+    not help. The prompt now states the convention and says not to trust
+    a net name for polarity."""
+    assert "leg 1 is the" in REVIEW_PROMPT and "ANODE" in REVIEW_PROMPT
+    assert "never by a net's name" in REVIEW_PROMPT
+
+
 # --------------------------------------------------------------- the merge
 
 
