@@ -1,37 +1,69 @@
-# Publish the marketing page in site/ to GitHub Pages on every push to main.
-# One static page, no build step (site/README.md), so the job is checkout,
-# upload, deploy -- the shape GitHub's own starter workflow uses
-# (actions/starter-workflows: pages/static.yml). Enable Pages once in the
-# repository settings with "GitHub Actions" as the source; until then this
-# job fails at deploy with a message naming that setting.
+# Build the marketing site in site/ (Vite + React, site/README.md) and publish
+# the built bundle, site/dist, to GitHub Pages on every push to main that
+# touches it. The deploy job follows Vite's own sample workflow
+# (vitejs/vite docs/guide/static-deploy-github-pages.yaml at 57fea00) with the
+# site in a subdirectory; the action majors stay the ones this file already
+# used. Enable Pages once in the repository settings with "GitHub Actions" as
+# the source; until then the deploy step fails naming that setting.
+# Pull requests that touch site/ run the build only, with read access.
 name: site
 
 on:
   push:
     branches: [main]
     paths: ["site/**", ".github/workflows/site.yml"]
+  pull_request:
+    paths: ["site/**", ".github/workflows/site.yml"]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: site
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: site/dist
       - id: deployment
         uses: actions/deploy-pages@v4

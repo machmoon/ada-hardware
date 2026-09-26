@@ -1,144 +1,69 @@
 <!doctype html>
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ada</title>
-<meta name="description" content="Ada is an autonomous hardware engineer: it draws the schematic, proves it with KiCad's own checks, and routes a board you can send to the fab.">
-<link rel="icon" href="assets/icon.png">
-<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wdth,wght@75..100,400..700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2026-09-21">
-<meta property="og:title" content="Ada">
-<meta property="og:description" content="Order boards that work. Ada draws the schematic, proves it with KiCad's own checks, and routes a board you can send to the fab.">
-<meta property="og:image" content="assets/board.png">
-</head>
-<body>
-
-<header class="bar" data-over-scene>
-  <a class="brand" href="#" aria-label="Ada home"><svg viewBox="20 110 472 292" fill="none" stroke="currentColor" stroke-width="50" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M42 293 H157 L311 139 H470"/><path d="M42 373 H190.1 L344.1 219 H470"/></svg></a>
-  <nav><ul>
-    <li><a class="cta ghost compact" href="mailto:liujpatrick@gmail.com?subject=Ada%20demo">Get a demo</a></li>
-    <li><button class="theme" id="theme" aria-label="Toggle theme"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg></button></li>
-  </ul></nav>
-</header>
-
-<div class="night-start">
-<section class="hero">
-  <img class="hero-board" src="assets/board_top.png" alt="Top copper of the ESP32 dev board Ada placed and routed, rendered by kicad-cli" width="1674" height="834">
-  <div class="hero-copy">
-    <h1>An AI hardware engineer that works beside KiCad.</h1>
-    <p class="subtitle">Ada is an AI hardware engineer that works beside KiCad: describe a board, get a schematic, a placed and routed board and a printable case, each checked by KiCad's own ERC and DRC. For a beginner before the first dead board, and a senior engineer before fab.</p>
-    <div class="cta-row">
-      <a class="cta primary" href="mailto:liujpatrick@gmail.com?subject=Ada%20demo">Get a demo <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a>
-      <a class="cta ghost" href="#see-it-work">See it work <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a>
-    </div>
-  </div>
-</section>
-
-<main class="sheet">
-<section class="used-by" id="what-ada-does">
-  <header>
-    <h2>A bad board costs weeks. Ada catches it first.</h2>
-    <p>It finds the floating ground and the missing pull-up while the design is still a file, not after the boards show up.</p>
-  </header>
-  <div class="lattice">
-    <figure class="feature">
-      <blockquote>6 of 6 test boards come out with zero ERC errors, zero DRC violations, and a schematic that matches the board. USB routes as a coupled pair at a fixed 0.25 mm gap.</blockquote>
-      <figcaption>Ada's board evaluation, Sep 16, 2026. Built on KiCad, ngspice, OR-Tools, OpenCascade, build123d and FreeCAD.</figcaption>
-      <a class="feature-link" href="https://github.com/machmoon/ada-hardware/blob/main/scripts/board_eval.py">See how we measure it <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a>
-    </figure>
-  </div>
-</section>
-
-<section class="bento-section" id="see-it-work">
-  <header>
-    <h2>See it work</h2>
-    <p>What Ada designs, how it checks it, and what it hands you.</p>
-  </header>
-  <div class="bento">
-    <article class="tile t-feed">
-      <div class="cap"><h3>One receipt per board</h3><p>Every claim about the board names the check that proved it. One failed check stops the run.</p></div>
-      <div class="window">
-        <div class="tabs"><span class="tab active">Passed <span class="count">5</span></span><span class="tab">Warnings <span class="count">0</span></span><span class="tab">Blocked <span class="count">0</span></span></div>
-        <ul class="rows">
-          <li class="row"><span class="sev ok">PASS</span><span class="id">ERC</span><span class="text">KiCad 10.0.6, 0 errors</span><span class="time">1s</span></li>
-          <li class="row"><span class="sev ok">PASS</span><span class="id">DRC</span><span class="text">0 violations, 0 unconnected</span><span class="time">2s</span></li>
-          <li class="row"><span class="sev ok">PASS</span><span class="id">PARITY</span><span class="text">Schematic and board agree</span><span class="time">2s</span></li>
-          <li class="row"><span class="sev ok">PASS</span><span class="id">SPICE</span><span class="text">Vout 3.30 V, margin +0.12 V</span><span class="time">4s</span></li>
-          <li class="row"><span class="sev ok">PASS</span><span class="id">CASE</span><span class="text">13 of 13 clauses, min wall +0.4 mm</span><span class="time">9s</span></li>
-        </ul>
-      </div>
-    </article>
-    <article class="tile t-integr">
-      <div class="cap"><h3>Works in your KiCad</h3><p>Ada drives the KiCad you already have. Every stage opens in the editor, and nothing that costs money runs until you approve it.</p></div>
-      <div class="window shot"><img src="assets/strip.png" alt="Ada's strip: prompt field, microphone, attach, history, settings, Generate"></div>
-    </article>
-    <article class="tile t-poc">
-      <div class="cap"><h3>Fixed before you see it</h3><p>KiCad's ERC runs while Ada draws. A floating ground pin in round one is fixed by round two.</p></div>
-      <pre class="window term"><span class="dim">propose · round 1</span>
-<span class="bad">✗</span> AMS1117-3.3.GND is on no net
-  put it on the ground net
-<span class="bad">✗</span> erc.pin_not_connected  U1 pin 1
-
-<span class="dim">propose · round 2</span>
-<span class="good">✓</span> one ground: GND
-<span class="good">✓</span> erc clean</pre>
-    </article>
-    <article class="tile t-fixpr">
-      <div class="cap"><h3>Routed the way you would</h3><p>Ground poured on both layers and stitched together. USB routed as a real differential pair.</p></div>
-      <div class="window shot"><img id="board-shot" src="assets/board.png" alt="The ESP32 dev board Ada placed and routed, rendered by kicad-cli from the KiCad file"></div>
-    </article>
-    <article class="tile t-carousel">
-      <div class="cap"><h3>A second opinion on every board</h3><p>Ada reviews its own design like a skeptical senior engineer. Every finding names the pins and the fix, and anything the netlist can't back gets dropped.</p></div>
-      <div class="car-tabs" role="tablist">
-        <button class="car-tab active" data-slide="0">U1 · J2 serial header</button>
-        <button class="car-tab" data-slide="1">U1 · J6 I2C bus</button>
-        <button class="car-tab" data-slide="2">U2 · J2 3.3 V rail</button>
-      </div>
-      <div class="car-stage">
-        <div class="gh-card active"><p class="gh-title"><span class="sev high">HIGH</span> Serial header TX and RX wired straight through</p><p>TXD0 lands on the header pin named TXD. On an FTDI adapter that pin is an output too, so two drivers fight and both receivers float.</p><p class="fix">fix: cross the pair, TXD0 to header RXD</p></div>
-        <div class="gh-card"><p class="gh-title"><span class="sev high">HIGH</span> No pull-ups on SDA and SCL</p><p>The Qwiic port hangs off IO21 and IO22 with nothing pulling either line to 3.3 V. I2C is open-drain, so the bus never idles high.</p><p class="fix">fix: 4.7 kΩ from SDA and SCL to +3V3</p></div>
-        <div class="gh-card"><p class="gh-title"><span class="sev high">HIGH</span> The header's 3.3 V pin backfeeds the regulator</p><p>The header shares the regulator's output net with no diode, so a 3.3 V cable and USB-C plugged in together fight each other.</p><p class="fix">fix: a Schottky or a solder jumper on that pin</p></div>
-      </div>
-      <p class="car-note">A real review of an ESP32 dev board, Sep 15, 2026.</p>
-    </article>
-  </div>
-</section>
-
-<section class="featured-posts" id="try">
-  <header><h2>Try it</h2><p>Get the Mac app early, or run the open-source engine today.</p></header>
-  <div class="bento">
-    <article class="tile t-half">
-      <div class="cap"><h3>Ada for Mac</h3><p>Early access for Apple silicon with KiCad 8 or newer. We set up every team by hand.</p></div>
-      <div><a class="cta primary" href="mailto:liujpatrick@gmail.com?subject=Ada%20demo">Get a demo <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a></div>
-    </article>
-    <article class="tile t-half">
-      <div class="cap"><h3>Run the engine yourself</h3><p>Bring your own model key. Ada sends your request and the datasheets to that model, and nothing else.</p></div>
-      <pre class="window term">pip install "silkscreen[agents,cad] @ https://github.com/machmoon/Ada/releases/download/v0.1.0/silkscreen-0.1.0-py3-none-any.whl"
-silkscreen serve</pre>
-    </article>
-  </div>
-</section>
-</main>
-</div>
-
-<section class="final-cta">
-  <div class="content">
-    <h2>Know it works before you order.</h2>
-    <p>See what Ada catches in your next board.</p>
-    <a class="cta primary" href="mailto:liujpatrick@gmail.com?subject=Ada%20demo">Get a demo <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10M7 17L17 7"/></svg></a>
-  </div>
-  <footer>
-    <span>© 2026 Ada</span>
-    <ul>
-      <li><a href="https://github.com/machmoon/ada-hardware" aria-label="GitHub">GitHub</a></li>
-      <li><a href="https://github.com/machmoon/ada-hardware/blob/main/docs/install.md">Install</a></li>
-      <li><a href="mailto:liujpatrick@gmail.com">Contact</a></li>
-    </ul>
-  </footer>
-</section>
-<script src="stars.js?v=2026-09-21"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ada</title>
+    <meta
+      name="description"
+      content="Ada is an autonomous hardware engineer: it draws the schematic, proves it with KiCad's own checks, and routes a board you can send to the fab."
+    />
+    <link rel="icon" href="./assets/icon.png" />
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+    <meta property="og:title" content="Ada" />
+    <meta
+      property="og:description"
+      content="Order boards that work. Ada draws the schematic, proves it with KiCad's own checks, and routes a board you can send to the fab."
+    />
+    <!-- og:image must be absolute (Open Graph). vite.config.ts copies assets/board.png to og/board.png. -->
+    <meta property="og:image" content="https://d1l2uamq911fx1.cloudfront.net/og/board.png" />
+    <meta property="og:url" content="https://d1l2uamq911fx1.cloudfront.net/" />
+    <meta name="theme-color" content="#f8f8f7" />
+    <script>
+      // Theme before first paint: a saved choice ("ada-theme", the old page's key) or the system setting,
+      // followed live while nothing is saved. Without JavaScript the page stays light.
+      (function () {
+        var root = document.documentElement;
+        var media = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+        function saved() {
+          try {
+            var v = localStorage.getItem("ada-theme");
+            return v === "light" || v === "dark" ? v : null;
+          } catch (e) {
+            return null;
+          }
+        }
+        function apply() {
+          var s = saved();
+          root.dataset.theme = s || (media && media.matches ? "dark" : "light");
+        }
+        apply();
+        if (media && media.addEventListener)
+          media.addEventListener("change", function () {
+            if (!saved()) apply();
+          });
+      })();
+    </script>
+  </head>
+  <body>
+    <!-- Without JavaScript React draws nothing, so a reader or crawler gets the headline and the three links that
+         matter. Keep the words in step with src/content.ts (HERO.title, LINKS, DEMO_MAILTO). -->
+    <noscript>
+      <main class="mx-auto max-w-[768px] px-4 pt-[20vh] text-center sm:px-6">
+        <h1 class="font-serif text-[28px] leading-[42px] font-normal text-[var(--text-primary)] md:text-[36px] md:leading-[54px]">
+          Order boards that work.
+        </h1>
+        <p class="mt-3 text-base leading-6 text-[var(--text-secondary)]">
+          Ada is an AI hardware engineer that works beside KiCad. The rest of this page needs JavaScript.
+        </p>
+        <p class="mt-5 text-sm leading-5 text-[var(--text-primary)]">
+          <a class="underline underline-offset-2" href="https://github.com/machmoon/ada-hardware">GitHub</a> ·
+          <a class="underline underline-offset-2" href="https://github.com/machmoon/ada-hardware/blob/main/docs/install.md">Install</a> ·
+          <a class="underline underline-offset-2" href="mailto:liujpatrick@gmail.com?subject=Ada%20demo">Get a demo</a>
+        </p>
+      </main>
+    </noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
