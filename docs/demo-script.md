@@ -11,7 +11,7 @@ own ERC and DRC, and a printable case checked clause by clause on the solid.
 
 ---
 
-## The cut (about 110 s)
+## The cut (about 112 s)
 
 Every row after the title is the same run. Waits are sped up and labelled with the
 factor; the narration is Kokoro text-to-speech (`af_heart`, the voice Ada speaks with).
@@ -23,14 +23,14 @@ factor; the narration is Kokoro text-to-speech (`af_heart`, the voice Ada speaks
 | Plan | Planning (sped up), then the plan's three questions with their defaults; "300 mA" and "No" typed; Propose circuit | "Ada plans before it draws, and asks only what changes the design: the load current, the connector, a power switch." |
 | Build | Propose, Place, Route on the step rail (sped up) | "It proposes a circuit that has to pass validation, places the parts with a constraint solver, and routes the copper." |
 | KiCad | `kicad-cli sch export svg` of the run's schematic, then `kicad-cli pcb render` of the routed board with its ground pour filled by KiCad | "These are KiCad's own renders of the files Ada wrote, with ground as a filled copper pour." |
-| Review | Review on the strip; the blocker (power LED wired backwards), then the output-capacitor finding with its datasheet p.4 citation | "Then Ada argues against its own design. It catches the power LED wired backwards, a blocker. And it questions the ceramic output capacitor the prompt asked for, citing the datasheet, page four." |
+| Review | Review on the strip; the output-capacitor finding with its datasheet p.4 citation (the run's other blocker, an LED polarity claim, was a false positive: the critic assumed KiCad's pin numbering; the prompts now state the convention) | "Then Ada argues against its own design. It questions the ceramic output capacitor the prompt asked for, citing the datasheet, page four, which asks for tantalum." |
 | Checks | A terminal replaying `kicad-cli` ERC, DRC and schematic parity on the run's files, with their real output | "KiCad's own checks on those files: zero ERC errors, zero DRC errors, and the schematic and board agree." |
 | ESP32 | The ESP32 card: that board rendered by KiCad, numbers from `board_eval.py --only esp32_devboard` on 2026-09-25 (scripted circuit, real engine) | "Same engine, bigger board: an eighteen-part ESP32, every net connected, all three KiCad checks at zero." |
-| Parts and case | Source the parts, Design the case, the rail rows with their receipts; the case kernel's own render of the case | "It proposes part numbers for eleven of twelve parts, none confirmed yet, and a printable case: twelve of thirteen checks pass." |
+| Parts and case | Source the parts, Design the case, the rail rows with their receipts; the case kernel's own render of the case | "It proposes part numbers for eleven of twelve parts, none confirmed yet, and a case checked on the solid: twelve of thirteen checks pass." |
 | Gate | "Prepare fab order · Ada Pro" on the strip, pressed | "Nothing up to here needs Ada Pro. Preparing the fab order is the one paid step: twelve dollars a month." |
 | Purchase | Settings › Ada Pro (`active: no`, Buy), the RevenueCat Test Store modal, `pro` active in `CustomerInfo` | "The purchase runs through the RevenueCat SDK, and the pro entitlement unlocks the step. This is the Test Store, so no money moved." |
-| Order | Back on the strip, "Prepare fab order · 1 call" (unlocked) is pressed; the order row reads not orderable, 1 blocker; "Every stage has run. Nothing was ordered." | "The fab pack is prepared, and it says what still blocks an order. Ada never orders on its own." |
-| Close | Repo URL, licences, Next Gen, Test Store note | "Ada is open source, and the engine is free. Ada Pro, through RevenueCat, is the one paid step." |
+| Order | Back on the strip, "Prepare fab order · 1 call" (unlocked) is pressed; the order row reads not orderable, 1 blocker; "Every stage has run. Nothing was ordered." | "The fab pack is prepared, but not orderable yet: its own Gerbers don't draw the ground pour. Ada never orders on its own." |
+| Close | Repo URL, licences, Next Gen, Test Store note | "Ada is open source, built by a student, and the engine is free. Ada Pro, through RevenueCat, is the one paid step." |
 
 ### How it was recorded
 
