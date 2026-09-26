@@ -42,7 +42,7 @@ from .config import DEFAULT_STEPS_DIR, Config, ConfigError, load_config
 from .runner import Runner
 from .store import BoardStore
 
-__all__ = ["build_runner", "main", "make_server"]
+__all__ = ["StartupError", "build_runner", "main", "make_server", "startup"]
 
 
 def build_runner(config: Config, *, steps: Any = None) -> Runner:
@@ -107,18 +107,22 @@ def _provider_problem() -> str | None:
     return None
 
 
-def main(argv: list[str] | None = None) -> int:
-    _load_dotenv()
-    try:
-        config = load_config(argv)
-    except ConfigError as exc:
-        print(f"alexabot: {exc}", file=sys.stderr)
-        return 2
+class StartupError(RuntimeError):
+    """The endpoint cannot start as configured; the message says why."""
+
+
+def startup(config: Config, *, banner: str | None = None) -> Runner:
+    """Everything :func:`main` does before it binds, shared with the sim.
+
+    Rate limit, the steps-dir default, the scripted environment pair (or the
+    provider check), the runner, and the sweep of boards an earlier process
+    left mid-run. ``.env`` is read by each ``main``, not here. ``banner``
+    goes to stderr where ``main`` always printed the scripted one.
+    """
     try:
         mcp_server.configure_rate_limit()
     except ValueError as exc:
-        print(f"alexabot: {exc}", file=sys.stderr)
-        return 2
+        raise StartupError(str(exc)) from None
     # Files the history names should outlive a reboot, so not the temp dir.
     os.environ.setdefault(
         "SILKSCREEN_STEPS_DIR", str(Path(DEFAULT_STEPS_DIR).expanduser())
@@ -128,12 +132,12 @@ def main(argv: list[str] | None = None) -> int:
         # the session must go the same way with or without kicad-cli here.
         os.environ.setdefault("SILKSCREEN_ERC_IN_LOOP", "0")
         os.environ.setdefault("SILKSCREEN_KICAD_LIBRARY", "0")
-        print(scripted.BANNER, file=sys.stderr)
+        if banner:
+            print(banner, file=sys.stderr)
     else:
         problem = _provider_problem()
         if problem:
-            print(f"alexabot: {problem} Or run with --scripted.", file=sys.stderr)
-            return 2
+            raise StartupError(f"{problem} Or run with --scripted.")
 
     runner = build_runner(config)
     swept = runner.store.fail_unfinished(time.time())
@@ -143,6 +147,21 @@ def main(argv: list[str] | None = None) -> int:
             "stopped; they are marked failed with the reason",
             file=sys.stderr,
         )
+    return runner
+
+
+def main(argv: list[str] | None = None) -> int:
+    _load_dotenv()
+    try:
+        config = load_config(argv)
+    except ConfigError as exc:
+        print(f"alexabot: {exc}", file=sys.stderr)
+        return 2
+    try:
+        runner = startup(config, banner=scripted.BANNER)
+    except StartupError as exc:
+        print(f"alexabot: {exc}", file=sys.stderr)
+        return 2
     server = make_server(config, runner=runner)
     host, port = server.server_address[:2]
     auth_words = (

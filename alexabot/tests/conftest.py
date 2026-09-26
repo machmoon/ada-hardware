@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import socket
+
 import pytest
 import silkscreen.mcp.server as mcp_server
 from silkscreen.mcp.server import RateLimiter
@@ -17,6 +19,26 @@ def _unlimited_tool_calls(monkeypatch):
     """A session polls faster than the default limit allows; the limiter has
     its own tests in engine/tests/test_mcp.py."""
     monkeypatch.setattr(mcp_server, "LIMITER", RateLimiter(1_000_000))
+
+
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+@pytest.fixture
+def loopback_only(monkeypatch):
+    """Refuse any connection that is not to this machine; the refused list."""
+    real = socket.socket.connect
+    refused = []
+
+    def connect(self, address):
+        host = address[0] if isinstance(address, tuple) else address
+        if isinstance(host, str) and host not in LOOPBACK and "/" not in host:
+            refused.append(address)
+            raise OSError(f"test refused a connection to {address!r}")
+        return real(self, address)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    return refused
 
 
 @pytest.fixture

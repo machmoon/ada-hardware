@@ -7,7 +7,6 @@ runs; a guard on ``socket.connect`` proves nothing left the machine.
 """
 
 import json
-import socket
 import threading
 import urllib.request
 
@@ -19,25 +18,6 @@ from alexabot.config import Config
 from alexabot.runner import Runner
 from alexabot.store import BoardStore
 from alexabot.tests.fakes import FakeSteps, wait_for
-
-LOOPBACK = ("127.0.0.1", "::1", "localhost")
-
-
-@pytest.fixture
-def loopback_only(monkeypatch):
-    """Refuse any connection that is not to this machine."""
-    real = socket.socket.connect
-    refused = []
-
-    def connect(self, address):
-        host = address[0] if isinstance(address, tuple) else address
-        if isinstance(host, str) and host not in LOOPBACK and "/" not in host:
-            refused.append(address)
-            raise OSError(f"test refused a connection to {address!r}")
-        return real(self, address)
-
-    monkeypatch.setattr(socket.socket, "connect", connect)
-    return refused
 
 
 class Client:

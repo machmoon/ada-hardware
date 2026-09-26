@@ -25,6 +25,14 @@ Two boundaries, stated rather than discovered:
 Speech never claims KiCad checked a board: the hosted stack has none
 (reviewer finding M5). The check is "the design review".
 
+``python -m alexabot.sim`` is the **simulated Alexa+ experience**: a voice
+page, a Strands agent per conversation (Amazon Nova 2 Lite on Bedrock, or a
+rule-based ``--scripted`` stand-in) as the MCP client of these tools, and
+Amazon Polly or the browser for Ada's voice (:mod:`alexabot.sim`,
+:mod:`alexabot.agent`). It is labelled "Simulated Alexa+ experience" on
+screen and is not Alexa, an Alexa skill, or made by Amazon. Strands and boto3
+are the ``alexa`` extra, imported lazily.
+
 Structured like ``slackbot/`` and ``zoombot/``: standard library only, no
 engine logic of its own, and :mod:`alexabot.runner` is the only module that
 imports the pipeline (``service.steps``), lazily, at startup. The design and
