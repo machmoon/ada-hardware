@@ -100,6 +100,11 @@ def _case_main(argv: list[str]) -> int:
                              "part's 3D model) seated on the standoffs inside "
                              "the case, and the assembly clause report "
                              "measured there. Needs KiCad on the machine")
+    parser.add_argument("--drawings", action="store_true",
+                        help="also write <stem>-base.svg and <stem>-lid.svg: A4 "
+                             "engineering drawings (plan, front, side, isometric, "
+                             "overall dimensions) and a schedule of every hole "
+                             "and outline, all measured from the solids")
     args = parser.parse_args(argv)
 
     from .enclosure.board_shape import board_envelope
@@ -186,6 +191,22 @@ def _case_main(argv: list[str]) -> int:
             print(f"wrote {path}")
     except Exception as exc:  # noqa: BLE001 - snapshots are advisory
         print(f"note: snapshots not rendered: {exc}", file=sys.stderr)
+    drawings_failed = False
+    if args.drawings:
+        # Opt-in and additive like --assemble: the STEP is already written, so
+        # a drawing failure is an error line and a non-zero exit at the end,
+        # never a lost case or a skipped --assemble.
+        from .enclosure.drawing import draw_model
+        try:
+            receipt = draw_model(model_built, out.parent, out.stem)
+        except Exception as exc:  # noqa: BLE001 - reported in words
+            print(f"error: --drawings: {exc}", file=sys.stderr)
+            drawings_failed = True
+            receipt = None
+        for sheet in receipt.sheets if receipt else ():
+            print(f"wrote {sheet.path}")
+        for warning in receipt.warnings if receipt else ():
+            print(f"note: {warning}", file=sys.stderr)
     if out != exports.step:
         # ``-o`` named something other than ``<stem>.step`` in that
         # directory (a different suffix): honour it with a copy.
@@ -235,7 +256,7 @@ def _case_main(argv: list[str]) -> int:
             print(f"  note: kernel clauses failed: {failed} (files still "
                   "written; --rigorous makes this an error)", file=sys.stderr)
 
-    return 1 if assembly_failed else 0
+    return 1 if assembly_failed or drawings_failed else 0
 
 
 def _print_prior_art(found) -> None:
