@@ -82,6 +82,19 @@ def test_no_model_writes_a_step_assembly_and_its_stls(tmp_path, capsys):
 
 
 @needs_build123d
+def test_drawings_writes_one_measured_sheet_per_printed_part(tmp_path, capsys):
+    board = _outlined_fixture(tmp_path)
+    out = tmp_path / "case.step"
+    code = cli.main(["case", str(board), "-o", str(out), "--no-model", "--drawings"])
+    assert code == 0
+    printed = capsys.readouterr().out
+    for name in ("case-base.svg", "case-lid.svg"):
+        sheet = tmp_path / name
+        assert sheet.exists() and f"wrote {sheet}" in printed
+        assert "<svg" in sheet.read_text(encoding="utf-8")[:200]
+
+
+@needs_build123d
 def test_no_model_needs_no_api_key(tmp_path, monkeypatch):
     """The offline path must never construct a model, key or no key."""
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
