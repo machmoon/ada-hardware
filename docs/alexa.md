@@ -120,7 +120,10 @@ asked.
 #   "Ask Ada for a three point three volt regulator board powered from USB-C."
 #   "Up to one amp."   "You choose."   "Yes, place and route it."
 #   "Explain the first blocker."   then "New conversation" and
-#   "How did my regulator board go?"
+#   "How did my regulator board go?"   The memory pill in the header now reads
+#   "Remembering (scripted): USB-C power input, 3.3 V logic"; say
+#   "Ask Ada for a sensor board" and Ada asks "Last time you chose: USB-C
+#   power input and 3.3 volt logic. Same again?"; "Yes" adds them to the intent.
 ```
 
 `--scripted` is `--agent scripted --workers scripted --tts browser`. The
@@ -143,11 +146,28 @@ aws sts get-caller-identity >/dev/null   # credentials present; us-east-1 with N
                                                      # (GOOGLE_API_KEY or ANTHROPIC_API_KEY)
 ```
 
+**(c) With Amazon Bedrock AgentCore Memory** (design preferences between
+conversations; see [Memory](#memory-design-preferences-across-conversations)):
+
+```bash
+./.venv/bin/python scripts/aws/agentcore_memory.py create   # once; idempotent; prints the export line
+export ADA_AGENTCORE_MEMORY_ID=AdaDesignPreferences-XXXXXXXXXX
+./.venv/bin/python -m alexabot.sim --scripted     # AgentCore for memory, everything else offline
+./.venv/bin/python -m alexabot.sim --agent bedrock --workers scripted   # and Nova + Polly
+./.venv/bin/python scripts/aws/agentcore_memory.py teardown --yes       # delete it and every preference
+```
+
 Startup refuses (exit 2), naming every problem at once, when the `alexa` extra
 is missing, when `--agent bedrock` or `--tts polly` has no AWS credentials
 ("run with --scripted"), when `--workers live` has no model provider, when a
-port is busy (`--mcp-port 0` / `--port 0` pick free ones), and on any
-non-loopback `--host`: the page has no login.
+port is busy (`--mcp-port 0` / `--port 0` pick free ones), on any
+non-loopback `--host` (the page has no login), and for memory: `--memory
+agentcore` with no id, an id that is not `<name>-<10 characters>`, AgentCore
+Memory with no AWS credentials, `--mcp-url` with a named memory and no
+`--memory-actor`, and a resource that one `GetMemory` finds missing, not
+`ACTIVE`, or without the user-preference strategy on
+`/users/{actorId}/preferences/`. An operator who named a memory gets a
+refusal, never a silent downgrade.
 
 | Flag / env | Default | Meaning |
 |---|---|---|
@@ -165,6 +185,11 @@ non-loopback `--host`: the page has no login.
 | `--mcp-url` | none | use another alexabot; board images are then off and the card says why |
 | `ALEXA_SIM_MCP_KEY` | none | an `ada_` key for the agent, when the tools need a credential |
 | `--db`, `--scripted-delay` | alexabot's; 1.5 s with scripted workers | passed through |
+| `--memory {agentcore,scripted,off}` | `agentcore` when an id is set; else `scripted` with `--scripted`; else `off` | where design preferences live between conversations |
+| `--memory-id` / `ADA_AGENTCORE_MEMORY_ID` | none | the AgentCore memory id `create` prints |
+| `--memory-region` / `ADA_AGENTCORE_REGION` | `--region` | AgentCore Memory's region |
+| `--memory-actor` | the in-process account | whose preferences; required with `--mcp-url` and a named memory (the implicit scripted memory turns itself off instead, and says why) |
+| `--max-memory-calls` / `ADA_AGENTCORE_MAX_CALLS` | 60 | process-wide AgentCore Memory call cap |
 
 ### How it works
 
@@ -236,6 +261,85 @@ request.
 The **"What the agent did"** drawer lists every model call and every MCP tool
 call with its arguments and origin (model or host poll), and the budget left.
 
+### Memory: design preferences across conversations
+
+`alexabot/memory.py`. What is remembered is narrow on purpose: the **design
+preferences a person states** ("powered from USB-C", "3.3 V logic", "no
+LED"), so a new conversation can offer them back. Boards stay in alexabot's
+SQLite store and reach speech only through `recall_my_boards`; a
+model-extracted copy of "one open blocker" would go stale when the board
+changes and still be spoken as truth.
+
+- **One seam, three implementations, one contract.** `AgentCoreMemory` (boto3's
+  `bedrock-agentcore` client, injected), `ScriptedMemory` (a few regular
+  expressions over the person's words, in this process, for `--scripted` and
+  the tests; labelled scripted everywhere it shows) and `MemoryOff`. `recall`
+  and `record` never raise; a failure is `unavailable`/`failed` with a
+  sentence from `memory.REASONS` ("this AWS identity may not use AgentCore
+  Memory", "AgentCore Memory is busy", ...), never an empty `ok` and never
+  exception text. `alexabot/tests/test_alexa_memory_contract.py` runs the same
+  assertions over all three, the adapter behind botocore's `Stubber`.
+- **Write: one `CreateEvent` per spoken turn**, after the reply, on a writer
+  thread (a queue of 32; a full queue drops the write and says so in the
+  trace), so a write never delays speech. The payload is the question the
+  person was answering (`ASSISTANT`, only when Ada's last utterance was a
+  question) and their own words (`USER`), with `clientToken`
+  `<conversation>-<turn>` so boto3's own retry stores a turn once. **Never
+  written:** Ada's reply, a default she chose, a host note, a hint, a tool
+  result, a chip label (`source: chip`), or a turn whose only tool call was
+  "you choose": the built-in extractor reads both roles, and "I'll assume no
+  LED" must never become "prefers no LED".
+- **Read: one `RetrieveMemoryRecords` per conversation**, when it opens (after
+  the greeting, which does not wait; the first turn waits at most 2 s), topK 5
+  in `/users/{actorId}/preferences/` with a fixed query. Records below a 0.2
+  relevance score (the Strands integration's default) or in another
+  namespace are dropped; the text is the documented JSON's `preference`, else
+  the raw text. What this conversation teaches is extracted about a minute
+  later and belongs to the next one.
+- **Ada offers, never assumes, and the request's own words win.** While a new
+  board could start, the turn carries a bracketed note for the model:
+  `[Memory: from earlier conversations with this person: "USB-C power input";
+  "3.3 V logic". Ask first, exactly: "Last time you chose: USB-C power
+  input and 3.3 volt logic. Same again?"]`. The host first drops every
+  preference whose category (power input, logic voltage, indicator,
+  connector, size) the request already names, so "a 5 V board with a barrel
+  jack" gets no note and no question; an uncategorised record shows on the
+  pill but is never offered. Only a yes puts the survivors into the
+  `start_board_design` intent; the next turn's note is re-filtered against
+  the answer ("yes, but a barrel jack" drops USB-C). The offer is made once
+  per conversation.
+- **A fourth guard rule, `memory_claim`.** Model text that claims to remember
+  ("last time", "I remember", "you usually", "as before", ...) is kept only
+  when this turn carries a note and the sentence names something in it;
+  otherwise it becomes the ask, "I'll go by what you just asked for.", "I
+  don't have any preferences saved from earlier conversations.", or the
+  memory-off sentence. Like the other three it is a regular expression: it
+  catches the tested phrasings, not every possible one.
+- **Who.** The actor is `acct-` plus 32 hex characters of the SHA-256 of the
+  alexabot account (the one whose boards these are), so the account name
+  never leaves the machine and a `.` in it cannot break botocore's `ActorId`
+  pattern. The session is the sim's `conv_<16 hex>`.
+- **What the page shows.** A pill in the header ("Memory off", "Memory:
+  checking", "Remembering: USB-C power input, 3.3 V logic", "Memory on:
+  nothing saved yet", "Memory unavailable", or the scripted forms), built on
+  the server by `memory.chip_label` and sent as `memory` events, so the page
+  never says it remembers something the server did not report. Tapping it
+  lists each preference with the date it was saved and the source. The "What
+  the agent did" drawer lists every memory call and the memory budget; the
+  footer says what is sent where. A failed write is one notice ("I couldn't
+  save that to memory; your board is unaffected.") and the pill turns
+  `unavailable`. `GET /api/config` carries `memory: {kind, name, strategy,
+  namespace, region, reason}`, never the memory id, the account or a
+  credential.
+- **Direct boto3, not the AgentCore SDK** (read as source at `c7423e5`, not a
+  dependency): its `retrieve_memories` answers `[]` on a `ClientError` (a
+  refusal would read as "nothing remembered"), `create_event` sends no
+  `clientToken`, `create_or_get_memory` matches a resource by id prefix, and
+  its Strands session manager writes one event per message (tool results and
+  host notes included, 4 to 6 per spoken turn) and retrieves on every user
+  message. Past events are not rehydrated into the history (a stated
+  deviation from KayLerch D30): a replayed "the board is routing" is stale.
+
 ### What it has been run against
 
 Offline, on this Mac: the scripted agent drove a whole session
@@ -257,8 +361,31 @@ browser's voice. No credential appeared in the server log, the page or
 whole of the live evidence: the honesty guards have only been exercised
 offline, because Nova never wrote a clean-review claim in those turns.
 
+Memory, offline on this Mac (2026-09-26): the scripted agent and
+`ScriptedMemory` drove a first conversation that asked for "a three point
+three volt regulator board powered from USB-C" and a second whose pill read
+"Remembering (scripted): USB-C power input, 3.3 V logic", whose "Ask Ada for
+a sensor board" got the ask and whose "Yes" started "a sensor board, with
+USB-C power input and 3.3 V logic"; a third asked for "a 5 V board with a
+barrel jack" and got no note and no ask. **AgentCore Memory itself has not
+been run live from this repo yet**: `scripts/aws/agentcore_memory.py` and the
+adapter are tested against botocore's `Stubber` (which checks every request
+against the service model offline), and the record text shape, extraction
+latency, the 0.2 score floor and the IAM actions on the account are
+unverified until they are.
+
 ### Sources
 
+- Amazon Bedrock AgentCore Memory, read as source to decide and not a
+  dependency: aws/bedrock-agentcore-sdk-python `c7423e5`
+  (`memory/client.py`, `memory/constants.py`,
+  `memory/integrations/strands/session_manager.py` and `config.py`);
+  awslabs/amazon-bedrock-agentcore-samples `e1a55b3`
+  (`01-features/04-manage-context-of-your-agent/memory/02-long-term-memory/01-built-in-strategies/user-preference.py`,
+  `04-namespaces/README.md`); botocore `bedrock-agentcore/2024-02-28` and
+  `bedrock-agentcore-control/2023-06-05` `service-2.json`/`waiters-2.json`
+  (`86201a3`); KayLerch's `packages/agent/src/memory/agentcore-memory.ts` and
+  `docs/decisions.md` D30/D31.
 - Strands Agents (strands-agents 1.57.1 = sdk-python `python/v1.57.1`,
   `6da3f48`, Apache-2.0): `Agent`, `hooks/events.py`, `tools/_caller.py`,
   `tools/mcp/mcp_client.py`, `models/bedrock.py`; the scripted model's stream
@@ -276,10 +403,84 @@ offline, because Nova never wrote a clean-review claim in those turns.
 No open-source Alexa+ web simulator exists to copy; the Alexa developer
 console's simulator is closed. The page's layout is Ada's own.
 
+## AWS integrations
+
+The simulated Alexa+ experience uses four AWS services. Each is behind a seam
+with an offline stand-in, so `--scripted` runs the same code paths with no AWS
+account and no key; with AWS, each is used only when configured, and a
+missing piece is a refusal or an "off" said out loud, never a silent pretend.
+
+```text
+ Browser: alexabot/web (Chrome or Edge)
+   | voice in: the browser's own Web Speech API
+   | POST /api/conversations/<cid>/turns, EventSource .../events
+   v
+ Sim server: python -m alexabot.sim, 127.0.0.1:8790 (alexabot/sim.py)
+   |  one Strands Agent per conversation (Strands Agents 1.57.1, alexabot/agent.py)
+   |
+   |-- Amazon Bedrock Runtime, ConverseStream ...... model us.amazon.nova-2-lite-v1:0
+   |     (us-east-1)                                 picks one of Ada's six tools per turn
+   |
+   |-- Amazon Polly, SynthesizeSpeech .............. Joanna, neural, mp3
+   |     (us-east-1)                                 speaks what Ada already said
+   |
+   |-- Amazon Bedrock AgentCore Memory ............. resource AdaDesignPreferences
+   |     (us-east-1)                                 RetrieveMemoryRecords: once per conversation
+   |                                                 CreateEvent: once per spoken turn
+   |                                                 built-in user-preference strategy,
+   |                                                 /users/{actorId}/preferences/
+   |
+   '-- MCP 2025-11-25, Streamable HTTP .............. http://127.0.0.1:8789/mcp
+         alexabot: six voice tools (alexabot/tools.py), SQLite board store
+           '-- service/steps.py -> the Ada engine (silkscreen):
+               propose, place (CP-SAT), route, review -> a KiCad project
+```
+
+| Service | Region | Called from | What for | Offline stand-in | Cap |
+|---|---|---|---|---|---|
+| Amazon Bedrock, Nova 2 Lite (`us.amazon.nova-2-lite-v1:0`, a cross-region inference profile) | `--region`, default `us-east-1` | `strands.models.BedrockModel` (`agent.bedrock_model_factory`), `ConverseStream` | the agent's language model: one call per spoken turn, which picks a tool; tool results end the turn on their own pre-written speech | `alexabot/scripted_agent.py`, a rule-based `strands.models.Model` | `--max-model-calls` 60 |
+| Amazon Polly, `SynthesizeSpeech` | `--region` | `alexabot/polly.py` | Ada's voice: neural `Joanna`, mp3, of an utterance already said, lazily and cached | the browser's `speechSynthesis` | `--max-polly-calls` 60 |
+| Amazon Bedrock AgentCore Memory (`bedrock-agentcore`, `bedrock-agentcore-control`) | `--memory-region`, default `--region` | `alexabot/memory.py` (boto3 directly), `scripts/aws/agentcore_memory.py` | design preferences between conversations: the person's words in, preferences extracted by the built-in user-preference strategy, offered back as a question | `ScriptedMemory` (`--scripted`), or off | `--max-memory-calls` 60 |
+| Strands Agents (the open-source SDK, Apache-2.0) | local | `alexabot/agent.py` | the agent loop, hooks, the Bedrock model class and the MCP client | none needed: it runs offline with the scripted model | |
+
+Credentials come from the standard AWS chain (`aws configure`, `aws sso
+login`, or the environment); the sim never prints them, and startup refuses
+in words when a configured service has none. IAM, least privilege:
+
+- the agent: `bedrock:InvokeModelWithResponseStream` on the Nova 2 Lite
+  inference profile and the foundation model it routes to;
+- the voice: `polly:SynthesizeSpeech`;
+- memory, the sim: `bedrock-agentcore:GetMemory`, `CreateEvent`,
+  `RetrieveMemoryRecords` on the one memory resource;
+- memory, the setup script: `bedrock-agentcore:CreateMemory`, `ListMemories`,
+  `GetMemory`, `DeleteMemory`.
+
+Cost, from the AWS pricing pages on 2026-09-26: AgentCore Memory is $0.25 per
+1,000 short-term events (one per written turn) and $0.50 per 1,000
+retrievals (one per conversation), plus $0.75 per 1,000 stored records a
+month; the extraction model is included for built-in strategies with no
+override, and this resource sets none (no execution role). A ten-turn
+conversation is about a quarter of a cent in memory calls.
+
+Without AWS: `python -m alexabot.sim --scripted` (no account, no key, nothing
+leaves the machine). With AWS, pick what to turn on:
+
+```bash
+python -m alexabot.sim --scripted                                    # none
+ADA_AGENTCORE_MEMORY_ID=... python -m alexabot.sim --scripted        # AgentCore Memory only
+python -m alexabot.sim --agent bedrock --workers scripted            # Bedrock + Polly (+ memory if the id is set)
+python -m alexabot.sim --agent bedrock --tts browser --memory off    # Bedrock only
+```
+
+Hosting is not part of this: everything above runs on one machine, and the
+sim refuses a non-loopback `--host`.
+
 ## Not built
 
 Cancel, booking a design review, an MCP Apps card, per-judge daily caps, and
 an `/integrations` entry. For the simulated experience: a real Alexa device
-or skill (there is none, and no Amazon sign-in), AgentCore Runtime and
-Memory (cross-session context is `recall_my_boards`), MCP Apps
+or skill (there is none, and no Amazon sign-in), AgentCore Runtime, MCP Apps
 (`ui://ada/board.html`), the hosted deployment, and per-judge access codes.
+For memory: forgetting a preference from the page (`BatchDeleteMemoryRecords`
+exists), rehydrating past messages, a semantic or summary strategy (boards
+stay in SQLite), and memory on a hosted deployment.

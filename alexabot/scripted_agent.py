@@ -22,6 +22,13 @@ Two layers, so the rules test without Strands installed:
   ``packages/agent/src/testing/scripted-model.ts`` (``ca2c2ef``, the bridge's
   plan D10): tool-use ids ``scripted-<n>``, and a ``calls`` record for tests.
 
+Memory: when the newest user message carries a ``[Memory: ...]`` note that
+says "Ask first", a request for a new board gets the note's question (rule
+8c), recomputed with :func:`alexabot.memory.unstated` so a preference the
+request already settles is never asked about; a yes to that question starts
+the board with the request plus the preferences, a no with the request alone
+(rule 8d).
+
 The board context -- which session, which state, which question -- comes from
 the same compact JSON line Nova reads (:func:`alexabot.agent.model_view`):
 the newest ``[Host note: ...]`` or tool result in the history. So the
@@ -34,6 +41,8 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
+
+from . import memory as memory_mod
 
 __all__ = [
     "HELP_TEXT",
@@ -58,7 +67,11 @@ ERROR_TEXT = (
     "Sorry, that didn't work on my side. You can ask me to start a new board."
 )
 
-_NOTE_SPLIT = re.compile(r"\n\[(?:Host note|Frontend hint):")
+_NOTE_SPLIT = re.compile(r"\n\[(?:Host note|Frontend hint|Memory):")
+_MEMORY_NOTE = re.compile(
+    r'\[Memory: from earlier conversations with this person: '
+    r'((?:"[^"]*"(?:; )?)*)\. (?:Ask first, exactly: "([^"]*)"|You already asked)')
+_NO = re.compile(r"^(no|nope|nah)\b|\bnot this time\b|\bsomething different\b")
 _HOST_NOTE = "[Host note:"
 _HINT = re.compile(r'\[Frontend hint: this request matched the tool "([a-z_]+)"')
 _HINT_VALUES = "and the values "
@@ -212,6 +225,41 @@ def _hint(text: str) -> dict[str, Any] | None:
             "input": dict(values) if isinstance(values, dict) else {}}
 
 
+def _memory_note(text: str) -> dict[str, Any] | None:
+    """The ``[Memory: ...]`` note in ``text``: its preferences, and its
+    question when it says "Ask first"."""
+    match = _MEMORY_NOTE.search(text)
+    if match is None:
+        return None
+    return {"prefs": re.findall(r'"([^"]*)"', match.group(1)), "ask": match.group(2)}
+
+
+def _text_of(message: Mapping[str, Any]) -> str:
+    return "".join(str(b["text"]) for b in _blocks(message)
+                   if isinstance(b.get("text"), str))
+
+
+def _asked_before(messages: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
+    """When the last thing said was the memory question: the request it was
+    asked about and the preferences it named."""
+    if len(messages) < 3 or messages[-2].get("role") != "assistant" \
+            or messages[-3].get("role") != "user":
+        return None
+    earlier = _text_of(messages[-3])
+    note = _memory_note(earlier)
+    said = " ".join(_text_of(messages[-2]).split())
+    if note is None or not note["ask"] or said != " ".join(note["ask"].split()):
+        return None
+    request = request_text(earlier)
+    return {"request": _ADDRESS.sub("", request, count=1).strip() or request,
+            "prefs": note["prefs"]}
+
+
+def _start(intent: str) -> dict[str, Any]:
+    return {"tool": "start_board_design",
+            "input": {"intent": intent[:500], "request_id": "host-assigned"}}
+
+
 def _ordinal(u: str) -> int:
     match = _ORDINAL.search(u)
     if match is None:
@@ -293,11 +341,32 @@ def decide(messages: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "input": {"session_id": sid,
                           "answers": [{"index": int(question.get("index", 0)),
                                        "answer": original[:200]}]}}
+    starts = bool(_START.search(u) and (not sid or _START_VERB.search(u)))
+    # 8c. A new board while a memory note says "Ask first": ask, about what the
+    # request leaves open (recomputed here; the host filtered already).
+    note = _memory_note(raw)
+    if starts and note is not None and note["ask"]:
+        left = memory_mod.unstated(
+            [memory_mod.preference(t) for t in note["prefs"]], original)
+        if left:
+            return {"text": memory_mod.ask_sentence(left)}
+    # 8d. The answer to that question: yes adds what the request and the
+    # answer leave open; no starts with the request alone.
+    asked = _asked_before(messages)
+    if asked is not None and (_YES.search(u) or _NO.search(u)):
+        request = asked["request"].rstrip(" .!?")
+        if _NO.search(u):
+            return _start(request)
+        left = memory_mod.unstated(
+            [memory_mod.preference(t) for t in asked["prefs"]],
+            f"{request} {original}")
+        shorts = [p.short for p in left]
+        return _start(f"{request}, with {memory_mod.speech.join_and(shorts)}"
+                      if shorts else request)
     # 9. A new board (with a board in hand, only when asked for with a verb).
-    if _START.search(u) and (not sid or _START_VERB.search(u)):
+    if starts:
         intent = _ADDRESS.sub("", original, count=1).strip() or original
-        return {"tool": "start_board_design",
-                "input": {"intent": intent[:500], "request_id": "host-assigned"}}
+        return _start(intent)
     # 10. Help.
     return {"text": HELP_TEXT}
 

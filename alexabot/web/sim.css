@@ -202,6 +202,100 @@ body {
   background: var(--warning-tsp);
 }
 
+/* -- memory: a pill that opens what Ada remembers ------------------------------ */
+
+.top-inner {
+  position: relative;
+}
+.pill-memory {
+  appearance: none;
+  gap: 6px;
+  max-width: 440px;
+  min-width: 0;
+  border: 1px solid var(--Button-border-secondary);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+.pill-memory:hover {
+  background: var(--fill-tsp-white-light);
+}
+.pill-memory::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-disable);
+}
+.pill-memory .pill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pill-memory[data-state="off"],
+.pill-memory[data-state="checking"] {
+  color: var(--text-tertiary);
+}
+.pill-memory[data-state="ok"]::before {
+  background: var(--ada-copper);
+}
+.pill-memory[data-state="unavailable"] {
+  border-color: var(--function-warning);
+  background: var(--warning-tsp);
+  color: var(--text-primary);
+}
+.pill-memory[data-state="unavailable"]::before {
+  background: var(--function-warning);
+}
+.memory-pop {
+  position: absolute;
+  top: calc(100% - 4px);
+  right: 16px;
+  z-index: 30;
+  width: min(360px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--border-dark);
+  border-radius: 12px;
+  background: var(--background-menu-white);
+  box-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.08);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 18px;
+}
+.memory-pop h2 {
+  margin: 0 0 8px;
+  font: 600 13px/18px var(--font-sans);
+}
+.memory-pop ul {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.memory-pop li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border-main);
+}
+.memory-pop li:first-child {
+  border-top: 0;
+}
+.memory-pop .when,
+.memory-pop .memory-source,
+.memory-pop .memory-empty {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.memory-pop .when {
+  flex: none;
+}
+.memory-pop p {
+  margin: 0;
+}
+
 /* -- buttons: manus's header buttons (32px, radius 8) ------------------------- */
 
 .btn {
@@ -1184,6 +1278,9 @@ main {
   .pill {
     padding: 0 8px;
     font-size: 11px;
+  }
+  .pill-memory {
+    max-width: 100%;
   }
   /* Six labels do not fit a phone: the bars stay, and only the step Ada is
      on is named (the others stay in the accessibility tree). */

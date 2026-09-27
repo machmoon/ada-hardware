@@ -11,6 +11,12 @@ One process, loopback only, three parts:
   step), its JSON API, an EventSource stream per conversation, the Polly
   audio of what Ada said, and the routed board as an SVG.
 
+With ``--memory`` (or ``ADA_AGENTCORE_MEMORY_ID``), each conversation also
+reads the person's remembered design preferences from Amazon Bedrock
+AgentCore Memory when it opens and writes their words back, one event per
+spoken turn (:mod:`alexabot.memory`); ``--scripted`` uses an in-process
+stand-in, and with neither, memory is off and the page says so.
+
 It is a **simulation**. Nothing here is Alexa, an Alexa skill, or made by
 Amazon; the page says so in its header, its greeting and its footer. The live
 agent's model is Amazon Nova 2 Lite on Bedrock and its voice Amazon Polly;
@@ -66,6 +72,7 @@ DEFAULT_PORT = 8790
 DEFAULT_MCP_PORT = 8789
 DEFAULT_MAX_MODEL_CALLS = 60
 DEFAULT_MAX_POLLY_CALLS = 60
+DEFAULT_MAX_MEMORY_CALLS = 60
 SCRIPTED_SIM_DELAY_S = 1.5
 MAX_BODY = 8 * 1024
 MAX_HINT_BYTES = 2 * 1024
@@ -82,7 +89,12 @@ SIM_ENV = (
     "ALEXA_SIM_MAX_POLLY_CALLS",
     "ALEXA_SIM_MCP_KEY",
     "AWS_REGION",
+    "ADA_AGENTCORE_MEMORY_ID",
+    "ADA_AGENTCORE_REGION",
+    "ADA_AGENTCORE_MAX_CALLS",
 )
+MEMORY_KINDS = ("agentcore", "scripted", "off")
+_ACCOUNT = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}\Z")
 
 INSTALL_LINE = 'pip install -e ".[dev,agents,cloud,adk,cad,alexa]"'
 
@@ -138,6 +150,12 @@ class SimConfig:
     max_polly_calls: int = DEFAULT_MAX_POLLY_CALLS
     db: str | None = None
     scripted_delay_s: float = 0.0
+    memory: str = "off"
+    memory_id: str | None = None
+    memory_region: str = "us-east-1"
+    memory_actor: str | None = None
+    max_memory_calls: int = 60
+    memory_reason: str | None = None
 
     @property
     def mode(self) -> str:
@@ -166,6 +184,18 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--mcp-url", default=None)
     p.add_argument("--db", default=None)
     p.add_argument("--scripted-delay", default=None, metavar="SECONDS")
+    p.add_argument("--memory", choices=MEMORY_KINDS, default=None,
+                   help="where design preferences live between conversations: "
+                   "AgentCore Memory (default when a memory id is set), scripted "
+                   "(default with --scripted) or off")
+    p.add_argument("--memory-id", default=None,
+                   help="the AgentCore memory id (ADA_AGENTCORE_MEMORY_ID)")
+    p.add_argument("--memory-region", default=None,
+                   help="the AgentCore Memory region (ADA_AGENTCORE_REGION; "
+                   "default --region)")
+    p.add_argument("--memory-actor", default=None,
+                   help="whose preferences these are; needed with --mcp-url")
+    p.add_argument("--max-memory-calls", default=None)
     p.add_argument("--host", default="127.0.0.1")
     return p
 
@@ -222,6 +252,12 @@ def load_sim_config(argv: Sequence[str] | None = None,
     mcp_url = (args.mcp_url or "").strip() or None
     if mcp_url and not re.match(r"\Ahttps?://", mcp_url):
         problems.append(f"--mcp-url must be an http(s) URL, got {mcp_url!r}")
+    region = args.region or env.get("AWS_REGION") or "us-east-1"
+    memory, memory_id, actor, reason = _memory_choice(args, env, agent, mcp_url,
+                                                      problems)
+    max_memory = _int(args.max_memory_calls if args.max_memory_calls is not None
+                      else env.get("ADA_AGENTCORE_MAX_CALLS"), "--max-memory-calls",
+                      problems, low=0, high=100_000, default=DEFAULT_MAX_MEMORY_CALLS)
     if problems:
         raise SimConfigError(problems)
     return SimConfig(
@@ -229,11 +265,58 @@ def load_sim_config(argv: Sequence[str] | None = None,
         agent=agent, workers=workers, tts=tts,
         model_id=args.model_id or env.get("ALEXA_SIM_MODEL_ID")
         or "us.amazon.nova-2-lite-v1:0",
-        region=args.region or env.get("AWS_REGION") or "us-east-1",
+        region=region,
         voice=args.voice or env.get("ALEXA_SIM_POLLY_VOICE") or "Joanna",
         max_model_calls=max_model, max_polly_calls=max_polly, db=args.db,
         scripted_delay_s=max(delay, 0.0),
+        memory=memory, memory_id=memory_id,
+        memory_region=(args.memory_region or env.get("ADA_AGENTCORE_REGION")
+                       or region),
+        memory_actor=actor, max_memory_calls=max_memory, memory_reason=reason,
     )
+
+
+def _memory_choice(args: argparse.Namespace, env: Mapping[str, str], agent: str,
+                   mcp_url: str | None, problems: list[str]
+                   ) -> tuple[str, str | None, str | None, str | None]:
+    """``(kind, memory id, actor, reason it is off)``.
+
+    An id means AgentCore; otherwise ``--scripted`` means the scripted
+    stand-in; otherwise off. An operator who named a memory (``--memory`` or
+    an id) gets a refusal, never a silent downgrade; only the implicit
+    scripted default with ``--mcp-url`` and no actor turns itself off, and
+    says why.
+    """
+    from .memory import MEMORY_ID, OFF_FIX
+
+    memory_id = (args.memory_id or env.get("ADA_AGENTCORE_MEMORY_ID") or "").strip() \
+        or None
+    actor = (args.memory_actor or "").strip() or None
+    explicit = args.memory
+    kind = explicit or ("agentcore" if memory_id else
+                        "scripted" if agent == "scripted" else "off")
+    reason = None
+    if kind == "agentcore" and memory_id is None:
+        problems.append("--memory agentcore needs a memory id: set "
+                        "ADA_AGENTCORE_MEMORY_ID or pass --memory-id (python "
+                        "scripts/aws/agentcore_memory.py create prints it)")
+    if kind == "agentcore" and memory_id and not MEMORY_ID.match(memory_id):
+        problems.append("the AgentCore memory id must look like "
+                        "<name>-<10 letters or digits>, as create prints it")
+    if actor is not None and not _ACCOUNT.match(actor):
+        problems.append("--memory-actor must be an account name: letters, digits "
+                        "and . _ : @ -, at most 128")
+    if mcp_url and kind != "off" and actor is None:
+        if explicit or memory_id:
+            problems.append("--mcp-url with memory needs --memory-actor: the sim "
+                            "cannot tell whose preferences these are")
+        else:
+            kind = "off"
+            reason = ("Memory is off with --mcp-url until --memory-actor names whose "
+                      "preferences these are.")
+    if kind == "off" and reason is None:
+        reason = OFF_FIX
+    return kind, (memory_id if kind == "agentcore" else None), actor, reason
 
 
 # -- the page's server ------------------------------------------------------------
@@ -643,7 +726,10 @@ def preflight(config: SimConfig) -> list[str]:
     except ImportError:
         problems.append(f"the alexa extra is not installed (Strands Agents); run "
                         f"{INSTALL_LINE}")
-    if config.agent == "bedrock" or config.tts == "polly":
+    needs = [name for name, used in (
+        ("Bedrock", config.agent == "bedrock"), ("Polly", config.tts == "polly"),
+        ("AgentCore Memory", config.memory == "agentcore")) if used]
+    if needs:
         try:
             import boto3
         except ImportError:
@@ -654,8 +740,11 @@ def preflight(config: SimConfig) -> list[str]:
             except Exception:  # noqa: BLE001 -- never echo why
                 credentials = None
             if credentials is None:
-                problems.append("no AWS credentials for Bedrock and Polly; run with "
-                                "--scripted, or sign in with the AWS CLI")
+                memory_way = (", --memory scripted or --memory off"
+                              if config.memory == "agentcore" else "")
+                problems.append(f"no AWS credentials for {' and '.join(needs)}; run "
+                                f"with --scripted{memory_way}, or sign in with the "
+                                "AWS CLI")
     if config.workers == "live" and config.mcp_url is None:
         from .app import _provider_problem
 
@@ -709,6 +798,8 @@ class Sim:
         self.host.join(10)
         for session in getattr(self.factory, "sessions", []):
             session.poller.join(10)
+            # The writer drains what the last turns queued (at most 5 s each).
+            session.memory.close(5)
         if self.serving:
             with contextlib.suppress(Exception):
                 self.server.shutdown()
@@ -731,18 +822,29 @@ def build(
     poll_min_s: float | None = None,
     poll_cap_s: float | None = None,
     polly_client: Any = None,
+    memory_clients: tuple[Any, Any] | None = None,
 ) -> Sim:
     """Start the MCP tools (unless ``--mcp-url``), the MCP client, and bind the
     page's server; nothing serves until :meth:`Sim.serve_in_background` or
-    ``serve_forever``. ``poll_*`` and ``polly_client`` are the tests' seams."""
+    ``serve_forever``. ``poll_*``, ``polly_client`` and ``memory_clients``
+    (``(bedrock-agentcore, bedrock-agentcore-control)``) are the tests' seams.
+
+    AgentCore Memory is probed first (one ``GetMemory``), so a resource that
+    is missing, not ACTIVE or differently shaped refuses before anything
+    starts."""
     from strands.tools.mcp import MCPClient
 
     from . import agent as voice
     from . import app as alexa_app
     from . import auth, tools
+    from . import memory as mem
     from .config import load_config
 
     env = os.environ if env is None else env
+    budget = voice.Budget(config.max_model_calls, config.max_polly_calls,
+                          config.max_memory_calls)
+    memory = _build_memory(config, budget, memory_clients)
+    actor = mem.actor_id(config.memory_actor) if config.memory_actor else None
     runner = None
     mcp_server = None
     images = config.mcp_url is None
@@ -774,6 +876,8 @@ def build(
                 "key (or MCP_HTTP_TOKEN) so the sim's agent can call them"])
         steps_dir = Path(os.environ.get("SILKSCREEN_STEPS_DIR", "~/.kaleo/alexa-steps"))
         board_file = board_file_lookup(runner.store, subject.subject, steps_dir)
+        # Whose preferences: the account whose boards these are, hashed.
+        actor = actor or mem.actor_id(subject.subject)
         server_name = tools.SERVER_INFO["title"]
     else:
         mcp_url = config.mcp_url
@@ -783,7 +887,6 @@ def build(
                        startup_timeout=30)
     client.start()
     listed = client.list_tools_sync()
-    budget = voice.Budget(config.max_model_calls, config.max_polly_calls)
     if config.agent == "scripted":
         from .scripted_agent import scripted_model
 
@@ -803,6 +906,8 @@ def build(
         images=images,
         poll_min_s=voice.HOST_POLL_MIN_S if poll_min_s is None else poll_min_s,
         poll_cap_s=voice.HOST_POLL_CAP_S if poll_cap_s is None else poll_cap_s,
+        memory=memory,
+        actor=actor,
     )
     speaker = None
     if config.tts == "polly":
@@ -830,12 +935,45 @@ def build(
         "mcp": {"url": mcp_url, "server": server_name, "spec": MCP_SPEC,
                 "tools": [t.tool_name for t in listed]},
         "board_images": images,
+        "memory": memory_view(config, memory),
     }
     app = SimApp(host=host, config=config_view, speaker=speaker,
                  board_file=board_file, budget=budget)
     server = make_sim_server(app, config.host, config.port)
     return Sim(config=config, app=app, server=server, host=host, factory=factory,
                client=client, mcp_server=mcp_server, runner=runner, mcp_url=mcp_url)
+
+
+def _build_memory(config: SimConfig, budget: Any,
+                  clients: tuple[Any, Any] | None) -> Any:
+    from . import memory as mem
+
+    if config.memory == "scripted":
+        return mem.ScriptedMemory()
+    if config.memory != "agentcore" or not config.memory_id:
+        return mem.MemoryOff(config.memory_reason or mem.OFF_FIX)
+    data, control = clients or mem.make_clients(config.memory_region)
+    if budget.take_memory():
+        problems = mem.probe(control, config.memory_id)
+    else:
+        problems = [f"AgentCore Memory: {mem.REASONS['budget']}"]
+    if problems:
+        raise SimConfigError(problems)
+    return mem.AgentCoreMemory(data, config.memory_id, region=config.memory_region,
+                               take=budget.take_memory)
+
+
+def memory_view(config: SimConfig, memory: Any) -> dict[str, Any]:
+    """``/api/config``'s memory block: what and where, never the memory id,
+    the account or a credential."""
+    from . import memory as mem
+
+    view = {"kind": memory.kind, "name": mem.MEMORY_NAME, "strategy": None,
+            "namespace": mem.NAMESPACE_TEMPLATE, "region": None, "reason": None}
+    view.update(memory.describe())
+    if memory.kind == "off":
+        view["name"] = view["namespace"] = None
+    return view
 
 
 def banner(sim: Sim) -> str:
@@ -848,8 +986,14 @@ def banner(sim: Sim) -> str:
         "the browser's voice"
     workers = "Ada's workers canned" if c.workers == "scripted" else \
         "Ada's workers on the configured model"
-    return (f"{LABEL} at {sim.url} ({who}; {workers}; {voice}). MCP tools at "
-            f"{sim.mcp_url}. This is a simulation; it is not Alexa.")
+    if c.memory == "agentcore":
+        remembers = f"AgentCore Memory in {c.memory_region}"
+    elif c.memory == "scripted":
+        remembers = "scripted memory, on this machine"
+    else:
+        remembers = "memory off"
+    return (f"{LABEL} at {sim.url} ({who}; {workers}; {voice}; {remembers}). MCP "
+            f"tools at {sim.mcp_url}. This is a simulation; it is not Alexa.")
 
 
 def main(argv: list[str] | None = None) -> int:

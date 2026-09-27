@@ -231,3 +231,22 @@ def test_model_view_leaves_findings_out_when_the_review_did_not_run():
         summary = json.loads(agent.model_view("board_status", sc))["summary"]
         assert summary["review"] == review["status"]
         assert "findings" not in summary and "blockers" not in summary
+
+
+def test_the_memory_placeholder_renders_on_and_off():
+    on = agent.system_prompt(server_name="Ada", server_instructions=tools.INSTRUCTIONS,
+                             tools=tools.TOOLS, locale="en-US", today="2026-10-11",
+                             memory=True)
+    off = _system()
+    assert "{{" not in on and "{{" not in off
+    assert "say only that question, exactly" in on
+    assert "their own words always win over a note" in on
+    assert "You keep nothing between conversations here." in off
+    assert "[Memory]" not in off
+
+
+def test_turn_prompt_appends_the_memory_note_last():
+    text = agent.turn_prompt("a sensor board", host_note='{"state":"done"}',
+                             memory_note='[Memory: "x"]')
+    assert text.splitlines()[0] == "a sensor board"
+    assert text.splitlines()[-1] == '[Memory: "x"]'

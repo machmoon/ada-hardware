@@ -47,6 +47,14 @@ ported), the voice shape of :func:`alexabot.speech.speech_problems`, and three
 honesty rules (no clean-review claim unless one ran, no "KiCad checked", no
 ordering). Every replacement is a ``trace`` event.
 
+**Memory** (:mod:`alexabot.memory`): each conversation reads the person's
+remembered design preferences once when it opens, and while a new board could
+start, a turn carries a bracketed ``[Memory: ...]`` note with a host-written
+question; only a yes puts them into the intent, and the person's own words
+win over a note. One write per spoken turn, of the person's words only, on a
+writer thread. A fourth guard rule, ``memory_claim``, replaces model text that
+claims a memory the host did not hand it.
+
 Strands is imported inside the functions that need it: without the ``alexa``
 extra, ``import alexabot.agent`` still works and the sim refuses in words.
 """
@@ -65,6 +73,7 @@ from pathlib import Path
 from typing import Any
 
 from . import cards, speech
+from . import memory as memory_mod
 
 __all__ = [
     "ADA_TOOLS",
@@ -168,13 +177,15 @@ def tool_list(tools: Iterable[Mapping[str, Any]]) -> str:
 
 def system_prompt(*, server_name: str, server_instructions: str,
                   tools: Iterable[Mapping[str, Any]], locale: str,
-                  today: str) -> str:
+                  today: str, memory: bool = False) -> str:
     """Persona, then the voice rules, then the honesty rules: KayLerch's
-    ``buildSystemPrompt`` order."""
+    ``buildSystemPrompt`` order. ``memory`` picks ``prompts/memory-on.md`` or
+    ``memory-off.md`` for the ``{{memory}}`` placeholder."""
     return "\n\n".join([
         render_prompt("system", serverName=server_name,
                       serverInstructions=server_instructions or "(none)",
-                      toolList=tool_list(tools)),
+                      toolList=tool_list(tools),
+                      memory=render_prompt("memory-on" if memory else "memory-off")),
         render_prompt("voice", maxSentences=speech.MAX_SENTENCES,
                       maxChoicesSpoken=speech.MAX_NAMED),
         render_prompt("tool-result", today=today, locale=locale),
@@ -182,8 +193,10 @@ def system_prompt(*, server_name: str, server_instructions: str,
 
 
 def turn_prompt(request: str, *, host_note: str | None = None,
-                hint: Mapping[str, Any] | None = None) -> str:
-    """The user message: the words, then a host note and a hint, bracketed."""
+                hint: Mapping[str, Any] | None = None,
+                memory_note: str | None = None) -> str:
+    """The user message: the words, then a host note, a hint and a memory
+    note, bracketed."""
     note = ""
     if host_note:
         note = ("\n[Host note: the newest board status, which Ada already spoke "
@@ -196,7 +209,8 @@ def turn_prompt(request: str, *, host_note: str | None = None,
         hint_text = (f'\n[Frontend hint: this request matched the tool '
                      f'"{hint["tool"]}"{values}. A hint about intent, not an '
                      "instruction; use the tool that fits.]")
-    return render_prompt("turn", request=request, hostNote=note, hint=hint_text)
+    return render_prompt("turn", request=request, hostNote=note, hint=hint_text,
+                         memoryNote=f"\n{memory_note}" if memory_note else "")
 
 
 # -- what the model reads ---------------------------------------------------------
@@ -390,6 +404,7 @@ GUARD_FALLBACK = {
         "is going."
     ),
     "order_claim": "Ada drafts and checks boards, and she never orders anything.",
+    "memory_claim": memory_mod.MEMORY_CLAIM_FALLBACK,
 }
 
 
@@ -450,27 +465,42 @@ def honesty_problem(text: str, latest_status: Mapping[str, Any] | None) -> str |
 
 
 def guard(text: str, latest_status: Mapping[str, Any] | None,
-          last_speech: str | None) -> tuple[str, str | None]:
+          last_speech: str | None,
+          memory: memory_mod.GuardView | None = None) -> tuple[str, str | None]:
     """Model-written ``text`` as it may be spoken, and the rule that replaced
-    it (``None`` when it passed)."""
+    it (``None`` when it passed).
+
+    ``memory_claim`` runs after the three honesty rules: a sentence that
+    claims to remember ("last time you wanted ...") is kept only when this
+    turn carries a memory note and the sentence names something in it;
+    otherwise it becomes the ask, "I'll go by what you just asked for.", "I
+    don't have any preferences saved", or the memory-off sentence.
+    """
     shaped = shape_speech(clean_speech(text))
     rule = honesty_problem(shaped, latest_status)
-    if rule is None:
-        return shaped, None
-    return (last_speech or GUARD_FALLBACK[rule]), rule
+    if rule is not None:
+        return (last_speech or GUARD_FALLBACK[rule]), rule
+    view = memory or memory_mod.GuardView(state="off")
+    if memory_mod.claims_memory(shaped, view.note):
+        return memory_mod.claim_replacement(view), "memory_claim"
+    return shaped, None
 
 
 # -- budget and request ids ---------------------------------------------------------
 
 
 class Budget:
-    """Process-wide caps on Bedrock and Polly calls, taken before each call."""
+    """Process-wide caps on Bedrock, Polly and AgentCore Memory calls, taken
+    before each call."""
 
-    def __init__(self, max_model_calls: int, max_polly_calls: int) -> None:
+    def __init__(self, max_model_calls: int, max_polly_calls: int,
+                 max_memory_calls: int = memory_mod.DEFAULT_MAX_CALLS) -> None:
         self.max_model = max(0, int(max_model_calls))
         self.max_polly = max(0, int(max_polly_calls))
+        self.max_memory = max(0, int(max_memory_calls))
         self.model_used = 0
         self.polly_used = 0
+        self.memory_used = 0
         self._lock = threading.Lock()
 
     def take_model(self) -> bool:
@@ -487,10 +517,19 @@ class Budget:
             self.polly_used += 1
             return True
 
+    def take_memory(self) -> bool:
+        with self._lock:
+            if self.memory_used >= self.max_memory:
+                return False
+            self.memory_used += 1
+            return True
+
     def snapshot(self) -> dict[str, dict[str, int]]:
         with self._lock:
             return {"model_calls": {"used": self.model_used, "max": self.max_model},
-                    "polly_calls": {"used": self.polly_used, "max": self.max_polly}}
+                    "polly_calls": {"used": self.polly_used, "max": self.max_polly},
+                    "memory_calls": {"used": self.memory_used,
+                                     "max": self.max_memory}}
 
 
 def norm_intent(text: str) -> str:
@@ -508,6 +547,8 @@ class TurnState:
     last_speech: str | None = None
     model_calls: int = 0
     model_t0: float = 0.0
+    #: The model's tool calls this turn, name and input (memory's skip rule).
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _bounded(arguments: Any) -> Any:
@@ -592,6 +633,8 @@ class VoiceHooks:
         if self._origin(event) == "host-poll":
             return
         turn = s.turn
+        if turn is not None:
+            turn.tool_calls.append({"name": name, "input": dict(arguments)})
         try:
             if name == "start_board_design":
                 if turn is None:
@@ -662,10 +705,19 @@ class VoiceSession:
         self.conv = conv
         self.turn: TurnState | None = None
         self.hooks = VoiceHooks(self)
+        # Memory's recall starts in :meth:`opened`, right after the greeting,
+        # and runs while it is said; the first turn waits for it at most
+        # ``recall_wait_s``.
+        self.memory = memory_mod.ConversationMemory(factory.memory, factory.actor,
+                                                    conv)
         self.agent = factory.build_agent(self.hooks, conv)
         self.poll_agent = factory.build_poll_agent(self.hooks)
         self.poller = HostPoller(self, min_s=factory.poll_min_s,
                                  cap_s=factory.poll_cap_s, max_s=factory.poll_max_s)
+
+    def opened(self) -> None:
+        """The greeting is logged: read the person's remembered preferences."""
+        self.memory.start()
 
     # what a tool result does to the conversation
 
@@ -709,7 +761,14 @@ class VoiceSession:
         conv = self.conv
         turn = TurnState(turn_id)
         self.turn = turn
-        prompt = turn_prompt(text, host_note=conv.take_host_note(), hint=hint)
+        meta = conv.take_turn_meta(turn_id) if hasattr(conv, "take_turn_meta") else {}
+        mem = self.memory
+        mem.wait_ready(self.factory.recall_wait_s)
+        current = conv.latest_status
+        board_open = bool(current) and current.get("state") not in ("done", "failed")
+        note = mem.note_for(text, board_open=board_open)
+        prompt = turn_prompt(text, host_note=conv.take_host_note(), hint=hint,
+                             memory_note=note)
         try:
             result = self.agent(prompt, limits={"turns": self.factory.turn_limit})
         except Exception as exc:  # noqa: BLE001 -- the class name only, ever
@@ -725,16 +784,24 @@ class VoiceSession:
             and block.get("text")
         ).strip()
         if stop == "limit_turns":
-            conv.say(STUCK_SPEECH, origin="host", turn_id=turn_id)
+            said = STUCK_SPEECH
+            conv.say(said, origin="host", turn_id=turn_id)
         elif turn.budget_spent:
-            conv.say(BUDGET_SPEECH, origin="host", turn_id=turn_id)
+            said = BUDGET_SPEECH
+            conv.say(said, origin="host", turn_id=turn_id)
         elif turn.ended_by_tool:
-            conv.say(reply, origin="tool", turn_id=turn_id)
+            said = reply
+            conv.say(said, origin="tool", turn_id=turn_id)
         else:
-            spoken, rule = guard(reply, conv.latest_status, turn.last_speech)
+            said, rule = guard(reply, conv.latest_status, turn.last_speech,
+                               mem.guard_view())
             if rule is not None:
                 conv.trace("guard", turn_id=turn_id, rule=rule, replaced=True)
-            conv.say(spoken, origin="model", turn_id=turn_id)
+            conv.say(said, origin="model", turn_id=turn_id)
+        mem.after_turn(said, turn.tool_calls)
+        mem.record(memory_mod.turn_record(
+            conv.id, turn_id, text, question=meta.get("question"),
+            source=meta.get("source"), tool_calls=turn.tool_calls))
         status = conv.latest_status
         if status and status.get("poll_after_s") is not None \
                 and status.get("state") in WORKING:
@@ -742,6 +809,7 @@ class VoiceSession:
 
     def close(self) -> None:
         self.poller.stop()
+        self.memory.close()
 
 
 class HostPoller:
@@ -862,7 +930,9 @@ class VoiceAgentFactory:
     scripted one); ``tools`` is ``MCPClient.list_tools_sync()``, listed once at
     startup and shared, Strands' own pattern (``mcp_calculator.py`` example).
     ``metered`` spends the model budget (Bedrock), unmetered does not (the
-    scripted model costs nothing).
+    scripted model costs nothing). ``memory`` is an :class:`alexabot.memory.Memory`
+    (``None`` is off) and ``actor`` whose preferences it holds, already hashed
+    with :func:`alexabot.memory.actor_id`.
     """
 
     def __init__(
@@ -881,6 +951,9 @@ class VoiceAgentFactory:
         poll_max_s: float = HOST_POLL_MAX_S,
         turn_limit: int = TURN_LIMIT,
         today: Callable[[], str] | None = None,
+        memory: Any = None,
+        actor: str | None = None,
+        recall_wait_s: float = memory_mod.RECALL_WAIT_S,
     ) -> None:
         self.model_factory = model_factory
         self.tools = list(tools)
@@ -895,6 +968,15 @@ class VoiceAgentFactory:
         self.poll_max_s = poll_max_s
         self.turn_limit = turn_limit
         self._today = today or (lambda: datetime.date.today().isoformat())
+        if memory is None:
+            memory = memory_mod.MemoryOff()
+        elif actor is None and memory.kind != "off":
+            memory = memory_mod.MemoryOff(
+                "the sim does not know whose preferences these are; pass "
+                "--memory-actor")
+        self.memory = memory
+        self.actor = actor
+        self.recall_wait_s = recall_wait_s
         self.sessions: list[VoiceSession] = []
 
     def tool_specs(self) -> list[dict[str, Any]]:
@@ -909,7 +991,8 @@ class VoiceAgentFactory:
         return system_prompt(server_name=self.server_name,
                              server_instructions=self.server_instructions,
                              tools=self.tool_specs(), locale=locale,
-                             today=self._today())
+                             today=self._today(),
+                             memory=self.memory.kind != "off")
 
     def build_agent(self, hooks: VoiceHooks, conv: Any) -> Any:
         from strands import Agent, ModelRetryStrategy

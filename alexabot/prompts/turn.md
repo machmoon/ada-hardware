@@ -1,1 +1,1 @@
-{{request}}{{hostNote}}{{hint}}
+{{request}}{{hostNote}}{{hint}}{{memoryNote}}

@@ -69,3 +69,16 @@ def test_the_page_never_parses_server_text_as_html():
     assert "insertAdjacentHTML" not in js and "document.write" not in js
     # The one markup it imports is the board SVG, checked first.
     assert "querySelector('script, foreignObject')" in js
+
+
+def test_the_memory_pill_is_the_servers_words_and_the_footer_says_what_is_sent():
+    page = _text("index.html")
+    assert 'data-testid="memory-pill"' in page and 'data-testid="memory-pop"' in page
+    assert 'aria-controls="memory-pop"' in page
+    js = _text("sim.js")
+    assert "'memory'" in js.split("const KINDS", 1)[1].split("\n", 1)[0]
+    # The pill's text is the server's label (memory.chip_label), never built here.
+    assert "$('memory-pill-text').textContent = v.label" in js
+    assert ("what you say, and the question you were answering, is sent to Amazon "
+            "Bedrock AgentCore Memory") in js
+    assert "Ada’s own replies are not sent." in js

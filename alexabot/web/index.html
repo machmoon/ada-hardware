@@ -23,6 +23,11 @@
       <div class="top-pills">
         <span class="pill pill-sim" data-testid="sim-label">Simulated Alexa+ experience</span>
         <span class="pill pill-mode" id="mode-pill" data-testid="mode-pill">Connecting</span>
+        <button type="button" class="pill pill-memory" id="memory-pill" data-testid="memory-pill" data-state="off" aria-expanded="false" aria-controls="memory-pop" hidden><span class="pill-text" id="memory-pill-text">Memory off</span></button>
+      </div>
+      <div class="memory-pop" id="memory-pop" data-testid="memory-pop" role="dialog" aria-labelledby="memory-pop-title" hidden>
+        <h2 id="memory-pop-title">What Ada remembers about your boards</h2>
+        <div id="memory-pop-body"></div>
       </div>
       <button type="button" class="btn btn-secondary" id="new-conversation" hidden>New conversation</button>
     </div>
@@ -83,6 +88,7 @@
   <footer class="foot" data-testid="footer">
     <p>This page simulates the Alexa+ experience in a browser. It is not Alexa, not an Alexa skill, and not made by Amazon. Voice recognition is your browser's own; Chrome sends audio to its speech service. Ada drafts and checks boards and never orders anything.</p>
     <p class="foot-mode" id="foot-mode"></p>
+    <p class="foot-memory" id="foot-memory" data-testid="foot-memory"></p>
   </footer>
 </body>
 </html>

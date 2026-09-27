@@ -12,9 +12,10 @@ Kinds: ``user``, ``agent_status``, ``card`` (an upsert by ``card.id``, logged
 only when it changed), ``focus`` (the page shows that card again: a tool the
 model called answered with a card that had not changed, so no ``card`` event
 would move the screen back to it), ``ada``, ``progress``, ``notice``,
-``error`` and ``trace``. ``ada``, ``progress`` and ``error`` are
-**utterances**: each has an ``utterance_id``, and those are the only texts
-the Polly route will speak.
+``error``, ``trace`` and ``memory`` (the conversation's memory view: what the
+page's memory pill shows, :class:`alexabot.memory.ConversationMemory`).
+``ada``, ``progress`` and ``error`` are **utterances**: each has an
+``utterance_id``, and those are the only texts the Polly route will speak.
 
 Conversations live in memory; a restart loses them (the boards are in
 SQLite). At most :data:`MAX_CONVERSATIONS` are kept; one idle for
@@ -162,6 +163,12 @@ class Conversation:
     highlights: dict[str, list[str]] = field(default_factory=dict)
     utterances: dict[str, str] = field(default_factory=dict)
     session: Any = None
+    #: The newest ``memory`` view (``None`` when the agent keeps no memory).
+    memory: dict[str, Any] | None = None
+    #: Ada's newest ``ada`` utterance, and per turn what memory needs to know
+    #: about it: its source and the question it answers.
+    last_ada: str | None = None
+    turn_meta: dict[str, dict[str, Any]] = field(default_factory=dict)
     _host_note: str | None = None
     _notices: set[str] = field(default_factory=set)
     lock: threading.RLock = field(default_factory=threading.RLock)
@@ -181,6 +188,8 @@ class Conversation:
 
     def say(self, text: str, *, origin: str, turn_id: str | None = None) -> dict:
         """Ada says ``text``: ``origin`` is ``tool``, ``model`` or ``host``."""
+        with self.lock:
+            self.last_ada = text
         return self._utterance("ada", text, {
             "turn_id": turn_id, "origin": origin,
             "expects_reply": text.rstrip().endswith("?"),
@@ -238,6 +247,15 @@ class Conversation:
             self.focus = card_id
             return self.log.append("focus", {"card_id": card_id})
 
+    def set_memory(self, view: dict[str, Any]) -> dict:
+        with self.lock:
+            self.memory = view
+            return self.log.append("memory", {"memory": view})
+
+    def take_turn_meta(self, turn_id: str) -> dict[str, Any]:
+        with self.lock:
+            return self.turn_meta.pop(turn_id, {})
+
     def set_host_note(self, note: str | None) -> None:
         with self.lock:
             self._host_note = note
@@ -252,7 +270,7 @@ class Conversation:
             return {"conversation_id": self.id, "busy": self.busy,
                     "current_session_id": self.current_session_id,
                     "next_seq": self.log.next_seq, "cards": dict(self.cards),
-                    "focus": self.focus}
+                    "focus": self.focus, "memory": self.memory}
 
 
 class AgentFactory(Protocol):
@@ -312,6 +330,9 @@ class ConversationHost:
             self._conversations[cid] = conv
         conv.session = self.factory.open(conv)
         conv.say(SCRIPTED_GREETING if self.scripted else GREETING, origin="host")
+        opened = getattr(conv.session, "opened", None)
+        if callable(opened):
+            opened()
         return conv
 
     def get(self, cid: str) -> Conversation:
@@ -331,6 +352,9 @@ class ConversationHost:
             conv.turns += 1
             turn_id = f"t_{conv.turns}"
             conv.last_active = self._clock()
+            asked = conv.last_ada if (conv.last_ada or "").rstrip().endswith("?") \
+                else None
+            conv.turn_meta[turn_id] = {"source": source, "question": asked}
             user = conv.log.append("user", {"turn_id": turn_id, "text": text,
                                             "source": source})
             conv.status("thinking", turn_id)

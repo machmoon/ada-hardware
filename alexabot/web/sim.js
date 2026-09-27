@@ -8,6 +8,8 @@
 //   - every card field comes from a tool's structuredContent via the server;
 //     the page draws nothing the tool did not supply and never shows a 0 for
 //     an unknown;
+//   - the memory pill's words are built on the server (memory.chip_label), so
+//     the page never says it remembers something the server did not report;
 //   - no server text is ever parsed as HTML. The one markup the page imports is
 //     the board SVG, which is refused if it holds a script, a foreignObject or
 //     an event handler.
@@ -24,7 +26,14 @@ const CONVERSATION_KEY = 'ada-alexa-sim.conversation'
 const MUTE_KEY = 'ada-alexa-sim.muted'
 const MIC_HINT = 'Tap the microphone, speak, and pause; Ada answers when you stop.'
 const ASKED_HINT = 'Ada asked you something. Tap the microphone to answer, or type.'
-const KINDS = ['user', 'agent_status', 'card', 'focus', 'ada', 'progress', 'notice', 'error', 'trace']
+const KINDS = ['user', 'agent_status', 'card', 'focus', 'ada', 'progress', 'notice', 'error', 'trace', 'memory']
+const MEMORY_FOOT = {
+  agentcore:
+    'With memory on, what you say, and the question you were answering, is sent to Amazon Bedrock AgentCore Memory, which extracts your design preferences for next time. Ada’s own replies are not sent.',
+  scripted:
+    'Scripted memory: a few rules on this machine pick design preferences out of what you say, at once; nothing leaves this machine.',
+  off: 'Memory is off: Ada keeps your boards between conversations, but not your preferences.',
+}
 
 const $ = (id) => document.getElementById(id)
 
@@ -82,6 +91,7 @@ const state = {
   muted: readStore('localStorage', MUTE_KEY) === '1',
   listening: false,
   heard: '',
+  memory: null,
 }
 
 // -- voice out: Polly audio when the server has it, else this browser ---------
@@ -254,10 +264,64 @@ async function loadConfig() {
     `Ada's own workers: ${body.workers === 'scripted' ? 'canned practice answers' : 'the configured model'}. ` +
     `Voice: ${voiceWords}.`
   $('voice-name').textContent = `Voice: ${voiceWords}.`
+  const memoryKind = (body.memory && body.memory.kind) || 'off'
+  $('foot-memory').textContent = MEMORY_FOOT[memoryKind] || MEMORY_FOOT.off
+  renderMemory(state.memory)
   if (body.mode === 'scripted') {
     $('intro-fine').textContent =
       'Scripted mode: a rule-based agent and canned answers, so every board is the practice regulator. Everything runs on this machine.'
   }
+}
+
+// -- memory: the pill and its popover -----------------------------------------
+
+// Before a conversation reports its memory, the pill says what the sim is
+// configured with; a conversation's `memory` events replace that.
+function configMemoryView() {
+  const m = (state.config && state.config.memory) || { kind: 'off' }
+  if (m.kind === 'off') return { kind: 'off', state: 'off', label: 'Memory off', title: m.reason, preferences: [] }
+  const label = m.kind === 'scripted' ? 'Scripted memory' : 'Memory on'
+  return { kind: m.kind, state: 'idle', label, title: m.reason || null, preferences: [] }
+}
+
+function renderMemory(view) {
+  const v = view || configMemoryView()
+  const pill = $('memory-pill')
+  pill.hidden = false
+  pill.dataset.state = v.state
+  pill.dataset.kind = v.kind
+  $('memory-pill-text').textContent = v.label
+  if (v.title) pill.title = v.title
+  else pill.removeAttribute('title')
+  const body = $('memory-pop-body')
+  const prefs = v.preferences || []
+  const parts = []
+  if (prefs.length) {
+    parts.push(
+      h(
+        'ul',
+        { dataset: { testid: 'memory-list' } },
+        prefs.map((p) => h('li', {}, h('span', {}, p.short || p.text), p.created_at ? h('span', { class: 'when' }, `saved ${p.created_at}`) : null)),
+      ),
+    )
+  } else {
+    const empty =
+      v.state === 'off' || v.state === 'unavailable'
+        ? v.title || v.detail || 'Memory is off.'
+        : v.state === 'checking'
+          ? 'Checking what Ada remembers…'
+          : v.state === 'idle'
+            ? 'Start a conversation to see what Ada remembers.'
+            : 'Nothing saved yet. Tell Ada what you like, such as USB-C power or 3.3 V logic.'
+    parts.push(h('p', { class: 'memory-empty' }, empty))
+  }
+  if (v.source) parts.push(h('p', { class: 'memory-source' }, `Source: ${v.source}`))
+  body.replaceChildren(...parts)
+}
+
+function setMemoryOpen(open) {
+  $('memory-pop').hidden = !open
+  $('memory-pill').setAttribute('aria-expanded', open ? 'true' : 'false')
 }
 
 // -- conversations ---------------------------------------------------------
@@ -304,6 +368,9 @@ function resetView() {
   state.focus = null
   state.expanded = {}
   state.busy = false
+  state.memory = null
+  renderMemory(null)
+  setMemoryOpen(false)
   $('transcript').replaceChildren()
   $('trace-list').replaceChildren()
   renderScreen()
@@ -420,6 +487,10 @@ function handle(event) {
     case 'trace':
       addTrace(event)
       break
+    case 'memory':
+      state.memory = event.memory || null
+      renderMemory(state.memory)
+      break
     default:
       break
   }
@@ -444,6 +515,15 @@ function traceText(event) {
   if (event.step === 'polly') return event.error ? `Polly: ${event.reason}` : `Polly · ${event.bytes} bytes · ${event.billed_chars ?? '?'} characters`
   if (event.step === 'poll') return `host poll failed · ${event.error}`
   if (event.step === 'turn') return `turn failed · ${event.error}`
+  if (event.step === 'memory') {
+    const scripted = state.memory && state.memory.kind === 'scripted'
+    const retrieve = event.op === 'retrieve'
+    const who = scripted
+      ? `scripted memory ${retrieve ? 'recall' : 'write'}`
+      : `AgentCore ${retrieve ? 'RetrieveMemoryRecords' : 'CreateEvent'}`
+    const count = event.op === 'retrieve' && event.state === 'ok' ? ` · ${event.count} remembered` : ''
+    return `${who} · ${event.state}${count}${event.ms ? ` · ${event.ms} ms` : ''}`
+  }
   return null
 }
 
@@ -451,7 +531,9 @@ function addTrace(event) {
   if (event.step === 'budget') {
     const m = event.model_calls || {}
     const p = event.polly_calls || {}
-    $('trace-lead').textContent = `Model calls ${m.used} of ${m.max} · Polly calls ${p.used} of ${p.max}`
+    const mem = event.memory_calls
+    const memWords = mem ? ` · Memory calls ${mem.used} of ${mem.max}` : ''
+    $('trace-lead').textContent = `Model calls ${m.used} of ${m.max} · Polly calls ${p.used} of ${p.max}${memWords}`
     return
   }
   const text = traceText(event)
@@ -834,6 +916,19 @@ function wire() {
     else if (!dictation.start()) note('The microphone could not start. You can type instead.')
   })
   $('mute').addEventListener('click', () => setMuted(!state.muted))
+  $('memory-pill').addEventListener('click', (event) => {
+    event.stopPropagation()
+    setMemoryOpen($('memory-pop').hidden)
+  })
+  document.addEventListener('click', (event) => {
+    if (!$('memory-pop').hidden && !$('memory-pop').contains(event.target)) setMemoryOpen(false)
+  })
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !$('memory-pop').hidden) {
+      setMemoryOpen(false)
+      $('memory-pill').focus()
+    }
+  })
   if (!dictation.supported) {
     $('mic').disabled = true
     note("This browser has no speech recognition (Firefox doesn't), so type to Ada. Chrome and Edge can listen.")

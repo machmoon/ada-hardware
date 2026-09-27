@@ -368,7 +368,8 @@ def test_config_reports_mode_agent_tts_and_budget_truthfully(loopback_only):
         assert body["mode"] == "scripted" and body["agent"]["kind"] == "scripted"
         assert body["tts"] == {"kind": "browser"}
         assert body["budget"] == {"model_calls": {"used": 1, "max": 20},
-                                  "polly_calls": {"used": 0, "max": 10}}
+                                  "polly_calls": {"used": 0, "max": 10},
+                                  "memory_calls": {"used": 0, "max": 60}}
     finally:
         s.close()
 

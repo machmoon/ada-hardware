@@ -1,7 +1,9 @@
 # Where the prompt text comes from
 
 Not sent to the model; `alexabot/agent.py` renders only `system.md`,
-`voice.md`, `tool-result.md` and `turn.md`.
+`voice.md`, `tool-result.md`, `turn.md` and one of `memory-on.md` /
+`memory-off.md` (Ada's own text; the `[Memory: ...]` note follows the
+bracketed-note shape of the tool hint below).
 
 `voice.md` and `tool-result.md` are adapted from the files of the same names
 in KayLerch/alexa-skill-mcp-bridge, `packages/agent/prompts/`, at commit

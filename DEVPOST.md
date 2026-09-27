@@ -504,7 +504,7 @@ valuable engineering artifact we produced was an honest list of what was actuall
 What we're proud of in the new one:
 
 - **The deterministic kernel has no network calls.** Every correctness-critical path is tested offline.
-- **4469 tests, and the interesting ones are regressions** — each pins down a specific bug
+- **4538 tests, and the interesting ones are regressions** — each pins down a specific bug
   that shipped in the previous version and can never ship again.
 - **A validation layer whose job is to say no.** The IR makes a floating capacitor and a
   hallucinated pin unrepresentable rather than merely unlikely.
@@ -545,7 +545,7 @@ resolve — and none of its code: upstream is Windows-only Electron by its autho
 statement, and the in-window pointer we shipped (feature 8) is a fresh Svelte
 implementation. The OS-level overlay that would most resemble MudrikNow is still unbuilt.
 Nothing in `engine/`, `service/`, or `scripts/` imports from it, it is
-excluded from lint and tests, and it contributes nothing to the 4469 tests or to
+excluded from lint and tests, and it contributes nothing to the 4538 tests or to
 any figure quoted in this document.
 
 `vendor/openwhispr/` is not our code either. It is
