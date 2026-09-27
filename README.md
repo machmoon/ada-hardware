@@ -330,7 +330,7 @@ Platform-by-platform commands are in [docs/install.md](docs/install.md#kicad-opt
 | `fab.py` — Gerber, Excellon, BOM, pick-and-place | **Working** · fab package export |
 | `order.py` — order options, manufacturability preflight | **Working** · blocks an unrouted board |
 | `sourcing.py` + `models3d.py` — BOM with distributor-checked MPNs, probed datasheets, library 3D models | **Working** · an MPN is `verified` only when Mouser lists that exact part number (`MOUSER_API_KEY` required); otherwise `proposed`, with `verify_error` saying why. `verified` means listed, **not** in stock and **not** the right package |
-| `mcp/` — MCP server over stdio | **Working** · 48 tests |
+| `mcp/` — MCP server over stdio | **Working** · 170 tests |
 | `audit/` — optional visual design review | **Working** · 52 tests |
 | `service/` — Cloud Run + Firestore cache | **Working** · 165 tests · deployed once to <https://silkscreen-vqdj4x5qbq-uc.a.run.app>, **currently down** (`/readyz` → 500, `/` → 503 on 2026-09-06, unhealthy since 2026-09-05). Redeploy with `scripts/deploy.sh` and re-verify with `curl -s -o /dev/null -w '%{http_code}' <url>/readyz` before a demo |
 | `slackbot/` — Slack bot over the pipeline | **Working** · untested against a live workspace |

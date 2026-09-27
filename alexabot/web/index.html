@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Ada, Simulated Alexa+</title>
+  <meta name="description" content="A simulated Alexa+ experience in a web page: talk to Ada, which designs and checks printed circuit boards through its MCP tools. Not Alexa.">
+  <link rel="icon" type="image/svg+xml" href="/static/mark.svg">
+  <link rel="preload" href="/static/fonts/libre-baskerville-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/sim.css">
+  <script type="module" src="/static/sim.js"></script>
+</head>
+<body>
+  <a class="skip" href="#composer-text">Skip to the message box</a>
+
+  <header class="top">
+    <div class="top-inner">
+      <a class="brand" href="/" aria-label="Ada, start over">
+        <svg class="mark" viewBox="20 110 472 292" fill="none" stroke="currentColor" stroke-width="50" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M42 293 H157 L311 139 H470"/><path d="M42 373 H190.1 L344.1 219 H470"/></svg>
+        <span class="brand-name">Ada</span>
+      </a>
+      <div class="top-pills">
+        <span class="pill pill-sim" data-testid="sim-label">Simulated Alexa+ experience</span>
+        <span class="pill pill-mode" id="mode-pill" data-testid="mode-pill">Connecting</span>
+        <button type="button" class="pill pill-memory" id="memory-pill" data-testid="memory-pill" data-state="off" aria-expanded="false" aria-controls="memory-pop" hidden><span class="pill-text" id="memory-pill-text">Memory off</span></button>
+      </div>
+      <div class="memory-pop" id="memory-pop" data-testid="memory-pop" role="dialog" aria-labelledby="memory-pop-title" hidden>
+        <h2 id="memory-pop-title">What Ada remembers about your boards</h2>
+        <div id="memory-pop-body"></div>
+      </div>
+      <button type="button" class="btn btn-secondary" id="new-conversation" hidden>New conversation</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="intro" id="intro" aria-labelledby="intro-title">
+      <h1 id="intro-title">Describe a board out loud.</h1>
+      <p class="intro-sub">Ada plans it with you one question at a time, then draws, routes and checks it.</p>
+      <button type="button" class="btn btn-primary btn-large" id="start">Start talking to Ada</button>
+      <p class="intro-fine" id="intro-fine">Everything runs on this machine. Your boards are saved between conversations.</p>
+    </section>
+
+    <section class="stage" id="stage" hidden aria-label="Conversation with Ada">
+      <div class="device" id="device">
+        <div class="device-screen" id="screen" data-testid="screen">
+          <div class="statusbar" id="statusbar" data-state="idle" aria-hidden="true"></div>
+          <div class="screen-body" id="screen-body" aria-live="polite">
+            <div class="screen-empty">
+              <p class="screen-empty-title">Ada is listening for a board to design.</p>
+              <p class="screen-empty-sub">Try &ldquo;a three point three volt regulator powered from USB-C&rdquo;.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="side" aria-label="Transcript">
+        <div class="side-head">
+          <h2 class="side-title">Conversation</h2>
+          <span class="thinking" id="thinking" hidden>Ada is thinking</span>
+        </div>
+        <ol class="transcript" id="transcript" role="log" aria-live="polite" aria-relevant="additions" data-testid="transcript"></ol>
+        <details class="trace" id="trace-box">
+          <summary>What the agent did</summary>
+          <p class="trace-lead" id="trace-lead"></p>
+          <ol class="trace-list" id="trace-list"></ol>
+        </details>
+      </aside>
+    </section>
+
+    <form class="composer" id="composer" hidden autocomplete="off">
+      <p class="interim" id="interim" aria-live="polite"></p>
+      <div class="composer-row">
+        <button type="button" class="mic" id="mic" aria-pressed="false" aria-label="Tap to talk" data-testid="mic">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+        </button>
+        <label class="visually-hidden" for="composer-text">Message to Ada</label>
+        <input class="composer-input" id="composer-text" name="text" type="text" maxlength="500" placeholder="Or type to Ada" enterkeyhint="send">
+        <button type="submit" class="btn btn-primary" id="send">Send</button>
+        <button type="button" class="btn btn-secondary btn-icon" id="mute" aria-pressed="false" aria-label="Mute Ada's voice" title="Mute Ada's voice">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="wave" d="M16.5 8.5a5 5 0 0 1 0 7"/><path class="cross" d="M16 9l5 6M21 9l-5 6"/></svg>
+        </button>
+      </div>
+      <p class="composer-note" id="composer-note"><span id="mic-hint">Tap the microphone, speak, and pause; Ada answers when you stop.</span> <span id="voice-name"></span></p>
+    </form>
+  </main>
+
+  <footer class="foot" data-testid="footer">
+    <p>This page simulates the Alexa+ experience in a browser. It is not Alexa, not an Alexa skill, and not made by Amazon. Voice recognition is your browser's own; Chrome sends audio to its speech service. Ada drafts and checks boards and never orders anything.</p>
+    <p class="foot-mode" id="foot-mode"></p>
+    <p class="foot-memory" id="foot-memory" data-testid="foot-memory"></p>
+  </footer>
+</body>
+</html>
