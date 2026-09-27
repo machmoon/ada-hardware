@@ -82,6 +82,7 @@ testpaths = [
     "teamsbot/tests",
     "meetbot/tests",
     "jirabot/tests",
+    "kicadcollab/tests",
 ]
 norecursedirs = ["vendor", ".venv", "frontend", "frontend-archive", "node_modules"]
 pythonpath = ["engine", "."]
