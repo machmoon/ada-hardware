@@ -119,3 +119,23 @@ describe("configurePurchases", () => {
     expect(verdictFrom(await refreshCustomerInfo())).toBe("entitled");
   });
 });
+
+describe("paywall helpers", () => {
+  it("names the paywall's custom variables the way the dashboard paywall uses them", async () => {
+    const { paywallVariables } = await import("./client");
+    expect(paywallVariables({ board: "a blinker", parts: 5 })).toEqual({
+      board_name: "a blinker",
+      part_count: "5",
+    });
+    expect(paywallVariables(null)).toEqual({});
+  });
+
+  it("offers only an https management URL", async () => {
+    const { managementUrl, customerInfoFixture } = await import("./client");
+    expect(managementUrl(customerInfoFixture({ pro: true, managementURL: "https://x.test/m" }))).toBe(
+      "https://x.test/m"
+    );
+    expect(managementUrl(customerInfoFixture({ pro: true, managementURL: "javascript:alert(1)" }))).toBeNull();
+    expect(managementUrl(customerInfoFixture({ pro: true, managementURL: null }))).toBeNull();
+  });
+});

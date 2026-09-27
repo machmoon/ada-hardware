@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Package } from "@revenuecat/purchases-js";
 import { Button, Header, Label } from "@/components";
 import { usePurchases } from "@/contexts/purchases.context";
@@ -8,10 +9,14 @@ import {
   PRO_UNLOCKS_LINE,
   TEST_STORE_LINE,
   isUserCancelled,
+  managementUrl,
   packagesOf,
+  paywallVariables,
   proEntitlement,
+  proOffering,
 } from "@/lib/purchases/client";
-import { PRO_PANE_ID } from "@/lib/purchases/pane";
+import { PAYWALL_CONTEXT_KEY, PRO_PANE_ID, readPaywallContext } from "@/lib/purchases/pane";
+import { safeLocalStorage } from "@/lib/storage/helper";
 import { lastVerdict } from "@/lib/purchases/verdict";
 
 /**
@@ -26,6 +31,12 @@ import { lastVerdict } from "@/lib/purchases/verdict";
  * SDK's own checkout modal; with a Test Store key that modal is a simulated
  * purchase and the pane says so in the one sentence agreed for it.
  */
+
+/** Said when the offering has no dashboard paywall and the buttons stand in. */
+export const NO_PAYWALL_LINE =
+  "No RevenueCat paywall is attached to this offering, so the plans are listed directly.";
+/** Said once a purchase from either door has made Ada Pro active. */
+export const UNLOCKED_LINE = "Ada Pro is active. Prepare fab order is unlocked on the strip.";
 
 /** "Purchase cancelled" is the SDK's user-cancelled error, in one line. */
 export const CANCELLED_LINE = "Purchase cancelled. Nothing was charged.";
@@ -68,6 +79,52 @@ export const AdaPro = ({ className }: AdaProProps) => {
   const info = purchases.customerInfo;
   const pro = info ? proEntitlement(info) : null;
   const remembered = lastVerdict();
+  const offering = proOffering(purchases.offerings);
+  const paywallHost = useRef<HTMLDivElement>(null);
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const manage = managementUrl(info);
+
+  const failed = (error: unknown) =>
+    setResult(
+      isUserCancelled(error)
+        ? CANCELLED_LINE
+        : `Could not purchase: ${(error as Error)?.message ?? "unknown error"}`
+    );
+
+  /**
+   * RevenueCat's own paywall, designed in the dashboard and rendered into the
+   * pane, the way RevenueCat's web sample does it (`presentPaywall` with an
+   * offering, a target element and custom variables). The board context the
+   * strip left is read once and removed, so a later visit to Settings shows
+   * the dashboard's default copy rather than an old board's name.
+   */
+  const showPaywall = useCallback(async () => {
+    if (!offering || !paywallHost.current) return;
+    const context = readPaywallContext();
+    safeLocalStorage.removeItem(PAYWALL_CONTEXT_KEY);
+    paywallHost.current.innerHTML = "";
+    setPaywallOpen(true);
+    setBusy("paywall");
+    setResult("");
+    try {
+      await purchases.paywall(offering, paywallHost.current, paywallVariables(context));
+      setResult(UNLOCKED_LINE);
+    } catch (error) {
+      failed(error);
+    } finally {
+      setBusy(null);
+      setPaywallOpen(false);
+    }
+  }, [offering, purchases]);
+
+  // Opened from the locked order step: go straight to the paywall.
+  const autoShown = useRef(false);
+  useEffect(() => {
+    if (autoShown.current || !offering?.hasPaywall || purchases.status !== "free") return;
+    if (!readPaywallContext()) return;
+    autoShown.current = true;
+    void showPaywall();
+  }, [offering, purchases.status, showPaywall]);
 
   const buy = async (pkg: Package) => {
     setBusy(pkg.identifier);
@@ -79,11 +136,7 @@ export const AdaPro = ({ className }: AdaProProps) => {
           ` (transaction ${outcome.storeTransaction.storeTransactionId}).`
       );
     } catch (error) {
-      setResult(
-        isUserCancelled(error)
-          ? CANCELLED_LINE
-          : `Could not purchase: ${(error as Error)?.message ?? "unknown error"}`
-      );
+      failed(error);
     } finally {
       setBusy(null);
     }
@@ -128,8 +181,40 @@ export const AdaPro = ({ className }: AdaProProps) => {
         </Button>
       </div>
 
-      {packages.length ? (
+      {offering?.hasPaywall && purchases.status !== "entitled" ? (
+        <div className="space-y-2" data-testid="pro-paywall">
+          {paywallOpen ? null : (
+            <Button
+              size="sm"
+              onClick={() => void showPaywall()}
+              disabled={busy !== null}
+              data-testid="pro-show-paywall"
+            >
+              See Ada Pro plans
+            </Button>
+          )}
+          <div ref={paywallHost} data-testid="pro-paywall-host" />
+        </div>
+      ) : null}
+
+      {manage && purchases.status === "entitled" ? (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void openUrl(manage)}
+          data-testid="pro-manage"
+        >
+          Manage subscription
+        </Button>
+      ) : null}
+
+      {offering?.hasPaywall && purchases.status !== "entitled" ? null : packages.length ? (
         <div className="space-y-2" data-testid="pro-packages">
+          {offering && !offering.hasPaywall ? (
+            <p className="text-xs text-muted-foreground" data-testid="pro-no-paywall">
+              {NO_PAYWALL_LINE}
+            </p>
+          ) : null}
           {packages.map((pkg) => {
             const product = pkg.webBillingProduct;
             return (

@@ -87,6 +87,14 @@ button back without starting the run over.
    `default` offering as its monthly package. This is the README's own
    sequence (`app/node_modules/@revenuecat/purchases-js/README.md`,
    Prerequisites).
+   Then attach a **paywall** to the `default` offering (Paywalls in the
+   dashboard) and define two custom variables on it, `board_name` and
+   `part_count`, with defaults such as "your board" and "every". Use them in
+   the copy as `{{ custom.board_name }}` and `{{ custom.part_count }}`: the
+   desktop fills them with the board the person was ordering when the gate
+   stopped them (`paywallVariables` in `app/src/lib/purchases/client.ts`).
+   Without a paywall the pane lists the package with a Buy button instead
+   and says so.
 3. Copy the Test Store's public API key (it starts with `test_`) into
    `app/.env.local`:
 
@@ -96,8 +104,11 @@ button back without starting the run over.
 
    `app/.env.example` documents the name. `*.local` is git-ignored.
 4. Start the app (`npm run dev` from `app/`, or `tauri dev`). Settings shows
-   an "Ada Pro" pane above Billing with the Test Store sentence and the
-   package. Buy opens the SDK's own checkout modal.
+   an "Ada Pro" pane above Billing with the Test Store sentence and
+   RevenueCat's paywall ("See Ada Pro plans"). Pressing the locked "Prepare
+   fab order · Ada Pro" on the strip opens this pane and the paywall at
+   once, with that board's name. Once Pro is active the pane offers
+   "Manage subscription", which opens `customerInfo.managementURL`.
 5. For the service gate, set `REVENUECAT_SECRET_API_KEY` and
    `REVENUECAT_PROJECT_ID` in the service's environment. Without them the
    order step runs ungated and every envelope says so.
@@ -152,7 +163,10 @@ What is planned and **[not yet built]**:
 
 - [not yet built] The service webhook and the ledger grant (above).
 - [not yet built] A live run against a RevenueCat project. Every test drives
-  `nullPurchases()`.
+  `nullPurchases()`, including the paywall path (`presentPaywall` is copied
+  from RevenueCat/purchases-js `afae8c7`
+  `examples/webbilling-demo/src/pages/rc_paywall/index.tsx`, not yet run
+  against a dashboard paywall).
 - [not yet built] The desktop reading the step envelope's `entitlement`
   block. The strip acts on the verdict and on the 402; the envelope field is
   for logs and the dashboard.

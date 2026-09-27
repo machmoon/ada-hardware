@@ -16,8 +16,17 @@
 // `kaleo.settings.` either, which is the settings mirror's prefix.
 
 import { safeLocalStorage } from "@/lib/storage/helper";
+import type { PaywallContext } from "./client";
 
 export const PANE_REQUEST_KEY = "kaleo.open_pane";
+/**
+ * The board the order step was for, beside the pane request, so the paywall
+ * the pane shows can name it. Same crossing, same staleness rule; a separate
+ * key so the pane request's shape (and every reader of it) is unchanged.
+ */
+export const PAYWALL_CONTEXT_KEY = "kaleo.paywall_context";
+/** A board name longer than this is cut: it is paywall copy, not a record. */
+export const BOARD_NAME_MAX = 60;
 /** The Ada Pro pane's element id in Settings, and its `#hash`. */
 export const PRO_PANE_ID = "pro";
 /** A request older than this is stale: the other window never took it. */
@@ -49,6 +58,37 @@ export function requestPane(pane: string, now = Date.now()): boolean {
   if (!PANE_ID.test(pane)) return false;
   const request: PaneRequest = { pane, at: now };
   return safeLocalStorage.setItem(PANE_REQUEST_KEY, JSON.stringify(request));
+}
+
+/**
+ * Record what the paywall should say about the board. Only a printable name
+ * and a whole part count cross; anything else is dropped rather than shown.
+ */
+export function requestPaywallContext(context: PaywallContext, now = Date.now()): boolean {
+  const clean: PaywallContext = {};
+  const board = typeof context.board === "string" ? context.board.replace(/[^\x20-\x7e]/g, "").trim() : "";
+  if (board) clean.board = board.slice(0, BOARD_NAME_MAX);
+  if (typeof context.parts === "number" && Number.isInteger(context.parts) && context.parts > 0) {
+    clean.parts = context.parts;
+  }
+  return safeLocalStorage.setItem(PAYWALL_CONTEXT_KEY, JSON.stringify({ ...clean, at: now }));
+}
+
+/** The board context for the paywall, or null when absent, stale or malformed. */
+export function readPaywallContext(now = Date.now()): PaywallContext | null {
+  const raw = safeLocalStorage.getItem(PAYWALL_CONTEXT_KEY);
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as (PaywallContext & { at?: unknown }) | null;
+    if (!value || typeof value !== "object" || typeof value.at !== "number") return null;
+    if (Math.abs(now - value.at) > PANE_REQUEST_MAX_AGE_MS) return null;
+    const out: PaywallContext = {};
+    if (typeof value.board === "string" && value.board) out.board = value.board.slice(0, BOARD_NAME_MAX);
+    if (typeof value.parts === "number" && Number.isInteger(value.parts) && value.parts > 0) out.parts = value.parts;
+    return out.board || out.parts ? out : null;
+  } catch {
+    return null;
+  }
 }
 
 /** The pending pane, or null when there is none or it is stale or malformed. */
@@ -91,8 +131,10 @@ async function showDashboard(): Promise<void> {
  */
 export async function openSettingsPane(
   pane: string,
-  open: () => Promise<void> = showDashboard
+  open: () => Promise<void> = showDashboard,
+  context?: PaywallContext
 ): Promise<void> {
+  if (context) requestPaywallContext(context);
   requestPane(pane);
   try {
     await open();

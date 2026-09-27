@@ -112,3 +112,23 @@ describe("openSettingsPane", () => {
     expect(readPaneRequest()).toBe("pro");
   });
 });
+
+describe("paywall context", () => {
+  it("carries a printable board name and a whole part count, and nothing else", async () => {
+    const { requestPaywallContext, readPaywallContext, BOARD_NAME_MAX } = await import("./pane");
+    const now = 1_000_000;
+    requestPaywallContext({ board: "  LDO\u0007 boardé  ", parts: 7 }, now);
+    expect(readPaywallContext(now)).toEqual({ board: "LDO board", parts: 7 });
+    requestPaywallContext({ board: "x".repeat(200), parts: 2.5 }, now);
+    expect(readPaywallContext(now)).toEqual({ board: "x".repeat(BOARD_NAME_MAX) });
+    requestPaywallContext({ board: "", parts: 0 }, now);
+    expect(readPaywallContext(now)).toBeNull();
+  });
+
+  it("is stale after the pane request's own minute", async () => {
+    const { requestPaywallContext, readPaywallContext, PANE_REQUEST_MAX_AGE_MS } = await import("./pane");
+    requestPaywallContext({ board: "blinker" }, 0);
+    expect(readPaywallContext(PANE_REQUEST_MAX_AGE_MS)).toEqual({ board: "blinker" });
+    expect(readPaywallContext(PANE_REQUEST_MAX_AGE_MS + 1)).toBeNull();
+  });
+});
