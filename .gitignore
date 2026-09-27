@@ -129,3 +129,6 @@ data/voice_samples/
 infra/
 # scripts/board_eval.py writes its measurements here; the copy the docs cite lives in docs/measurements/.
 /board_eval.json
+
+# Hackathon hand-off notes, submission drafts and video; kept beside the repo, never in it.
+/hackathons/
