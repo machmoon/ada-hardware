@@ -367,12 +367,20 @@ three volt regulator board powered from USB-C" and a second whose pill read
 "Remembering (scripted): USB-C power input, 3.3 V logic", whose "Ask Ada for
 a sensor board" got the ask and whose "Yes" started "a sensor board, with
 USB-C power input and 3.3 V logic"; a third asked for "a 5 V board with a
-barrel jack" and got no note and no ask. **AgentCore Memory itself has not
-been run live from this repo yet**: `scripts/aws/agentcore_memory.py` and the
-adapter are tested against botocore's `Stubber` (which checks every request
-against the service model offline), and the record text shape, extraction
-latency, the 0.2 score floor and the IAM actions on the account are
-unverified until they are.
+barrel jack" and got no note and no ask.
+
+AgentCore Memory, live (2026-09-26, us-east-1, 8 AgentCore calls, a
+throwaway actor): `GetMemory` found the resource `ACTIVE` with the
+user-preference strategy on `/users/{actorId}/preferences/`; two
+`CreateEvent` turns ("I want a sensor board powered from USB-C.", "Use 3.3
+volt logic, please. I always prefer 3.3 V.") took 346 and 163 ms; retrieval
+returned nothing at 30, 60, 90 and 120 s and both preferences at 150 s, as
+"Powered from USB-C" and "Always prefers 3.3 V logic", neither cut by the 0.2
+floor. That wording is why `short_text` also drops a subject-less "Always
+prefers" and the ask reads "Last time you chose: ..." (the first wording,
+"you mentioned powered from USB-C", was only caught live). Still
+unverified: the minimum IAM actions (the check ran as an account admin),
+and extraction latency beyond this one sample.
 
 ### Sources
 
