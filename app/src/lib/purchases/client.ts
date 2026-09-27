@@ -31,11 +31,22 @@
 import type {
   CustomerInfo,
   EntitlementInfo,
+  Offering,
   Offerings,
   Package,
+  PaywallPurchaseResult,
   PurchaseResult,
   StoreTransaction,
 } from "@revenuecat/purchases-js";
+
+/**
+ * The board the person was about to order when the gate stopped them, carried
+ * from the strip to the Settings pane (`pane.ts`) so the paywall can name it.
+ */
+export interface PaywallContext {
+  board?: string;
+  parts?: number;
+}
 
 // ----------------------------------------------------------- the contract
 
@@ -115,6 +126,21 @@ export interface PurchasesSdk {
   getCustomerInfo(): Promise<CustomerInfo>;
   isSandbox(): boolean;
   getAppUserId(): string;
+  /**
+   * `Purchases.presentPaywall`: render the paywall designed in the RevenueCat
+   * dashboard for `offering` into `htmlTarget` and run its checkout.
+   * `variables` are plain strings here; the adapter wraps each in the SDK's
+   * `CustomVariableValue.string`, so this seam (and the fake) never needs
+   * RevenueCat's UI package.
+   */
+  presentPaywall(params: PaywallParams): Promise<PaywallPurchaseResult>;
+}
+
+/** What Ada passes to a paywall. */
+export interface PaywallParams {
+  offering: Offering;
+  htmlTarget: HTMLElement;
+  variables?: Record<string, string>;
 }
 
 /**
@@ -134,6 +160,24 @@ async function realSdk(): Promise<PurchasesSdk> {
     getCustomerInfo: () => Purchases.getSharedInstance().getCustomerInfo(),
     isSandbox: () => Purchases.getSharedInstance().isSandbox(),
     getAppUserId: () => Purchases.getSharedInstance().getAppUserId(),
+    // RevenueCat's own sample does exactly this
+    // (RevenueCat/purchases-js afae8c7,
+    // examples/webbilling-demo/src/pages/rc_paywall/index.tsx): the offering,
+    // a target element, the custom variables, then the `PurchaseResult`.
+    presentPaywall: async ({ offering, htmlTarget, variables }) => {
+      const { CustomVariableValue } = await import("@revenuecat/purchases-js");
+      const customVariables = Object.fromEntries(
+        Object.entries(variables ?? {}).map(([name, value]) => [
+          name,
+          CustomVariableValue.string(value),
+        ])
+      );
+      return Purchases.getSharedInstance().presentPaywall({
+        offering,
+        htmlTarget,
+        customVariables,
+      });
+    },
   };
 }
 
@@ -202,6 +246,42 @@ export async function buy(pkg: Package): Promise<PurchaseResult> {
   return (await sdk()).purchase({ rcPackage: pkg });
 }
 
+/**
+ * Show the offering's dashboard paywall inside `htmlTarget` and buy from it.
+ * Resolves with the `PurchaseResult` (plus the package chosen); rejects with
+ * the SDK's user-cancelled error when the person backs out.
+ */
+export async function showPaywall(params: PaywallParams): Promise<PaywallPurchaseResult> {
+  return (await sdk()).presentPaywall(params);
+}
+
+/** The offering the pane sells from: the current one, else `default`, else none. */
+export function proOffering(offerings: Offerings | undefined): Offering | null {
+  if (!offerings) return null;
+  return offerings.current ?? offerings.all?.[PRO_OFFERING] ?? null;
+}
+
+/**
+ * The paywall's custom variables, named as the dashboard paywall uses them
+ * (`{{ custom.board_name }}`, `{{ custom.part_count }}`): the board the person
+ * was about to order when they met the gate, so the paywall talks about that
+ * board rather than about a product in general. Absent context sends none and
+ * the dashboard's defaults show.
+ */
+export function paywallVariables(context: PaywallContext | null): Record<string, string> {
+  if (!context) return {};
+  const out: Record<string, string> = {};
+  if (context.board) out.board_name = context.board;
+  if (typeof context.parts === "number") out.part_count = String(context.parts);
+  return out;
+}
+
+/** Where the customer manages the subscription RevenueCat holds, when it says. */
+export function managementUrl(info: CustomerInfo | undefined): string | null {
+  const url = info?.managementURL ?? null;
+  return url && /^https:\/\//.test(url) ? url : null;
+}
+
 /** The latest `CustomerInfo` from RevenueCat. Requires a configured SDK. */
 export async function refreshCustomerInfo(): Promise<CustomerInfo> {
   return (await sdk()).getCustomerInfo();
@@ -229,9 +309,7 @@ export function proEntitlement(info: CustomerInfo): EntitlementInfo | null {
 
 /** The packages the pane lists: the current offering's, else `default`'s, else none. */
 export function packagesOf(offerings: Offerings | undefined): Package[] {
-  if (!offerings) return [];
-  const offering = offerings.current ?? offerings.all?.[PRO_OFFERING] ?? null;
-  return offering?.availablePackages ?? [];
+  return proOffering(offerings)?.availablePackages ?? [];
 }
 
 /** True for the SDK's user-cancelled error; a closed modal is not a failure. */
@@ -257,12 +335,16 @@ export interface NullPurchasesOptions {
   offeringsError?: Error;
   /** Thrown by `configure` when set. */
   configureError?: Error;
+  /** What `presentPaywall` answers; an Error is thrown instead. */
+  paywall?: PaywallPurchaseResult | Error;
 }
 
 /** A recording fake: every call is remembered, nothing reaches a network. */
 export interface NullPurchases extends PurchasesSdk {
   readonly calls: string[];
   readonly purchased: Package[];
+  /** Every `presentPaywall` call's variables, in order. */
+  readonly paywalls: Record<string, string>[];
   configured: { apiKey: string; appUserId: string } | null;
   /** Change what the next `getCustomerInfo` answers. */
   setCustomerInfo(info: CustomerInfo): void;
@@ -271,10 +353,12 @@ export interface NullPurchases extends PurchasesSdk {
 export function nullPurchases(options: NullPurchasesOptions = {}): NullPurchases {
   const calls: string[] = [];
   const purchased: Package[] = [];
+  const paywalls: Record<string, string>[] = [];
   let customerInfo = options.customerInfo ?? customerInfoFixture({ pro: false });
   const fake: NullPurchases = {
     calls,
     purchased,
+    paywalls,
     configured: null,
     isConfigured() {
       calls.push("isConfigured");
@@ -313,6 +397,19 @@ export function nullPurchases(options: NullPurchasesOptions = {}): NullPurchases
     },
     getAppUserId() {
       return fake.configured?.appUserId ?? "";
+    },
+    async presentPaywall({ offering, variables }) {
+      calls.push("presentPaywall");
+      paywalls.push({ ...(variables ?? {}) });
+      const answer = options.paywall;
+      if (answer instanceof Error) throw answer;
+      if (answer) {
+        customerInfo = answer.customerInfo;
+        return answer;
+      }
+      const pkg = offering.availablePackages[0] ?? packageFixture();
+      customerInfo = customerInfoFixture({ pro: true, appUserId: fake.configured?.appUserId });
+      return { ...purchaseResultFixture(customerInfo, pkg), selectedPackage: pkg };
     },
     setCustomerInfo(info) {
       customerInfo = info;
@@ -410,7 +507,11 @@ export function packageFixture(options: PackageFixtureOptions = {}): Package {
   } as unknown as Package;
 }
 
-export function offeringsFixture(packages: Package[], identifier = PRO_OFFERING): Offerings {
+export function offeringsFixture(
+  packages: Package[],
+  identifier = PRO_OFFERING,
+  hasPaywall = false
+): Offerings {
   const offering = {
     identifier,
     serverDescription: "",
@@ -425,7 +526,7 @@ export function offeringsFixture(packages: Package[], identifier = PRO_OFFERING)
     twoMonth: null,
     monthly: packages[0] ?? null,
     weekly: null,
-    hasPaywall: false,
+    hasPaywall,
   };
   return { all: { [identifier]: offering }, current: offering } as unknown as Offerings;
 }

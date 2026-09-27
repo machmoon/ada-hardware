@@ -26,7 +26,7 @@ import { SilkscreenError } from "@/lib/silkscreen/client";
 import type { StepName, StepResponse } from "@/lib/silkscreen/types";
 import { StepPanel } from "@/pages/kaleo/components/StepPanel";
 import { PRO_BUTTON_LABEL } from "./client";
-import { readPaneRequest } from "./pane";
+import { readPaneRequest, readPaywallContext } from "./pane";
 
 const mockInvoke = vi.mocked(invoke);
 
@@ -69,6 +69,7 @@ function purchases(status: PurchasesState["status"], reason: string | null = nul
     appUserId: null,
     reason,
     buy: vi.fn(() => Promise.reject(new Error("not in this test"))),
+    paywall: vi.fn(() => Promise.reject(new Error("not in this test"))),
     refresh: vi.fn(() => Promise.resolve()),
   };
 }
@@ -206,5 +207,7 @@ describe("the order step under the Ada Pro gate", () => {
     expect(run.approve).not.toHaveBeenCalled();
     expect(readPaneRequest()).toBe("pro");
     expect(screen.getByTestId("step-disarm")).toBeTruthy();
+    // The Settings pane's paywall is told which board this was.
+    expect(readPaywallContext()?.board).toBe(run.history[run.history.length - 1]?.intent);
   });
 });

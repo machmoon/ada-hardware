@@ -56,7 +56,7 @@ import type { StepName } from "@/lib/silkscreen/types";
 import { cn } from "@/lib/utils";
 import { useCalm } from "@/lib/calm";
 import { usePurchases } from "@/contexts/purchases.context";
-import { PRO_BUTTON_LABEL } from "@/lib/purchases/client";
+import { PRO_BUTTON_LABEL, type PaywallContext } from "@/lib/purchases/client";
 import { PRO_PANE_ID, openSettingsPane } from "@/lib/purchases/pane";
 
 export interface StepPanelProps {
@@ -882,13 +882,20 @@ const PRO_TITLE = "Ada Pro is required to prepare a fab order. Opens Settings; s
  * The strip's one gated control. It replaces the order step's approve button
  * (and its armed confirm) while this desktop is known not to have Ada Pro, or
  * when the service just said so with a 402. It spends nothing: it opens the
- * dashboard at the Ada Pro pane, where the purchase is made.
+ * dashboard at the Ada Pro pane, where RevenueCat's paywall is shown, and
+ * hands that pane the board being ordered so the paywall can name it.
  */
-const ProButton = ({ variant }: { variant: "default" | "outline" }) => (
+const ProButton = ({
+  variant,
+  context,
+}: {
+  variant: "default" | "outline";
+  context: PaywallContext;
+}) => (
   <Button
     size="sm"
     variant={variant}
-    onClick={() => void openSettingsPane(PRO_PANE_ID)}
+    onClick={() => void openSettingsPane(PRO_PANE_ID, undefined, context)}
     data-testid="step-pro"
     data-step="order"
     data-locked="pro"
@@ -942,6 +949,16 @@ export const StepPanel = ({
   const review = reviewDetails(latest);
   const route = routeDetails(latest);
   const place = placeDetails(latest);
+  // What the paywall says about this board: the run's own words and how many
+  // parts the placer put down (from the place step, wherever it is in history).
+  const placedParts = run.history
+    .map((response) => placeDetails(response))
+    .filter((details) => details !== null)
+    .pop()?.parts.length;
+  const paywallContext: PaywallContext = {
+    board: latest?.intent,
+    parts: placedParts || undefined,
+  };
   const priorArt = priorArtDetails(latest);
 
   // The case step's two inputs (`service/steps.py::_case`): a style, and the
@@ -1228,7 +1245,7 @@ export const StepPanel = ({
                 Start over
               </Button>
             ) : armed.step === "order" && orderLocked ? (
-              <ProButton variant="default" />
+              <ProButton variant="default" context={paywallContext} />
             ) : (
               <Button
                 size="sm"
@@ -1253,6 +1270,7 @@ export const StepPanel = ({
               <ProButton
                 key={step}
                 variant={step === run.available[0] && !unread ? "default" : "outline"}
+                context={paywallContext}
               />
             ) : (
               <Button

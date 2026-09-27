@@ -10,6 +10,7 @@ import {
 } from "react";
 import type {
   CustomerInfo,
+  Offering,
   Offerings,
   Package,
   PurchaseResult,
@@ -25,6 +26,7 @@ import {
   isTestStoreKey,
   refreshCustomerInfo,
   sdkIsSandbox,
+  showPaywall,
   verdictFrom,
 } from "@/lib/purchases/client";
 import { ensureAppUserId } from "@/lib/purchases/app-user-id";
@@ -58,6 +60,11 @@ export interface PurchasesState {
   /** The last SDK failure's message, verbatim, for the pane. */
   error?: string;
   buy(pkg: Package): Promise<PurchaseResult>;
+  /**
+   * Show RevenueCat's dashboard paywall for `offering` inside `target` and buy
+   * from it; `variables` fill its `{{ custom.* }}` placeholders.
+   */
+  paywall(offering: Offering, target: HTMLElement, variables: Record<string, string>): Promise<PurchaseResult>;
   refresh(): Promise<void>;
 }
 
@@ -107,7 +114,7 @@ export const PurchasesProvider = ({
   apiKey = configuredPublicKey(),
   refreshOnFocus = true,
 }: PurchasesProviderProps) => {
-  const [state, setState] = useState<Omit<PurchasesState, "buy" | "refresh">>(() => ({
+  const [state, setState] = useState<Omit<PurchasesState, "buy" | "paywall" | "refresh">>(() => ({
     status: "unknown",
     configured: false,
     sandbox: false,
@@ -158,8 +165,10 @@ export const PurchasesProvider = ({
     }
   }, []);
 
-  const buy = useCallback(async (pkg: Package): Promise<PurchaseResult> => {
-    const result = await buyPackage(pkg);
+  // Both doors -- the package button and the dashboard paywall -- land the
+  // same way: the `CustomerInfo` the purchase returned is the new verdict, for
+  // this window at once and for the strip through the settings store.
+  const settle = useCallback((result: PurchaseResult): PurchaseResult => {
     const verdict = verdictFrom(result.customerInfo);
     verdictRef.current = verdict;
     if (mountedRef.current) {
@@ -175,6 +184,17 @@ export const PurchasesProvider = ({
     void recordVerdict(verdict);
     return result;
   }, []);
+
+  const buy = useCallback(
+    async (pkg: Package): Promise<PurchaseResult> => settle(await buyPackage(pkg)),
+    [settle]
+  );
+
+  const paywall = useCallback(
+    async (offering: Offering, target: HTMLElement, variables: Record<string, string>) =>
+      settle(await showPaywall({ offering, htmlTarget: target, variables })),
+    [settle]
+  );
 
   /**
    * Configure once, then check. Shared while in flight, so StrictMode's
@@ -256,7 +276,7 @@ export const PurchasesProvider = ({
     [refresh]
   );
 
-  const value = useMemo<PurchasesState>(() => ({ ...state, buy, refresh }), [state, buy, refresh]);
+  const value = useMemo<PurchasesState>(() => ({ ...state, buy, paywall, refresh }), [state, buy, paywall, refresh]);
   return <PurchasesContext.Provider value={value}>{children}</PurchasesContext.Provider>;
 };
 
@@ -273,6 +293,7 @@ const NOT_MOUNTED: PurchasesState = Object.freeze({
   appUserId: null,
   reason: NOT_MOUNTED_LINE,
   buy: () => Promise.reject(new Error(NOT_MOUNTED_LINE)),
+  paywall: () => Promise.reject(new Error(NOT_MOUNTED_LINE)),
   refresh: () => Promise.resolve(),
 });
 

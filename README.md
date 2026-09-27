@@ -47,6 +47,74 @@ The earlier entry, for the All Things Agentic hackathon on 2026-08-31 (Gemini, A
 Run), is kept in [docs/google-hackathon.md](docs/google-hackathon.md). The Shipaton
 entry text is [DEVPOST.md](DEVPOST.md).
 
+## How Ada uses RevenueCat
+
+One entitlement, one gate, one paywall. Everything Ada designs is free; **Ada Pro**
+unlocks the step that turns a checked board into a fab order.
+
+| RevenueCat object | Ada's value | Where it is used |
+|---|---|---|
+| Entitlement | `pro` | the only thing Ada checks, on the desktop and on the service |
+| Product | `ada_pro_monthly` (monthly subscription) | in the `default` offering |
+| Offering | `default`, with a dashboard **paywall** attached | shown by `presentPaywall` |
+| Paywall custom variables | `board_name`, `part_count` | the paywall talks about the board you are ordering |
+| App user id | a UUID minted once per desktop | sent to RevenueCat and to Ada's service |
+
+```mermaid
+sequenceDiagram
+    participant You
+    participant Strip as Ada strip (the board's steps)
+    participant Pane as Settings > Ada Pro
+    participant RC as RevenueCat
+    participant Svc as Ada service
+    You->>Strip: press "Prepare fab order · Ada Pro"
+    Strip->>Pane: open, with this board's name and part count
+    Pane->>RC: presentPaywall(offering, customVariables)
+    RC-->>Pane: PurchaseResult (CustomerInfo has "pro" active)
+    Pane-->>Strip: verdict "entitled" (the order step unlocks)
+    You->>Strip: press "Prepare fab order"
+    Strip->>Svc: POST /steps/<id>/order (X-Kaleo-App-User-Id)
+    Svc->>RC: GET /v2/projects/{id}/customers/{app_user_id}
+    RC-->>Svc: "pro" active
+    Svc-->>Strip: the fab order package (Gerbers, BOM, 3D)
+```
+
+The code, in the order it runs:
+
+1. **Configure** once per window with the public key and the desktop's app user id:
+   [`app/src/contexts/purchases.context.tsx`](app/src/contexts/purchases.context.tsx).
+2. **The gate** reads `customerInfo.entitlements.active["pro"]` and nothing else:
+   `verdictFrom` in [`app/src/lib/purchases/client.ts`](app/src/lib/purchases/client.ts).
+   A free desktop sees the order step as "Prepare fab order · Ada Pro"
+   ([`StepPanel.tsx`](app/src/pages/kaleo/components/StepPanel.tsx)).
+3. **The paywall** is RevenueCat's own, designed in the dashboard and rendered in the
+   Ada Pro pane, exactly as RevenueCat's web sample does it
+   ([`AdaPro.tsx`](app/src/pages/settings/components/AdaPro.tsx)):
+
+   ```ts
+   await Purchases.getSharedInstance().presentPaywall({
+     offering,                        // offerings.current ("default")
+     htmlTarget: paywallHost,         // a div in the Ada Pro pane
+     customVariables: {               // {{ custom.board_name }} in the paywall copy
+       board_name: CustomVariableValue.string("a 3.3V LDO board powered by USB-C"),
+       part_count: CustomVariableValue.string("7"),
+     },
+   });
+   ```
+
+   An offering with no paywall attached falls back to one button per package
+   (`purchase({ rcPackage })`), and the pane says so.
+4. **The service checks too.** The desktop's verdict is a convenience; the order route
+   asks RevenueCat's REST API v2 before it builds anything and answers `402
+   entitlement_required` otherwise ([`service/entitlements.py`](service/entitlements.py)).
+   If RevenueCat is unreachable it lets the order through and says why: a paid feature is
+   never lost to an outage.
+5. **Manage subscription** opens `customerInfo.managementURL`, RevenueCat's own page.
+
+Today the key is a RevenueCat **Test Store** key: purchases are simulated and no money
+moves, and the pane says so. Setup, the three-state verdict and what is not built are in
+[docs/purchases.md](docs/purchases.md).
+
 ## What it connects to
 
 | App | What Ada does with it | Verified live today |
