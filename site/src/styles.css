@@ -1,0 +1,118 @@
+/*
+ * Ada site tokens. manus.im's tokens verbatim (TOK = manus's 341xmc-7ks04j
+ * stylesheet, MAIN = 3v32y1ei64-4x, both pretty-printed and cited by line in
+ * ada-site-ref/manus-reference.md), plus the Ada additions marked "Ada".
+ */
+@import "tailwindcss";
+@import "@fontsource-variable/libre-baskerville/wght.css"; /* roman 400-700, OFL-1.1 */
+@import "@fontsource-variable/libre-baskerville/wght-italic.css"; /* italic 400-700 */
+
+/* dark follows data-theme, which the head script in index.html sets before paint */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", Helvetica,
+    "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol"; /* MAIN L226-233 */
+  --font-serif: "Libre Baskerville Variable", Georgia, Cambria, ui-serif, "Times New Roman", Times,
+    serif; /* MAIN L12764 */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; /* Ada: manus's home shows no code */
+  --shadow-input: 0px 2px 3px -1px #0000001a, 0px 1px 0px 0px #191c2105, 0px 0px 0px 1px #191c2114; /* Aceternity's */
+  --shadow-card: 0 12px 32px 0 rgba(0, 0, 0, 0.02); /* MAIN L11068 */
+  --shadow-panel: 0px 8px 24px 0px var(--shadow-M); /* MAIN L11233 */
+}
+
+:root {
+  color-scheme: light;
+  --text-primary: #1a1a1a; /* TOK L55 */
+  --text-secondary: #4d4d4d; /* TOK L56 */
+  --text-tertiary: #737373; /* TOK L57 */
+  --text-disable: #a6a6a6; /* TOK L58 */
+  --text-onblack: #fff; /* TOK L60 */
+  --text-white: #fff; /* TOK L61 */
+  --text-white-tsp: #fff9; /* TOK L62 */
+  --background-gray-main: #f8f8f7; /* TOK L68 */
+  --background-menu-white: #fff; /* TOK L70 */
+  --border-main: #0000000f; /* TOK L81 */
+  --border-white: #fff3; /* TOK L83 */
+  --border-dark: #00000024; /* TOK L86 */
+  --function-error: #fb494f; /* TOK L96 */
+  --function-success: #25ba3b; /* TOK L97 */
+  --function-warning: #efa201; /* TOK L98 */
+  --function-error-tsp: #f25a5a14; /* TOK L99 */
+  --function-success-tsp: #25ba3b14; /* TOK L101 */
+  --fill-tsp-white-main: #37352f0f; /* TOK L103 */
+  --fill-tsp-white-dark: #37352f14; /* TOK L104 */
+  --fill-tsp-white-light: #37352f0a; /* TOK L105 */
+  --Button-black: #1a1a19; /* TOK L115 */
+  --Button-border-secondary: #0000001f; /* TOK L121 */
+  --shadow-M: #0000000f; /* TOK L126 */
+  --card-border: #e5e7eb; /* prompt card: Tailwind preflight fallback, MAIN L54-56 */
+  --footer: #1a1a19; /* MAIN L8220 */
+  --ada-copper: #d68c48; /* Ada: site/assets/favicon.svg, the brand mark's copper */
+}
+
+[data-theme="dark"] {
+  /* mirrors manus's .dark set, TOK L152-249 */
+  color-scheme: dark;
+  --text-primary: #e6e6e6;
+  --text-secondary: #b3b3b3;
+  --text-tertiary: #8c8c8c;
+  --text-disable: #595959;
+  --text-onblack: #000000e5;
+  --background-gray-main: #1a1a1a;
+  --background-menu-white: #242424;
+  --border-main: #ffffff0f;
+  --border-dark: #ffffff1f;
+  /* manus's dark --border-white is #00000014, invisible on the black footer; Ada keeps #fff3 */
+  --function-error: #eb4d4d;
+  --function-success: #5eb92d;
+  --function-warning: #ffbf36;
+  --function-error-tsp: #eb4d4d1f;
+  --function-success-tsp: #5eb92d1f;
+  --fill-tsp-white-main: #ffffff0f;
+  --fill-tsp-white-dark: #ffffff14;
+  --fill-tsp-white-light: #ffffff0a;
+  --Button-black: #fffffff2;
+  --Button-border-secondary: #ffffff1f;
+  --shadow-M: #00000047;
+  --card-border: #ffffff0f;
+}
+
+@layer base {
+  html {
+    background: var(--background-gray-main);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: 1.5; /* MAIN L61-68 */
+    overflow-x: clip; /* the phone guard the old site used too */
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--background-gray-main);
+  }
+  :focus-visible {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
+  }
+  footer :focus-visible {
+    outline-color: #fff;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+  /* in-page anchors land below the 56px sticky header */
+  section[id] {
+    scroll-margin-top: 56px;
+  }
+}
+
+/* Aceternity's tabs and terminal use this class; their own site defines it globally. */
+@utility no-visible-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
