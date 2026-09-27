@@ -41,6 +41,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .board import BoardResult, PlacedPart, part_silk_segments
+from .footprints import SILK_STROKE_NM
 from .packing import Layer
 from .units import NM_PER_MM, mm
 
@@ -69,7 +70,12 @@ _MARGIN_NM = mm(2.0)
 #: Stroke widths: thin enough not to distort the geometry they trace, wide
 #: enough to clear every fab's minimum-feature check.
 _OUTLINE_WIDTH_NM = mm(0.1)
-_SILK_WIDTH_NM = mm(0.12)
+#: The stroke every silkscreen line is plotted with: the emitters' own pen, so
+#: the Gerber and the .kicad_pcb cannot disagree. Public because the fab-house
+#: capability check (:mod:`silkscreen.fabhouse`) must compare each house's
+#: minimum with the width actually plotted, not a copy of it.
+SILK_WIDTH_NM = SILK_STROKE_NM
+_SILK_WIDTH_NM = SILK_WIDTH_NM
 
 #: Soldermask expansion per side. 0.051 mm (2 mil) is the industry-default
 #: opening enlargement: enough that a small registration error still leaves the

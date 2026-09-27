@@ -594,7 +594,7 @@ def test_silkscreen_traces_the_body_outline_with_a_pen(board):
     assert _coords(silk), "the fixture circuit should have a legend to draw"
     assert not _rect_apertures(silk)
     circles = _CIRCLE_RE.findall(silk)
-    assert {_nm(c[1]) for c in circles} == {mm(0.12)}
+    assert {_nm(c[1]) for c in circles} == {mm(0.15)}
 
     # Each stroke endpoint sits on some part's body rectangle: the outline is
     # clipped around pads, never redrawn somewhere else.
@@ -622,7 +622,7 @@ def test_silkscreen_strokes_stay_clear_of_every_pad(board):
     starts exactly at the body edge. Independent math: widen each stroke by
     the pen half-width and measure axis-aligned separation from each pad flash.
     """
-    pen_half = mm(0.12) // 2
+    pen_half = mm(0.15) // 2
     clearance = mm(0.2)
 
     pads = []

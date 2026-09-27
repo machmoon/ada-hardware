@@ -175,8 +175,11 @@ def fit_courtyard(fp: Footprint, excess_mm: float = _COURTYARD_EXCESS_MM) -> Non
     fp.courtyard_h_nm = half_h + mm(excess_mm)
 
 
-#: Pen width both emitters stroke silkscreen with.
-SILK_STROKE_NM = mm(0.12)
+#: Pen width both emitters stroke silkscreen with. 0.15 mm, not KLC's 0.12 mm:
+#: a legend is printed by a fab, and 0.12 mm is under the minimum every house in
+#: :mod:`silkscreen.fabhouse` publishes (OSH Park 5 mil, JLCPCB and PCBWay
+#: 0.15 mm), so it would be printed badly or dropped.
+SILK_STROKE_NM = mm(0.15)
 
 #: Minimum gap between silkscreen ink and solderable copper. Ink on a pad
 #: resists solder; most fabs clip it silently, so the shipped board stops

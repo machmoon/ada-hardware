@@ -566,8 +566,13 @@ def order_manifest(
 
     ``orderable`` is read straight off the preflight, where it is derived from
     the issue list rather than stored: the manifest has no way to claim a board
-    is orderable while a blocker stands against it.
+    is orderable while a blocker stands against it. ``fab_houses`` is what
+    each real fab would make of the board and what it costs
+    (:func:`silkscreen.fabhouse.fab_house_report`), advisory only.
     """
+    # Imported here: fabhouse imports this module for OrderIssue.
+    from .fabhouse import fab_house_report
+
     return {
         "generator": "silkscreen",
         "board": board_summary(board, options),
@@ -577,6 +582,7 @@ def order_manifest(
         "orderable": pre.orderable,
         "requires_human_approval": True,
         "disclaimer": _DISCLAIMER,
+        "fab_houses": fab_house_report(board, options),
     }
 
 
