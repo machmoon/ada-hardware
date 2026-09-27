@@ -47,6 +47,36 @@ The earlier entry, for the All Things Agentic hackathon on 2026-08-31 (Gemini, A
 Run), is kept in [docs/google-hackathon.md](docs/google-hackathon.md). The Shipaton
 entry text is [DEVPOST.md](DEVPOST.md).
 
+## Amazon Developer Hackathon: what changed in the window
+
+**Disclosure.** Ada began on 2026-08-29, two days before *Build, Ship, Shape* opened
+(2026-08-31). Its PCB engine, placer, router, verifiers and desktop app were built
+between then and 2026-09-25 for two earlier hackathons (All Things Agentic, Google;
+RevenueCat Shipaton 2026) and with no Amazon tools. This entry claims only the commits
+between the tags `shipaton-2026` (11a45d9, the Shipaton submission) and `amazon-2026`:
+[compare](https://github.com/machmoon/ada-hardware/compare/shipaton-2026...amazon-2026).
+This repository's first commit is a 2026-09-13 squash; the full history since
+2026-08-29 is in a private repository and is available to judges on request.
+
+**Credit.** The pre-existing engine has contributors besides Pat Liu: James
+(jamesEmerson112), pullbro and Leo Pozhenko (leopozh). The work in the window is Pat's,
+written with Claude Code (the commits say so). Third-party code is listed under
+"Third-party code" in [DEVPOST.md](DEVPOST.md).
+
+**What is new, commit by commit:**
+
+| Commit | Date | What it adds |
+|---|---|---|
+| `2cc51e3` | 2026-09-25 | The MCP server speaks spec **2025-11-25** over stdio and Streamable HTTP (it announced 2024-11-05 before), checked against python-sdk 1.30 and 2.2 as independent clients |
+| `2cfdfd2` | 2026-09-26 | [`alexabot/`](alexabot/): six voice-shaped MCP tools (start, answer, continue, status, explain, recall) that answer in under a second and run the design on a background thread; per-account board history in SQLite; `--scripted` runs a whole session offline |
+| `0ce1748` | 2026-09-26 | `python -m alexabot.sim`: a **simulated Alexa+** page, a Strands agent on **Amazon Bedrock** (Nova 2 Lite) as the MCP client, **Amazon Polly** voice, board cards |
+| `1078601` | 2026-09-26 | Design preferences remembered across conversations in **Amazon Bedrock AgentCore Memory**, offered back as a question ("Last time you chose: USB-C power input. Same again?"), never assumed |
+
+Run it offline with no keys: `python -m alexabot.sim --scripted` and open
+`http://127.0.0.1:8790`. Setup, the AWS integrations and what is unverified live are in
+[docs/alexa.md](docs/alexa.md). "Simulated" is literal: the Alexa+ add-on tools are in
+preview for select partners, so no real Alexa+ agent has called these tools.
+
 ## What it connects to
 
 | App | What Ada does with it | Verified live today |
