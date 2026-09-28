@@ -15,7 +15,6 @@ import {
   AUTO_ADVANCE_MS,
   ENGINE_TITLE,
   ENGINE_TITLE_DOWN,
-  KICAD_MISSING_FIX,
   EngineStep,
 } from "./EngineStep";
 
@@ -31,17 +30,9 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-// The canvas probe is injected everywhere so no test depends on whether this
-// machine happens to have KiCad; the default is "found", which is the state
-// that leaves the pre-existing engine behaviour untouched.
-const foundKicad = () =>
-  Promise.resolve([{ id: "kicad-cli", available: true, detail: "/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli" }]);
-const missingKicad = () => Promise.resolve([{ id: "kicad-cli", available: false, detail: "not found" }]);
-
 const mount = (over: Partial<React.ComponentProps<typeof EngineStep>> = {}) => {
   const onCanContinue = vi.fn();
   const onAutoAdvance = vi.fn();
-  const setCard = vi.fn();
   render(
     <MemoryRouter>
       <EngineStep
@@ -49,13 +40,11 @@ const mount = (over: Partial<React.ComponentProps<typeof EngineStep>> = {}) => {
         token="tok"
         onCanContinue={onCanContinue}
         onAutoAdvance={onAutoAdvance}
-        setCard={setCard}
-        probeTools={foundKicad}
         {...over}
       />
     </MemoryRouter>,
   );
-  return { onCanContinue, onAutoAdvance, setCard };
+  return { onCanContinue, onAutoAdvance };
 };
 
 describe("EngineStep", () => {
@@ -119,45 +108,5 @@ describe("EngineStep", () => {
       await new Promise((r) => setTimeout(r, AUTO_ADVANCE_MS + 100));
     });
     expect(h.onAutoAdvance).toHaveBeenCalledTimes(1);
-  });
-
-  it("names KiCad on this screen, and says what finding the binary does not prove", async () => {
-    healthMock.mockReturnValue(health(true));
-    keyMock.mockResolvedValue({ state: "ready", summary: "ok" });
-    const h = mount();
-    await waitFor(() => expect(screen.getByTestId("kicad-card").getAttribute("data-state")).toBe("found"));
-    expect(screen.getByTestId("kicad-answer").textContent).toBe("KiCad is here");
-    expect(screen.getByTestId("kicad-detail").textContent).toMatch(/did not run it/);
-    expect(screen.getByTestId("kicad-detail").textContent).not.toMatch(/works/);
-    // `setCard` runs from a second effect keyed on the kicad state, after the
-    // commit the waitFor above observed, so it is awaited too or the assertion
-    // races the passive effect (it lost 2 runs in 3 with the five files together).
-    await waitFor(() => expect(h.setCard).toHaveBeenCalledWith("kicad", true));
-  });
-
-  it("a missing KiCad holds the screen instead of auto-advancing past the bad news", async () => {
-    healthMock.mockReturnValue(health(true));
-    keyMock.mockResolvedValue({ state: "ready", summary: "ok" });
-    const h = mount({ probeTools: missingKicad });
-    await waitFor(() => expect(screen.getByTestId("kicad-card").getAttribute("data-state")).toBe("missing"));
-    expect(screen.getByTestId("kicad-fix").textContent).toBe(KICAD_MISSING_FIX);
-    // Not a blocker: Ada still designs boards, so Continue stays open.
-    expect(h.onCanContinue).toHaveBeenLastCalledWith(true);
-    await waitFor(() => expect(h.setCard).toHaveBeenCalledWith("kicad", false));
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, AUTO_ADVANCE_MS + 100));
-    });
-    expect(h.onAutoAdvance).not.toHaveBeenCalled();
-  });
-
-  it("a machine it could not ask is 'not asked', never 'install KiCad'", async () => {
-    healthMock.mockReturnValue(health(true));
-    keyMock.mockResolvedValue({ state: "ready", summary: "ok" });
-    const h = mount({ probeTools: () => Promise.reject(new Error("no IPC")) });
-    await waitFor(() => expect(screen.getByTestId("kicad-card").getAttribute("data-state")).toBe("unknown"));
-    expect(screen.getByTestId("kicad-answer").textContent).toBe("KiCad: not asked");
-    expect(screen.queryByTestId("kicad-fix")).toBeNull();
-    // Unknown is not an answer, so the card is not recorded as connected.
-    await waitFor(() => expect(h.setCard).toHaveBeenCalledWith("kicad", false));
   });
 });

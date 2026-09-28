@@ -17,8 +17,8 @@ const walk = (state: SetupState, ...actions: Parameters<typeof reduce>[1][]) =>
   actions.reduce(reduce, state);
 
 describe("the setup step machine", () => {
-  it("has six steps, one dot each, and every card lives on exactly one step", () => {
-    expect(SETUP_STEPS).toEqual(["hello", "appearance", "engine", "accounts", "permissions", "done"]);
+  it("has seven steps, one dot each, and every card lives on exactly one step", () => {
+    expect(SETUP_STEPS).toEqual(["hello", "appearance", "engine", "tools", "accounts", "permissions", "done"]);
     const placed = SETUP_STEPS.flatMap((s) => CARDS_BY_STEP[s]);
     expect([...placed].sort()).toEqual([...SETUP_CARDS].sort());
   });
@@ -31,17 +31,17 @@ describe("the setup step machine", () => {
     }
     expect(s.step).toBe("done");
     // `done` draws no dots (no footer), so it sits outside the counted route
-    // and clamps to 0 — the four counted screens are appearance…permissions.
-    expect(progress(s)).toEqual({ index: 0, total: 4 });
+    // and clamps to 0 — the five counted screens are appearance…permissions.
+    expect(progress(s)).toEqual({ index: 0, total: 5 });
   });
 
   it("counts only the screens that draw a dot", () => {
     // The first screen with a dot row is the first screen counted. Six dots on
     // `appearance` with the second lit promised a screen the user had already
     // passed on a row they had never seen.
-    expect(progress({ ...INITIAL_STATE, step: "hello" }).total).toBe(4);
-    expect(progress({ ...INITIAL_STATE, step: "appearance" })).toEqual({ index: 0, total: 4 });
-    expect(progress({ ...INITIAL_STATE, step: "permissions" })).toEqual({ index: 3, total: 4 });
+    expect(progress({ ...INITIAL_STATE, step: "hello" }).total).toBe(5);
+    expect(progress({ ...INITIAL_STATE, step: "appearance" })).toEqual({ index: 0, total: 5 });
+    expect(progress({ ...INITIAL_STATE, step: "permissions" })).toEqual({ index: 4, total: 5 });
   });
 
   it("back never goes below hello", () => {
@@ -54,11 +54,12 @@ describe("the setup step machine", () => {
       { type: "continue" },
       { type: "continue" },
       { type: "continue" },
+      { type: "continue" },
       { type: "complete", card: "google" },
       { type: "continue" },
     );
     expect(s.step).toBe("permissions");
-    expect(s.skipped).toEqual(["kicad", "stripe", "microsoft"]);
+    expect(s.skipped).toEqual(["kicad", "freecad", "ngspice", "stripe", "microsoft"]);
     expect(remaining(s)).toEqual(["notifications", "voice"]);
   });
 
@@ -92,7 +93,7 @@ describe("the setup step machine", () => {
 
   it("autoAdvance only fires from the step it was armed on", () => {
     const engine = reduce(INITIAL_STATE, { type: "jump", step: "engine" });
-    expect(reduce(engine, { type: "autoAdvance", from: "engine" }).step).toBe("accounts");
+    expect(reduce(engine, { type: "autoAdvance", from: "engine" }).step).toBe("tools");
     const accounts = reduce(engine, { type: "continue" });
     // The probe answered after the user already pressed Continue.
     expect(reduce(accounts, { type: "autoAdvance", from: "engine" })).toBe(accounts);
@@ -121,6 +122,8 @@ describe("the setup step machine", () => {
     // Skipped alone is enough to trust remaining again.
     expect(hydrate({ step: "done", skipped: ["google"], remaining: [] }).completed).toEqual([
       "kicad",
+      "freecad",
+      "ngspice",
       "stripe",
       "microsoft",
       "notifications",
@@ -133,7 +136,7 @@ describe("the setup step machine", () => {
     const s = hydrate({ step: "permissions", skipped: ["google", "nope"], remaining: ["notifications", "voice"] });
     expect(s.step).toBe("permissions");
     expect(s.skipped).toEqual(["google"]);
-    expect(s.completed).toEqual(["kicad", "stripe", "microsoft"]);
+    expect(s.completed).toEqual(["kicad", "freecad", "ngspice", "stripe", "microsoft"]);
     expect(remaining(s)).toEqual(["notifications", "voice"]);
   });
 

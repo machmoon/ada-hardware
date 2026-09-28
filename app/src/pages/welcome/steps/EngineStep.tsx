@@ -5,30 +5,15 @@ import { Button } from "@/components/ui";
 import { EngineStartCommands, StepFrame } from "@/components/setup";
 import { useEngineHealth } from "@/hooks/useEngineHealth";
 import { fetchKeyStatus, keyAllowsContinue, type KeyStatus } from "@/lib/setup/engine";
-import { listCliTools, type CliToolInfo } from "@/lib/cli";
-import type { SetupCardId } from "@/lib/setup/machine";
 
 export const ENGINE_TITLE = "Start the engine";
 export const ENGINE_TITLE_DOWN = "Start the engine in a terminal";
 export const ENGINE_SUBTITLE =
-  "Two things live outside Ada: the engine that generates boards, and KiCad, the canvas she works on.";
+  "The engine that generates boards runs outside Ada. KiCad and the other tools come next.";
 
 /** How long a healthy engine sits on screen before the wizard moves on. */
 export const AUTO_ADVANCE_MS = 600;
 export const ENGINE_POLL_MS = 2000;
-
-/** Verbatim from `app/src-tauri/src/cli.rs`, which is the only reader of it. */
-export const KICAD_ENV_VAR = "KICAD_CLI";
-export const KICAD_MISSING_FIX =
-  "Install KiCad, or set KICAD_CLI to the kicad-cli binary if it lives somewhere off PATH.";
-/** What finding the binary does and does not prove. Never "KiCad works". */
-export const KICAD_FOUND_CAVEAT = "Found on this Mac. Ada did not run it, so the version is not known.";
-export const KICAD_MISSING_COST =
-  "Ada still designs boards without it. What stops working is showing a stage in KiCad, the ERC and DRC checks, and the 3D export the order step ships.";
-export const KICAD_UNKNOWN =
-  "Ada could not ask this machine what it has. That answer only exists in the desktop app.";
-
-type KicadState = "checking" | "found" | "missing" | "unknown";
 
 interface EngineStepProps {
   baseUrl: string;
@@ -37,10 +22,6 @@ interface EngineStepProps {
   onCanContinue: (allowed: boolean) => void;
   /** Fired once, after the first healthy probe with a usable key row. */
   onAutoAdvance: () => void;
-  /** Records the KiCad card, so the "Skipped: …" line can name it. */
-  setCard?: (card: SetupCardId, done: boolean) => void;
-  /** Injected so tests need no Tauri IPC; defaults to the real allowlist probe. */
-  probeTools?: () => Promise<CliToolInfo[]>;
 }
 
 /**
@@ -54,51 +35,12 @@ export const EngineStep = ({
   token,
   onCanContinue,
   onAutoAdvance,
-  setCard,
-  probeTools = listCliTools,
 }: EngineStepProps) => {
   const navigate = useNavigate();
   const health = useEngineHealth(baseUrl, ENGINE_POLL_MS, token);
   const [key, setKey] = useState<KeyStatus | null>(null);
   const [keyChecked, setKeyChecked] = useState(false);
-  const [kicad, setKicad] = useState<KicadState>("checking");
-  const [kicadDetail, setKicadDetail] = useState("");
   const advanced = useRef(false);
-
-  // The canvas, asked once. `cli.rs` already resolves `kicad-cli` for the
-  // Settings pane; the wizard asks the same question at the moment it matters
-  // instead of leaving it in a pane a new user has no reason to open.
-  useEffect(() => {
-    let live = true;
-    probeTools()
-      .then((tools) => {
-        if (!live) return;
-        const tool = tools.find((candidate) => candidate.id === "kicad-cli");
-        if (!tool) {
-          // A build with no allowlist compiled in is a build problem, not a
-          // missing install, so it must not read as "install KiCad".
-          setKicad("unknown");
-          setKicadDetail("This build reported no kicad-cli entry at all.");
-          return;
-        }
-        setKicad(tool.available ? "found" : "missing");
-        setKicadDetail(tool.detail);
-      })
-      .catch(() => {
-        if (live) setKicad("unknown");
-      });
-    return () => {
-      live = false;
-    };
-  }, [probeTools]);
-
-  // Only a real "found" completes the card. "unknown" is not an answer, and
-  // recording it as done would put a machine nobody asked about into the
-  // connected column.
-  useEffect(() => {
-    if (kicad === "checking") return;
-    setCard?.("kicad", kicad === "found");
-  }, [kicad, setCard]);
 
   // The key row, once per healthy transition.
   useEffect(() => {
@@ -124,24 +66,12 @@ export const EngineStep = ({
     onCanContinue(allowed);
   }, [allowed, onCanContinue]);
 
-  // A screen that self-dismisses in 600 ms cannot deliver bad news, so a
-  // missing canvas holds it: the wizard only skates past when it has nothing
-  // to tell you. This is OpenWhispr's `required-models` rule
-  // (`vendor/openwhispr/src/components/onboarding/flow.ts:159-161`, where the
-  // step is spliced into the route only when the dependency is absent),
-  // applied inside an existing screen rather than as a seventh one.
-  //
-  // "checking" deliberately does not block: the probe is a local `which` that
-  // starts on mount and settles long before this timer, and letting an
-  // unanswered probe stall the wizard would be a worse failure than an
-  // occasional early advance — the answer still reaches the Done screen's
-  // skipped line and the Settings pane either way.
   useEffect(() => {
-    if (!allowed || advanced.current || kicad === "missing") return;
+    if (!allowed || advanced.current) return;
     advanced.current = true;
     const timer = window.setTimeout(onAutoAdvance, AUTO_ADVANCE_MS);
     return () => window.clearTimeout(timer);
-  }, [allowed, kicad, onAutoAdvance]);
+  }, [allowed, onAutoAdvance]);
 
   const probing = health.lastCheckedAt === null;
   const down = !probing && !health.ok;
@@ -194,50 +124,6 @@ export const EngineStep = ({
         {down ? (
           <EngineStartCommands compact only={["serve"]} baseUrl={baseUrl} onEngineChange={health.recheck} />
         ) : null}
-
-        <div
-          className="flex items-start gap-3 rounded-lg border bg-card p-3"
-          data-testid="kicad-card"
-          data-state={kicad}
-        >
-          {kicad === "checking" ? (
-            <Loader2Icon className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" />
-          ) : kicad === "found" ? (
-            <CheckCircle2Icon className="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
-          ) : (
-            <XCircleIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          )}
-          <div className="min-w-0 flex-1 space-y-1">
-            <p className="text-sm font-medium" data-testid="kicad-answer">
-              {kicad === "checking"
-                ? "Looking for KiCad…"
-                : kicad === "found"
-                  ? "KiCad is here"
-                  : kicad === "missing"
-                    ? "No KiCad on this Mac"
-                    : "KiCad: not asked"}
-            </p>
-            <p className="text-xs text-muted-foreground" data-testid="kicad-detail">
-              {kicad === "found"
-                ? KICAD_FOUND_CAVEAT
-                : kicad === "missing"
-                  ? KICAD_MISSING_COST
-                  : kicad === "unknown"
-                    ? KICAD_UNKNOWN
-                    : ""}
-            </p>
-            {kicad === "missing" ? (
-              <p className="text-xs" data-testid="kicad-fix">
-                {KICAD_MISSING_FIX}
-              </p>
-            ) : null}
-            {kicadDetail && kicad !== "found" ? (
-              <p className="text-[11px] text-muted-foreground" data-testid="kicad-probe-detail">
-                {kicadDetail}
-              </p>
-            ) : null}
-          </div>
-        </div>
 
         <div className="text-center">
           <Button

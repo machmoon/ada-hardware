@@ -69,9 +69,9 @@ describe("Welcome", () => {
     fireEvent.click(screen.getByTestId("setup-continue"));
     await waitFor(() => expect(screen.getByTestId("setup-title").textContent).toBe("Choose your look"));
     expect(stub.__values()["setup.step"]).toBe("appearance");
-    expect(stub.__values()["setup.remaining"]).toEqual(["kicad", "google", "stripe", "microsoft", "notifications", "voice"]);
+    expect(stub.__values()["setup.remaining"]).toEqual(["kicad", "freecad", "ngspice", "google", "stripe", "microsoft", "notifications", "voice"]);
     expect(screen.getByTestId("setup-dots")).toBeTruthy();
-    expect(screen.getByTestId("setup-live").textContent).toBe("Step 1 of 4, Choose your look");
+    expect(screen.getByTestId("setup-live").textContent).toBe("Step 1 of 5, Choose your look");
   });
 
   it("resumes from the stored step", () => {

@@ -18,6 +18,7 @@ export const SETUP_STEPS = [
   "hello",
   "appearance",
   "engine",
+  "tools",
   "accounts",
   "permissions",
   "done",
@@ -26,6 +27,8 @@ export type SetupStepId = (typeof SETUP_STEPS)[number];
 
 export const SETUP_CARDS = [
   "kicad",
+  "freecad",
+  "ngspice",
   "google",
   "stripe",
   "microsoft",
@@ -38,9 +41,9 @@ export type SetupCardId = (typeof SETUP_CARDS)[number];
 export const CARDS_BY_STEP: Record<SetupStepId, readonly SetupCardId[]> = {
   hello: [],
   appearance: [],
-  // KiCad is the canvas this whole product sits on, so the screen that asks
-  // "is the outside world ready" asks about both, not only the engine.
-  engine: ["kicad"],
+  engine: [],
+  // The outside tools, each downloadable from this screen (`tools.rs`).
+  tools: ["kicad", "freecad", "ngspice"],
   accounts: ["google", "stripe", "microsoft"],
   permissions: ["notifications", "voice"],
   done: [],
@@ -49,6 +52,8 @@ export const CARDS_BY_STEP: Record<SetupStepId, readonly SetupCardId[]> = {
 /** The human name of a card, for the "Skipped: …" line. */
 export const CARD_NAMES: Record<SetupCardId, string> = {
   kicad: "KiCad",
+  freecad: "FreeCAD",
+  ngspice: "ngspice",
   google: "Google",
   stripe: "Billing",
   microsoft: "Microsoft",

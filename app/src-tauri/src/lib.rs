@@ -5,6 +5,7 @@ mod engine;
 mod setup;
 mod pty;
 mod shortcuts;
+mod tools;
 mod tray;
 mod wake;
 mod window;
@@ -89,6 +90,10 @@ pub fn run() {
             shortcuts::set_always_on_top,
             shortcuts::exit_app,
             tray::tray_set_state,
+            // The Setup Assistant's Tools step; see `tools.rs`.
+            tools::tools_status,
+            tools::tools_install,
+            tools::tools_cancel,
             // The terminal skin's real pty. Unlike `cli::run_cli` these are
             // the user's own shell with their own privileges, so they only
             // exist while that skin is open; see `pty.rs`.

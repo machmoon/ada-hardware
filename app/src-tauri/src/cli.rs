@@ -66,7 +66,7 @@ pub(crate) fn python_interpreter(root: &Path) -> Result<OsString, String> {
     Err("Ada's Python environment is missing; run ./scripts/install.sh or set ADA_PYTHON".into())
 }
 
-fn which(name: &str) -> Option<PathBuf> {
+pub(crate) fn which(name: &str) -> Option<PathBuf> {
     let path = env::var_os("PATH")?;
     for dir in env::split_paths(&path) {
         let candidate = dir.join(name);
@@ -84,7 +84,7 @@ fn which(name: &str) -> Option<PathBuf> {
     None
 }
 
-fn kicad_cli_path() -> Option<PathBuf> {
+pub(crate) fn kicad_cli_path() -> Option<PathBuf> {
     if let Some(value) = env::var_os("KICAD_CLI").filter(|v| !v.is_empty()) {
         let path = PathBuf::from(value);
         if path.is_file() {

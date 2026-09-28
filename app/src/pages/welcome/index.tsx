@@ -10,6 +10,7 @@ import { useSetupReport } from "./useSetupReport";
 import { HELLO_TITLE, HelloStep } from "./steps/HelloStep";
 import { APPEARANCE_TITLE, AppearanceStep } from "./steps/AppearanceStep";
 import { ENGINE_TITLE, EngineStep } from "./steps/EngineStep";
+import { TOOLS_TITLE, ToolsStep } from "./steps/ToolsStep";
 import { ACCOUNTS_TITLE, AccountsStep } from "./steps/AccountsStep";
 import { PERMISSIONS_TITLE, PermissionsStep } from "./steps/PermissionsStep";
 import { DONE_TITLE, DoneStep } from "./steps/DoneStep";
@@ -18,6 +19,7 @@ const TITLES: Record<SetupStepId, string> = {
   hello: HELLO_TITLE,
   appearance: APPEARANCE_TITLE,
   engine: ENGINE_TITLE,
+  tools: TOOLS_TITLE,
   accounts: ACCOUNTS_TITLE,
   permissions: PERMISSIONS_TITLE,
   done: DONE_TITLE,
@@ -119,9 +121,10 @@ const Welcome = () => {
             token={token}
             onCanContinue={setEngineOk}
             onAutoAdvance={onAutoAdvance}
-            setCard={setup.setCard}
           />
         );
+      case "tools":
+        return <ToolsStep setCard={setup.setCard} />;
       case "accounts":
         return <AccountsStep baseUrl={baseUrl} token={token} report={report} setCard={setup.setCard} />;
       case "permissions":

@@ -364,3 +364,22 @@
 .kv-list[data-motion="still"] {
   transition: none !important;
 }
+
+/* The Tools step's bar when no byte count exists (Homebrew, verify, install):
+   OpenWhispr's `indeterminate` sweep (vendor/openwhispr/src/index.css). */
+@keyframes kv-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+.kv-indeterminate {
+  animation: kv-indeterminate 1.5s ease-in-out infinite;
+}
+[data-motion="still"] .kv-indeterminate {
+  animation: none;
+  width: 100%;
+  opacity: 0.5;
+}

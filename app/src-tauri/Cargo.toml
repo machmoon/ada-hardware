@@ -48,6 +48,9 @@ cpal = "0.15.3"
 hound = "3.5.1"
 tokio = { version = "1.0", features = ["full"] }
 futures-util = "0.3"
+# tools.rs: stream KiCad/FreeCAD images with progress (rustls, as tauri-plugin-http already builds it) and check their SHA-256.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+sha2 = "0.10"
 anyhow = "1.0"
 tracing = "0.1"
 livekit-wakeword = "0.1"
