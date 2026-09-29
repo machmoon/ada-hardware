@@ -7,6 +7,11 @@
 
 # Ada
 
+**Ada is the Cursor of hardware engineering.** Cursor writes code inside your editor; Ada
+designs circuit boards inside KiCad. Describe a board in one sentence and get back the
+schematic, a placed and routed board, and a 3D-printable case, each checked by KiCad's own
+rule checks before you order anything.
+
 Ada is an AI hardware engineer that works beside KiCad: describe a board, get a
 schematic and a placed and routed board checked by KiCad's own ERC and DRC, and a
 printable case checked clause by clause on the solid. For a beginner before the first

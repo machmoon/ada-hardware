@@ -34,10 +34,12 @@ export const ANNOUNCEMENT = { text: "Ada's engine is open source. Run it today",
 // Band 3: hero. h1 was the old og:description; the subtitle is the old hero's first sentence, corrected: ERC runs on
 // the .kicad_sch and DRC on the .kicad_pcb (engine/silkscreen/verify/kicad.py), while the case is gated by the
 // enclosure kernel's signed-margin clauses against the board (engine/silkscreen/enclosure/kernel.py).
+// Pat 2026-09-29: lead with the one-line pitch, "the Cursor of hardware engineering", so a visitor knows what Ada is
+// before the details. The previous title was "Order boards that work."
 export const HERO = {
-  title: "Order boards that work.",
+  title: "The Cursor of hardware engineering.",
   subtitle:
-    "Ada is an AI hardware engineer that works beside KiCad: describe a board, get a schematic and a placed and routed board checked by KiCad's own ERC and DRC, and a printable case checked against the board.",
+    "Cursor writes code in your editor. Ada designs circuit boards in KiCad: describe a board, get a schematic, a placed and routed board and a printable case, checked by KiCad's own ERC and DRC before you order.",
   // The desktop app's EXAMPLE_PROMPTS, verbatim: app/src/pages/kaleo/components/PromptBar.tsx:109-113
   placeholders: [
     "A 3.3 V LDO board off USB-C with a power LED",
