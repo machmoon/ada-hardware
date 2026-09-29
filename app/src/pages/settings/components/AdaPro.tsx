@@ -193,7 +193,16 @@ export const AdaPro = ({ className }: AdaProProps) => {
               See Ada Pro plans
             </Button>
           )}
-          <div ref={paywallHost} data-testid="pro-paywall-host" />
+          {/* RevenueCat's paywall is laid out for a phone; on the desktop it sits
+              centred at phone width on its own dark backdrop, the way a mobile
+              paywall reads, instead of stretching across the pane. */}
+          <div className={paywallOpen ? "rounded-2xl bg-[#0b0b0d] px-4 py-6" : undefined}>
+            <div
+              ref={paywallHost}
+              data-testid="pro-paywall-host"
+              className="mx-auto w-full max-w-[440px] overflow-hidden rounded-2xl"
+            />
+          </div>
         </div>
       ) : null}
 
