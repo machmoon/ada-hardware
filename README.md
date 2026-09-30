@@ -46,7 +46,7 @@ desktop app in [`app/`](app/). *Silkscreen* is the engine underneath: the Python
 the `silkscreen` command, and most of this repository. Ada is a client of Silkscreen;
 either can be used without the other.
 
-Demo video (1:55, RevenueCat Shipaton 2026): https://youtu.be/2Q72GIds94Q
+Demo video (1:59, RevenueCat Shipaton 2026): https://youtu.be/U6eXbL0wiqA
 
 The earlier entry, for the All Things Agentic hackathon on 2026-08-31 (Gemini, ADK, Cloud
 Run), is kept in [docs/google-hackathon.md](docs/google-hackathon.md). The Shipaton
