@@ -10,6 +10,8 @@ import type {
   BackgroundOutcome,
   BackgroundOutcomes,
   EnclosureBlock,
+  FabHouseCard,
+  FabHousesBlock,
   Finding,
   OrderIssue,
   ReviewBlock,
@@ -499,6 +501,77 @@ export interface OrderDetails {
   step: string | null;
   /** Why something did not happen — a missing kicad-cli, a failed export. */
   warnings: string[];
+  /** The "Order your board" panel, or null from an engine that sends none. */
+  fabHouses: OrderPanel | null;
+}
+
+/**
+ * One fab house on the order panel. A house can sell more than one service
+ * (OSH Park's standard and Super Swift); the card leads with the one the
+ * engine recommended, else the house's first, and lists the rest under it.
+ */
+export interface FabHouseGroup {
+  house: string;
+  primary: FabHouseCard;
+  others: FabHouseCard[];
+  recommended: boolean;
+}
+
+export interface OrderPanel {
+  houses: FabHouseGroup[];
+  recommendedReason: string | null;
+  boundary: string;
+}
+
+/**
+ * The `fab_houses` block grouped one card per house, in the engine's order.
+ * Nothing is computed here that the engine did not send: a price is shown
+ * only where `price` is non-null, and a house with none keeps its
+ * `price_note`, never a number.
+ */
+export function orderPanel(block: FabHousesBlock | undefined | null): OrderPanel | null {
+  if (!block || !Array.isArray(block.houses) || block.houses.length === 0) return null;
+  const byHouse = new Map<string, FabHouseCard[]>();
+  for (const card of block.houses) {
+    const list = byHouse.get(card.house) ?? [];
+    list.push(card);
+    byHouse.set(card.house, list);
+  }
+  const houses: FabHouseGroup[] = [];
+  for (const [house, cards] of byHouse) {
+    const primary = cards.find((c) => c.recommended) ?? cards[0];
+    houses.push({
+      house,
+      primary,
+      others: cards.filter((c) => c !== primary),
+      recommended: primary.recommended === true,
+    });
+  }
+  return {
+    houses,
+    recommendedReason: block.recommended_reason ?? null,
+    boundary: block.boundary,
+  };
+}
+
+/** Big-number money for a card: "$27.32", split from the board count. */
+export function priceAmount(card: FabHouseCard): string | null {
+  if (!card.price) return null;
+  const { total_cents, currency } = card.price;
+  const amount = (total_cents / 100).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return currency === "USD" ? `$${amount}` : `${currency} ${amount}`;
+}
+
+/** "9–12 days", or null when the house documents none. */
+export function leadTimeText(card: FabHouseCard): string | null {
+  const lead = card.lead_time_days;
+  if (!lead || lead.length !== 2) return null;
+  const [lo, hi] = lead;
+  if (!(hi > 0)) return null;
+  return lo === hi ? `${lo} days` : `${lo}–${hi} days`;
 }
 
 const ISSUE_RANK: Record<string, number> = { blocker: 0, warning: 1, note: 2 };
@@ -527,6 +600,7 @@ export function orderDetails(response: StepResponse | undefined): OrderDetails |
     model: response.files.model_glb ?? null,
     step: response.files.model_step ?? null,
     warnings: response.warnings ?? [],
+    fabHouses: orderPanel(response.fab_houses),
   };
 }
 

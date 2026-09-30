@@ -521,6 +521,48 @@ export interface OrderIssue {
 }
 
 /**
+ * One fab service in the order step's `fab_houses` block, as
+ * `service/fabhouses.py` sends it. `price` is null whenever the house
+ * publishes no rule this engine can evaluate (JLCPCB, PCBWay): then
+ * `price_note` names where the real quote is, and no number exists to show.
+ */
+export interface FabHouseCard {
+  id: string;
+  house: string;
+  service: string;
+  buildable: boolean;
+  /** The capability check's blockers: why this house will not build it. */
+  blockers: { code?: string | null; title?: string | null; detail?: string | null }[];
+  warnings: { code?: string | null; title?: string | null; detail?: string | null }[];
+  price: {
+    total_cents: number;
+    currency: string;
+    boards: number;
+    /** "3 boards, $27.32" */
+    text: string;
+    basis: string;
+    shipping_cents?: number | null;
+  } | null;
+  /** "Quote on JLCPCB" when there is no price; null when there is one. */
+  price_note: string | null;
+  unpriced_reason?: string | null;
+  /** The house's documented [min, max] business days, or null. */
+  lead_time_days: [number, number] | null;
+  quote_url: string | null;
+  source_url?: string | null;
+  recommended: boolean;
+}
+
+/** The order step's "Order your board" block (`service/fabhouses.py`). */
+export interface FabHousesBlock {
+  houses: FabHouseCard[];
+  recommended: string | null;
+  recommended_reason: string | null;
+  /** Ada prepared and priced it; the person pays the fab. */
+  boundary: string;
+}
+
+/**
  * The `order` block: the manifest a human reads, every issue the gate found,
  * the verdict, and the fab files inline. Nothing in it has been submitted
  * anywhere; `manifest.requires_human_approval` says so on the wire.
@@ -650,6 +692,8 @@ export interface StepResponse {
   sourcing?: SourcingBlock;
   // order
   order?: OrderBlock;
+  /** Only on the `order` envelope: one card per fab service. Absent from older engines. */
+  fab_houses?: FabHousesBlock;
   // case
   enclosure?: EnclosureBlock | null;
   /**

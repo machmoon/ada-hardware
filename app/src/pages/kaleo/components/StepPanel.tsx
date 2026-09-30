@@ -37,6 +37,7 @@ import {
   statusBadge,
 } from "@/lib/silkscreen/steps";
 import { MarginAxis } from "./MarginAxis";
+import { OrderYourBoard } from "./OrderYourBoard";
 // The review card, plus its tone table: the BOM's MPN badge shares its tones
 // with the review they were written for.
 import { ReviewOutcome, TONE_CLASS } from "./ReviewOutcome";
@@ -1328,6 +1329,12 @@ export const StepPanel = ({
             New run
           </Button>
         </div>
+      ) : null}
+
+      {order?.fabHouses ? (
+        // The payoff of the order step, outside the 14rem receipt box so it
+        // is never scrolled away or folded under Details by calm output.
+        <OrderYourBoard panel={order.fabHouses} zip={order.zip} />
       ) : null}
 
       {review || caseOutcome || order || sourcing || route || place || priorArt || warned ? (

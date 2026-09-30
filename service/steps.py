@@ -98,6 +98,7 @@ from silkscreen.sourcing import SourcingResult, bom_csv, bom_rows, grouped_bom_c
 from silkscreen.units import to_mm
 
 from . import amend as _amend
+from .fabhouses import fab_houses_block
 
 __all__ = [
     "StepNotFound",
@@ -1967,6 +1968,10 @@ def _order(session: Session, payload: dict[str, Any], *, model) -> dict[str, Any
         started=started,
         body={
             "order": session.order,
+            # The "Order your board" panel: the manifest's per-house report,
+            # reshaped (additive; the manifest is unchanged). Prepared and
+            # priced only -- nothing on any path places or pays for an order.
+            "fab_houses": fab_houses_block(manifest.get("fab_houses")),
             "sourcing": sourcing.as_dict(),
             "warnings": warnings,
         },
