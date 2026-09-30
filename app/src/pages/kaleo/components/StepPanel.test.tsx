@@ -685,6 +685,41 @@ describe("StepPanel order outcome", () => {
     expect(screen.getByTestId("order-not-submitted").textContent).toContain("Nothing is submitted");
   });
 
+  it("shows the Order your board panel outside the folded details when the engine sends fab houses", () => {
+    const withHouses = step({
+      ...ordered,
+      fab_houses: {
+        houses: [
+          {
+            id: "oshpark-2layer",
+            house: "OSH Park",
+            service: "2 Layer Prototype",
+            buildable: true,
+            blockers: [],
+            warnings: [],
+            price: { total_cents: 2732, currency: "USD", boards: 3, text: "3 boards, $27.32", basis: "published-rule" },
+            price_note: null,
+            lead_time_days: [9, 12],
+            quote_url: "https://oshpark.com/",
+            recommended: true,
+          },
+        ],
+        recommended: "oshpark-2layer",
+        recommended_reason: "Lowest published price.",
+        boundary: "Ada prepared and priced this order.",
+      },
+    });
+    render(<StepPanel run={runOf([withHouses])} onDismiss={() => {}} />);
+    const panel = screen.getByTestId("order-panel");
+    expect(panel.closest("details")).toBeNull();
+    expect(panel.textContent).toContain("$27.32");
+  });
+
+  it("draws no Order your board panel for an engine that sends no fab houses", () => {
+    render(<StepPanel run={runOf([ordered])} onDismiss={() => {}} />);
+    expect(screen.queryByTestId("order-panel")).toBeNull();
+  });
+
   it("reveals the zip and opens the model through the OS", () => {
     mockReveal.mockResolvedValue(undefined);
     mockOpenPath.mockResolvedValue(undefined);

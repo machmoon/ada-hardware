@@ -403,6 +403,29 @@ def test_order_writes_the_package_and_names_it(server, tmp_path):
     assert state["files"]["order"] == str(zip_path)
 
 
+def test_order_carries_the_fab_houses_panel_beside_the_manifest(server):
+    from service.fabhouses import BOUNDARY, fab_houses_block
+
+    sid = _routed(server)
+    status, body = post(server, f"/steps/{sid}/order", {"order": {"quantity": 3}})
+    assert status == 200, body
+    block = body["fab_houses"]
+    # Additive: a reshaping of the manifest's own report, which is unchanged.
+    assert block == fab_houses_block(body["order"]["manifest"]["fab_houses"])
+    assert [c["house"] for c in block["houses"]] == [
+        "OSH Park",
+        "OSH Park",
+        "JLCPCB",
+        "PCBWay",
+    ]
+    osh = block["houses"][0]
+    assert osh["price"]["boards"] == 3
+    assert osh["price"]["text"].startswith("3 boards, $")
+    assert block["houses"][2]["price"] is None
+    assert block["boundary"] == BOUNDARY
+    assert block["recommended"] in {c["id"] for c in block["houses"]} | {None}
+
+
 def test_order_without_kicad_cli_warns_and_still_succeeds(server):
     sid = _routed(server)
     status, body = post(server, f"/steps/{sid}/order", {})

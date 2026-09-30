@@ -447,6 +447,7 @@ describe("orderDetails", () => {
       model: null,
       step: null,
       warnings: [],
+      fabHouses: null,
     });
   });
 });
