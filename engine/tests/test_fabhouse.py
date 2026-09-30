@@ -159,26 +159,28 @@ def test_a_track_under_the_house_minimum_is_blocked(routed):
 
 
 def test_a_thin_annular_ring_is_blocked_at_the_house_that_forbids_it(routed):
-    """The same via clears OSH Park and fails JLCPCB. Both answers are right.
+    """The same via clears JLCPCB and fails OSH Park. Both answers are right.
 
-    The via is injected with the router's own geometry rather than taken from
-    the fixture, because whether this small board routes with a via at all is
+    JLCPCB builds a 0.15 mm via hole in a 0.25 mm pad (a 0.05 mm ring); OSH
+    Park asks for 5 mil. A 0.1 mm ring sits between the two. The via is
+    injected with the router's own geometry rather than taken from the
+    fixture, because whether this small board routes with a via at all is
     the solver's choice and differs between platforms.
     """
     original = list(routed.vias)
-    routed.vias = [*original, Via(0, 0, "GND", mm(0.6), mm(0.3))]
+    routed.vias = [*original, Via(0, 0, "GND", mm(0.5), mm(0.3))]
     try:
         ring_nm = (routed.vias[-1].diameter_nm - routed.vias[-1].drill_nm) // 2
 
         oshpark = service_by_id("oshpark-2layer")
         jlcpcb = service_by_id("jlcpcb-2layer")
-        assert oshpark.min_annular_ring_nm <= ring_nm < jlcpcb.min_annular_ring_nm
+        assert jlcpcb.min_annular_ring_nm <= ring_nm < oshpark.min_annular_ring_nm
 
         assert "annular-ring-below-fab-minimum" not in _codes(
-            check_capabilities(routed, oshpark)
+            check_capabilities(routed, jlcpcb)
         )
         assert "annular-ring-below-fab-minimum" in _codes(
-            check_capabilities(routed, jlcpcb)
+            check_capabilities(routed, oshpark)
         )
     finally:
         routed.vias = original
