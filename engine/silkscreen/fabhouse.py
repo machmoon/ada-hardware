@@ -178,7 +178,12 @@ SERVICES: tuple[FabService, ...] = (
         min_track_nm=mm(0.10),
         min_clearance_nm=mm(0.10),
         min_drill_nm=mm(0.15),
-        min_annular_ring_nm=mm(0.18),
+        # Vias, which is what _smallest_annular_ring_nm measures: the page
+        # lists a 0.15 mm via hole in a 0.25 mm via pad for standard 2-layer,
+        # i.e. a 0.05 mm ring. Its 0.18 mm "absolute minimum" is the PTH
+        # annular ring, a different row, and applying it to vias refused
+        # boards JLCPCB builds.
+        min_annular_ring_nm=mm(0.05),
         min_silk_width_nm=mm(0.15),
         min_side_nm=mm(3),
         max_width_nm=mm(1020),
