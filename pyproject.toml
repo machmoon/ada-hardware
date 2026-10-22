@@ -24,6 +24,9 @@ adk = ["google-adk>=2.8,<3"]
 anthropic = ["anthropic>=1.5,<2"]
 # Claude on Amazon Bedrock: the SDK signs requests with botocore.
 bedrock = ["anthropic>=1.5,<2", "boto3>=1.34"]
+# Claude through a signed-in Claude Code (SILKSCREEN_CLAUDE_BACKEND=cli,
+# agents/claude_cli.py): the Agent SDK drives the `claude` binary.
+claude-cli = ["claude-agent-sdk>=0.2.171,<0.3"]
 training = ["tinker>=0.26,<0.27", "tinker-cookbook>=0.5.5,<0.6"]
 # The Slack bot is stdlib-only against the Web API; Pillow buys a PNG preview
 # that Slack renders inline, where an SVG only ever downloads.

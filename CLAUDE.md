@@ -17,6 +17,7 @@ python scripts/check_docs.py                         # fails if README/DEVPOST q
 python -m silkscreen "a 3.3V LDO board" -o /tmp/b/board.kicad_pcb  # writes a whole KiCad project: .kicad_pro, .kicad_sch, .placed.kicad_pcb, .kicad_pcb
 PORT=8081 python -m service.app                      # serve API + built web UI (8080 is taken by another app on James's machine)
 SILKSCREEN_ENGINE=sdk PORT=8081 python -m service.app  # same, with the straight-line SDK driver instead of the default ADK workflow
+SILKSCREEN_CLAUDE_BACKEND=cli python -m silkscreen "a 3.3V LDO board"  # Claude through a signed-in Claude Code (claude.ai subscription) via the Agent SDK; needs the `claude-cli` extra; local dev only, never inferred
 ZOOM_CLIENT_ID=… ZOOM_CLIENT_SECRET=… ZOOM_ACCOUNT_ID=… ZOOM_WEBHOOK_SECRET_TOKEN=… python -m zoombot  # Zoom webhook surface on ZOOM_PORT (default 8095); needs the `zoom` extra for a live RTMS socket
 TEAMS_APP_ID=… TEAMS_APP_SECRET=… TEAMS_TENANT_ID=… python -m teamsbot  # Teams bot surface on :3978; needs the `teams` extra (cryptography) or it refuses every request
 python -m alexabot.sim --scripted                    # the simulated Alexa+ page on :8790 (Strands agent + the tools above, offline); needs the `alexa` extra, installed with adk in one request: pip install -e ".[dev,agents,cloud,adk,cad,alexa]" (alone it moves OpenTelemetry past google-adk's pin)

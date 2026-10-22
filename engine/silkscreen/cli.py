@@ -456,7 +456,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="primary model id; a claude-* id leads with "
                              "Claude, any other id with Gemini (default: "
                              "Claude's $SILKSCREEN_CLAUDE_MODEL when "
-                             "ANTHROPIC_API_KEY or a Vertex project is set, "
+                             "ANTHROPIC_API_KEY, a Vertex project or "
+                             "SILKSCREEN_CLAUDE_BACKEND=cli is set, "
                              f"then Gemini's ${MODEL_ENV_VAR}, else "
                              f"{DEFAULT_MODEL})")
     parser.add_argument("--effort", choices=[e.value for e in Effort],

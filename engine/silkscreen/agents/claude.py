@@ -12,6 +12,10 @@ way and only the client differs:
     names are the SDK's own (``anthropic/lib/vertex/_client.py``: ``project_id``
     falls back to ``ANTHROPIC_VERTEX_PROJECT_ID``, ``region`` to
     ``CLOUD_ML_REGION``), not names invented here.
+``cli``
+    A logged-in Claude Code, driven through the Claude Agent SDK
+    (:mod:`silkscreen.agents.claude_cli`), so a developer's claude.ai
+    subscription pays. Only on ``SILKSCREEN_CLAUDE_BACKEND=cli``.
 
 Prior art this follows, read at source rather than from docs:
 
@@ -60,6 +64,7 @@ __all__ = [
     "CLAUDE_EFFORT_ENV_VAR",
     "CLAUDE_BACKEND_ENV_VAR",
     "API_KEY_ENV_VAR",
+    "CLI_BACKEND",
     "VERTEX_PROJECT_ENV_VAR",
     "VERTEX_REGION_ENV_VAR",
     "THINKING_HEADROOM_TOKENS",
@@ -94,7 +99,8 @@ CLAUDE_MODEL_ENV_VAR = "SILKSCREEN_CLAUDE_MODEL"
 #: per-tier default in :data:`_DEFAULT_EFFORT`.
 CLAUDE_EFFORT_ENV_VAR = "SILKSCREEN_CLAUDE_EFFORT"
 
-#: ``api`` or ``vertex``; unset chooses (see :func:`claude_backend`).
+#: ``api``, ``vertex``, ``bedrock`` or ``cli``; unset chooses (see
+#: :func:`claude_backend`).
 CLAUDE_BACKEND_ENV_VAR = "SILKSCREEN_CLAUDE_BACKEND"
 #: Claude on Amazon Bedrock (``anthropic.AnthropicBedrock``): credentials come
 #: from botocore's own chain (environment, ``~/.aws``, an instance role), the
@@ -109,6 +115,10 @@ BEDROCK_REGION_ENV_VAR = "AWS_REGION"
 #: ``aws bedrock list-inference-profiles``, 2026-09-15).
 BEDROCK_MODEL_ENV_VAR = "AWS_BEDROCK_CLAUDE_MODEL"
 BEDROCK_PROFILE_PREFIX = "global.anthropic."
+#: The Claude Code backend (``SILKSCREEN_CLAUDE_BACKEND=cli``). Nothing else
+#: is read: the ``claude`` binary carries its own login. Never inferred from
+#: that login being present, for the Bedrock reason above.
+CLI_BACKEND = "cli"
 
 API_KEY_ENV_VAR = "ANTHROPIC_API_KEY"
 VERTEX_PROJECT_ENV_VAR = "ANTHROPIC_VERTEX_PROJECT_ID"
@@ -197,6 +207,8 @@ def claude_backend(env: Mapping[str, str] | None = None) -> str | None:
         return "api" if has_key else None
     if forced == "bedrock":
         return "bedrock" if _text(env, BEDROCK_REGION_ENV_VAR) else None
+    if forced == CLI_BACKEND:
+        return CLI_BACKEND
     if has_vertex:
         return "vertex"
     if has_key:
@@ -229,6 +241,12 @@ def claude_missing(env: Mapping[str, str] | None = None) -> str:
             f"{CLAUDE_BACKEND_ENV_VAR}=bedrock needs {BEDROCK_REGION_ENV_VAR} and AWS "
             "credentials botocore can find (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, "
             "~/.aws/credentials, or an IAM role)"
+        )
+    if forced == CLI_BACKEND:
+        return (
+            f"{CLAUDE_BACKEND_ENV_VAR}=cli needs the claude-agent-sdk package "
+            "(pip install -e '.[claude-cli]') and a signed-in Claude Code "
+            "(claude auth login)"
         )
     return (
         f"set {API_KEY_ENV_VAR} for the Anthropic API, or {VERTEX_PROJECT_ENV_VAR} "
@@ -299,7 +317,7 @@ class ClaudeModel:
                 backend = "vertex"
             else:
                 backend = claude_backend(env)
-        if backend not in ("api", "vertex", "bedrock"):
+        if backend not in ("api", "vertex", "bedrock", CLI_BACKEND):
             raise ModelError(f"Claude is not configured: {claude_missing(env)}.")
         self.backend = backend
         # Kept for :meth:`for_tier`, which must build a sibling without
@@ -313,6 +331,10 @@ class ClaudeModel:
         self._client = client if client is not None else self._build_client()
 
     def _build_client(self) -> Any:
+        if self.backend == CLI_BACKEND:
+            from .claude_cli import AgentSdkClient
+
+            return AgentSdkClient(timeout_s=self.timeout_s)
         try:
             import anthropic
         except ImportError as exc:  # pragma: no cover - import guard
